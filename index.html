@@ -199,7 +199,6 @@ tr:hover td{background:var(--bg);}
 <!-- TABS -->
 <div class="tabs">
   <button class="tab on" onclick="switchTab('driver')" id="tab-driver">Chauffeur</button>
-  <button class="tab" onclick="switchTab('manager')" id="tab-manager">Manager</button>
   <button class="tab" onclick="switchTab('messages')" id="tab-messages">Messages <span id="msg-badge" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;">0</span></button>
 </div>
 
@@ -243,8 +242,8 @@ tr:hover td{background:var(--bg);}
           <select class="fi" id="f-op">
             <option>Chargement</option>
             <option>Déchargement</option>
-            <option>Chargement + Déchargement</option>
-            <option>Déchargement + Chargement</option>
+            <option>Chargement puis Déchargement</option>
+            <option>Déchargement puis Chargement</option>
           </select>
         </div>
       </div>
@@ -342,81 +341,6 @@ tr:hover td{background:var(--bg);}
       <button class="btn bo" style="border-color:var(--blue);color:var(--blue);" onclick="endMissionNewOne()">✚ Terminer cette mission — en démarrer une nouvelle</button>
       <button class="btn bo" style="color:var(--red);border-color:rgba(163,45,45,0.4);" onclick="document.getElementById('end-modal').classList.add('open')">⏹ Terminer la journée</button>
     </div>
-  </div>
-</div>
-
-<!-- ============================================================ MANAGER -->
-<div class="view wide" id="view-manager">
-  <div class="sgrid">
-    <div class="sc"><div class="sc-l">Missions</div><div class="sc-v" id="sm">0</div><div class="sc-s">complètes</div></div>
-    <div class="sc"><div class="sc-l">Att. quai moy.</div><div class="sc-v" id="sa">—</div><div class="sc-s">min (arrivée→quai)</div></div>
-    <div class="sc"><div class="sc-l">Opération moy.</div><div class="sc-v" id="so">—</div><div class="sc-s">min charg./décharg.</div></div>
-    <div class="sc"><div class="sc-l">Transit moy.</div><div class="sc-v" id="st">—</div><div class="sc-s">min entre sites</div></div>
-  </div>
-  <div class="toolbar">
-    <select id="f-floc" onchange="renderMgr()"><option value="">Tous les lieux</option></select>
-    <select id="f-fdate" onchange="renderMgr()"><option value="">Toutes les dates</option></select>
-    <select id="f-fop" onchange="renderMgr()">
-      <option value="">Charg. + Décharg.</option>
-      <option value="Chargement">Chargement seul</option>
-      <option value="Déchargement">Déchargement seul</option>
-    </select>
-    <button class="btn bo bsm" onclick="exportCSV()">CSV complet</button>
-    <button class="btn bo bsm" onclick="exportCSVByLoc()">CSV par lieu</button>
-    <button class="btn bo bsm" onclick="printReport()">Imprimer</button>
-    <button class="btn bo bsm" style="color:var(--red);border-color:rgba(163,45,45,0.4);" onclick="document.getElementById('clear-modal').classList.add('open')">Effacer</button>
-  </div>
-
-  <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div class="ctit" style="margin-bottom:0;">Synthèse par lieu — 5 timers</div>
-    </div>
-    <div class="tw"><table>
-      <thead><tr>
-        <th>Lieu</th><th>Passages</th>
-        <th style="background:rgba(24,95,165,0.08);">Transit moy.</th>
-        <th style="background:rgba(24,95,165,0.08);">Att.quai moy.</th>
-        <th style="background:rgba(24,95,165,0.08);">Mise à quai moy.</th>
-        <th style="background:rgba(186,117,23,0.1);">Opération moy.</th>
-        <th style="background:rgba(29,158,117,0.1);">Doc moy.</th>
-        <th>TOTAL moy.</th>
-        <th>Fiche client</th>
-      </tr></thead>
-      <tbody id="rep-loc"></tbody>
-    </table></div>
-  </div>
-
-  <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div class="ctit" style="margin-bottom:0;">Détail — chaque passage</div>
-      <button class="btn bo bsm" onclick="exportCSVDetail()">CSV détail</button>
-    </div>
-    <div class="tw"><table>
-      <thead><tr>
-        <th>Date</th><th>Chauffeur</th><th>Lieu</th><th>Opération</th><th>Quai</th>
-        <th>Arrivée</th><th>Quai attrib.</th><th>À quai</th><th>Déb.opé.</th><th>Fin opé.</th><th>CMR reçu</th><th>Départ</th>
-        <th style="background:rgba(24,95,165,0.08);">Transit</th>
-        <th style="background:rgba(24,95,165,0.08);">Att.quai</th>
-        <th style="background:rgba(24,95,165,0.08);">Mise quai</th>
-        <th style="background:rgba(186,117,23,0.08);">Opé.</th>
-        <th style="background:rgba(29,158,117,0.08);">Doc</th>
-        <th>TOTAL</th>
-      </tr></thead>
-      <tbody id="rep-detail"></tbody>
-    </table></div>
-  </div>
-
-  <div class="card">
-    <div class="ctit">Temps de transit entre sites 🚛</div>
-    <div class="tw"><table>
-      <thead><tr><th>Trajet</th><th>Passages</th><th>Moy.</th><th>Max</th></tr></thead>
-      <tbody id="rep-transit"></tbody>
-    </table></div>
-  </div>
-
-  <div class="card">
-    <div class="ctit">Journal des missions</div>
-    <div id="act-list"><div class="empty"><p>Aucune mission enregistrée.</p></div></div>
   </div>
 </div>
 
@@ -521,17 +445,11 @@ function toast(msg, err) {
   t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800);
 }
 function switchTab(tab) {
-  ['driver','manager','messages'].forEach(t => {
+  ['driver','messages'].forEach(t => {
     const te=$('tab-'+t), ve=$('view-'+t);
     if(te) te.classList.toggle('on', t===tab);
     if(ve) ve.classList.toggle('on', t===tab);
   });
-  if (tab === 'manager') {
-    currentRole = 'manager';
-    renderMgr();
-    show('msg-manager-panel', true);
-    show('msg-driver-panel', false);
-  }
   if (tab === 'driver') {
     currentRole = 'driver';
   }
@@ -1253,5 +1171,6 @@ function renderMessages() {
 // ============================================================
 function doClear(){missions=[];save();$('clear-modal').classList.remove('open');toast('Données effacées.');renderMgr();}
 </script>
+<script type="module" src="./supabase_config.js"></script>
 </body>
 </html>
