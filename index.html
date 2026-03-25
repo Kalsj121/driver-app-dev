@@ -400,6 +400,10 @@ tr:hover td{background:var(--bg);}
 </div>
 <div class="toast" id="toast"></div>
 
+<!-- Supabase Library -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./supabase_config.js"></script>
+
 <script>
 'use strict';
 // ============================================================
@@ -425,7 +429,16 @@ let step     = 0;     // étape courante (1-7)
 let ticker   = null;
 let dayStart = null;
 
-try { missions = JSON.parse(localStorage.getItem('lca_v4') || '[]'); } catch(e) {}
+// Load from Supabase on startup
+async function initMissions() {
+  if (window.missionsFromSupabase && window.missionsFromSupabase.length > 0) {
+    missions = window.missionsFromSupabase;
+  } else {
+    try {
+      missions = JSON.parse(localStorage.getItem('lca_v4') || '[]');
+    } catch(e) {}
+  }
+}
 
 // ============================================================
 // UTILS
@@ -439,7 +452,14 @@ function tsStr(ts) { if(!ts)return'—'; return new Date(ts).toLocaleTimeString(
 function todayStr() { return new Date().toLocaleDateString('fr-BE'); }
 function ms2min(ms) { return Math.round(ms/60000); }
 function avg(arr) { return arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null; }
-function save() { try { localStorage.setItem('lca_v4', JSON.stringify(missions)); } catch(e) {} }
+async function save() { 
+  // Save to localStorage as backup
+  try { localStorage.setItem('lca_v4', JSON.stringify(missions)); } catch(e) {}
+  // Save current mission to Supabase if active
+  if (active) {
+    await saveMissionToSupabase(active);
+  }
+}
 function toast(msg, err) {
   const t=$('toast'); t.textContent=msg; t.style.background=err?'#A32D2D':'#1A1A1A';
   t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800);
@@ -667,6 +687,8 @@ function endDay() {
   active.dayEndTs=Date.now(); active.completed=true;
   missions.push(JSON.parse(JSON.stringify(active)));
   save();
+  // Also save to Supabase
+  saveMissionToSupabase(active).catch(e => console.warn('Failed to save to Supabase:', e));
   active=null; curStop=null; step=0; dayStart=null;
   clearInterval(ticker);
   show('ph-mission',false); show('ph0',true);
@@ -1020,6 +1042,8 @@ function endMissionNewOne() {
   active.completed = true;
   missions.push(JSON.parse(JSON.stringify(active)));
   save();
+  // Also save to Supabase
+  saveMissionToSupabase(active).catch(e => console.warn('Failed to save to Supabase:', e));
   // Reset mission state but keep day running
   const prevDriver = active.driver;
   const prevPlate  = active.plate;
@@ -1053,9 +1077,20 @@ function getWarningThreshold(location) {
 // ============================================================
 let messages = [];
 let currentRole = 'driver';
-try { messages = JSON.parse(localStorage.getItem('lca_msgs') || '[]'); } catch(e) {}
 
-function saveMsgs() { try { localStorage.setItem('lca_msgs', JSON.stringify(messages)); } catch(e) {} }
+// Load from Supabase on startup
+async function initMessages() {
+  if (window.messagesFromSupabase && window.messagesFromSupabase.length > 0) {
+    messages = window.messagesFromSupabase;
+  } else {
+    try { messages = JSON.parse(localStorage.getItem('lca_msgs') || '[]'); } catch(e) {}
+  }
+}
+
+async function saveMsgs() { 
+  // Save to localStorage as backup
+  try { localStorage.setItem('lca_msgs', JSON.stringify(messages)); } catch(e) {} 
+}
 
 // Build driver list from missions for the "msg-to" dropdown
 function buildDriverList() {
@@ -1080,8 +1115,11 @@ function sendManagerMessage() {
   const txt = $('msg-text')?.value.trim();
   if (!txt) { toast('Veuillez saisir un message.', true); return; }
   const toLabel = to === 'all' ? 'Tous' : to;
-  messages.push({ id: Date.now(), from: 'bureau', fromName: 'Bureau', to, toLabel, text: txt, ts: Date.now(), read: false });
+  const msg = { id: Date.now(), from: 'bureau', fromName: 'Bureau', to, toLabel, text: txt, ts: Date.now(), read: false };
+  messages.push(msg);
   saveMsgs();
+  // Also save to Supabase
+  saveMessageToSupabase(msg).catch(e => console.warn('Failed to save to Supabase:', e));
   if ($('msg-text')) $('msg-text').value = '';
   renderMessages();
   toast('Message envoyé à ' + toLabel + ' ✓');
@@ -1091,8 +1129,11 @@ function sendDriverMessage() {
   const txt = $('driver-reply')?.value.trim();
   if (!txt) { toast('Veuillez saisir un message.', true); return; }
   const driverName = active ? active.driver : ($('d-name')?.value.trim() || 'Chauffeur');
-  messages.push({ id: Date.now(), from: 'driver', fromName: driverName, to: 'bureau', toLabel: 'Bureau', text: txt, ts: Date.now(), read: false });
+  const msg = { id: Date.now(), from: 'driver', fromName: driverName, to: 'bureau', toLabel: 'Bureau', text: txt, ts: Date.now(), read: false };
+  messages.push(msg);
   saveMsgs();
+  // Also save to Supabase
+  saveMessageToSupabase(msg).catch(e => console.warn('Failed to save to Supabase:', e));
   if ($('driver-reply')) $('driver-reply').value = '';
   renderMessages();
   toast('Message envoyé au bureau ✓');
@@ -1170,7 +1211,16 @@ function renderMessages() {
 // CLEAR
 // ============================================================
 function doClear(){missions=[];save();$('clear-modal').classList.remove('open');toast('Données effacées.');renderMgr();}
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+// Initialize data from Supabase on page load
+document.addEventListener('DOMContentLoaded', async () => {
+  await initMissions();
+  await initMessages();
+  console.log('Data loaded: ' + missions.length + ' missions, ' + messages.length + ' messages');
+});
 </script>
-<script type="module" src="./supabase_config.js"></script>
 </body>
 </html>
