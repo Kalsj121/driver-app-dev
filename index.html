@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>LCA · Pointage Chauffeurs</title>
+<style>
+:root {
+  --blue:#185FA5; --blue-dark:#0C447C; --blue-light:#E6F1FB;
+  --green:#0F6E56; --green-light:#E1F5EE; --green-mid:#1D9E75;
+  --amber:#BA7517; --amber-light:#FAEEDA;
+  --red:#A32D2D; --red-light:#FCEBEB;
+  --gray-bg:#F5F5F3; --gray-card:#FFFFFF;
+  --gray-border:rgba(0,0,0,0.12); --gray-border-strong:rgba(0,0,0,0.22);
+  --text-primary:#1A1A1A; --text-secondary:#6B6B68; --text-hint:#9E9E9A;
+  --radius-md:8px; --radius-lg:12px; --radius-xl:16px;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --gray-bg:#141414; --gray-card:#1E1E1E;
+    --gray-border:rgba(255,255,255,0.1); --gray-border-strong:rgba(255,255,255,0.2);
+    --text-primary:#F0F0EE; --text-secondary:#A0A09C; --text-hint:#6A6A68;
+    --blue-light:#0C2740; --green-light:#042920; --amber-light:#2A1C04;
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--gray-bg);color:var(--text-primary);min-height:100vh;}
+.app-header{background:var(--gray-card);border-bottom:0.5px solid var(--gray-border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-mark{width:32px;height:32px;background:var(--blue);border-radius:8px;display:flex;align-items:center;justify-content:center;}
+.logo-mark svg{width:18px;height:18px;fill:none;stroke:#fff;stroke-width:2;}
+.logo-text{font-size:15px;font-weight:700;letter-spacing:-0.02em;}
+.logo-sub{font-size:11px;color:var(--text-secondary);}
+.tab-bar{display:flex;background:var(--gray-card);border-bottom:0.5px solid var(--gray-border);}
+.tab{flex:1;padding:12px;text-align:center;font-size:14px;font-weight:500;color:var(--text-secondary);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+.view{display:none;padding:20px;max-width:560px;margin:0 auto;}
+.view.active{display:block;}
+.view.wide{max-width:960px;}
+.card{background:var(--gray-card);border:0.5px solid var(--gray-border);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:12px;}
+.card-title{font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:14px;}
+.form-group{margin-bottom:14px;}
+.form-label{font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;font-weight:500;}
+.form-input{width:100%;padding:11px 13px;font-size:15px;border:0.5px solid var(--gray-border-strong);border-radius:var(--radius-md);background:var(--gray-bg);color:var(--text-primary);outline:none;font-family:inherit;}
+.form-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(24,95,165,0.1);}
+select.form-input{cursor:pointer;}
+textarea.form-input{resize:vertical;min-height:68px;}
+.btn{width:100%;padding:13px;font-size:15px;font-weight:600;border:none;border-radius:var(--radius-md);cursor:pointer;font-family:inherit;transition:opacity .15s,transform .1s;}
+.btn:active{transform:scale(.98);}
+.btn-primary{background:var(--blue);color:#fff;}
+.btn-primary:hover{background:var(--blue-dark);}
+.btn-success{background:var(--green);color:#fff;}
+.btn-success:hover{background:#085041;}
+.btn-outline{background:none;border:0.5px solid var(--gray-border-strong);color:var(--text-primary);margin-top:8px;}
+.btn-sm{width:auto;padding:8px 14px;font-size:13px;font-weight:500;}
+
+/* STOP TIMELINE */
+.stop-done{background:var(--green-light);border:0.5px solid rgba(29,158,117,0.35);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:4px;}
+.stop-connector{width:2px;height:16px;background:var(--green-mid);margin:0 0 4px 18px;}
+.stop-loc{font-size:15px;font-weight:700;}
+.stop-op{font-size:12px;color:var(--text-secondary);margin-top:2px;}
+.stop-times{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;}
+.time-pill{background:var(--gray-card);border-radius:99px;padding:4px 10px;font-size:12px;border:0.5px solid var(--gray-border);}
+.time-pill span{color:var(--text-secondary);margin-right:3px;}
+.dur-pill{border-radius:99px;padding:4px 10px;font-size:12px;font-weight:700;}
+.dur-ok{background:var(--green-light);color:var(--green);}
+.dur-med{background:var(--amber-light);color:var(--amber);}
+.dur-long{background:var(--red-light);color:var(--red);}
+.transit-pill{background:var(--amber-light);color:var(--amber);border-radius:99px;padding:4px 10px;font-size:12px;font-weight:600;}
+
+/* ACTIVE STOP */
+.active-bar{background:var(--blue-light);border:0.5px solid rgba(24,95,165,0.3);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:12px;}
+.active-loc{font-size:18px;font-weight:700;margin-bottom:2px;}
+.active-op{font-size:13px;color:var(--text-secondary);margin-bottom:12px;}
+.timer-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.timer-box{background:var(--gray-card);border-radius:var(--radius-md);padding:10px 12px;border:0.5px solid var(--gray-border);}
+.tb-label{font-size:11px;color:var(--text-secondary);margin-bottom:3px;}
+.tb-val{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;}
+.tb-live{color:var(--blue);}
+
+/* TRANSIT */
+.transit-bar{background:var(--amber-light);border:0.5px solid rgba(186,117,23,0.3);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:12px;}
+.tbar-header{display:flex;align-items:center;justify-content:space-between;}
+.tbar-title{font-size:15px;font-weight:700;color:var(--amber);}
+.tbar-sub{font-size:12px;color:var(--amber);opacity:.8;margin-top:2px;}
+.tbar-timer{font-size:28px;font-weight:700;color:var(--amber);font-variant-numeric:tabular-nums;}
+
+/* CARGO */
+.cargo-type-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px;border:0.5px solid var(--gray-border-strong);border-radius:var(--radius-md);cursor:pointer;font-size:14px;font-weight:500;background:var(--gray-bg);user-select:none;}
+.cargo-type-btn.selected{background:var(--blue-light);border-color:var(--blue);color:var(--blue);}
+.cargo-item{background:var(--gray-bg);border:0.5px solid var(--gray-border);border-radius:var(--radius-md);padding:12px;margin-bottom:8px;}
+.cargo-item .form-label{font-size:12px;}
+.cargo-item .form-input{font-size:14px;padding:9px 11px;}
+.awb-input{font-family:monospace;letter-spacing:.05em;}
+.uld-input{font-family:monospace;letter-spacing:.05em;text-transform:uppercase;}
+.rm-btn{background:none;border:none;cursor:pointer;color:var(--text-secondary);font-size:16px;padding:2px 6px;border-radius:4px;}
+.rm-btn:hover{color:var(--red);background:var(--red-light);}
+
+/* CMR */
+.upload-zone{border:1.5px dashed var(--gray-border-strong);border-radius:var(--radius-md);padding:20px;text-align:center;cursor:pointer;background:var(--gray-bg);}
+.upload-zone:hover{border-color:var(--blue);background:var(--blue-light);}
+.upload-zone.has-file{border-color:var(--green-mid);border-style:solid;background:var(--green-light);}
+.upload-zone svg{width:28px;height:28px;margin-bottom:8px;}
+.upload-zone p{font-size:14px;color:var(--text-secondary);}
+.upload-zone.has-file p{color:var(--green);font-weight:600;}
+input[type="file"]{display:none;}
+.cmr-preview{margin-top:10px;border-radius:var(--radius-md);overflow:hidden;max-height:140px;}
+.cmr-preview img{width:100%;height:140px;object-fit:cover;display:block;}
+
+/* DASHBOARD */
+.stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px;}
+.stat-card{background:var(--gray-card);border:0.5px solid var(--gray-border);border-radius:var(--radius-lg);padding:14px 16px;}
+.stat-label{font-size:11px;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+.stat-value{font-size:24px;font-weight:700;letter-spacing:-.02em;}
+.stat-sub{font-size:11px;color:var(--text-secondary);margin-top:2px;}
+.toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.toolbar select{flex:1;min-width:140px;padding:8px 12px;font-size:13px;border:0.5px solid var(--gray-border-strong);border-radius:var(--radius-md);background:var(--gray-card);color:var(--text-primary);font-family:inherit;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:14px;}
+th{text-align:left;font-size:11px;font-weight:700;color:var(--text-secondary);padding:8px 12px;border-bottom:0.5px solid var(--gray-border);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;}
+td{padding:10px 12px;border-bottom:0.5px solid var(--gray-border);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--gray-bg);}
+.act-item{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--gray-border);}
+.act-item:last-child{border-bottom:none;}
+.act-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:5px;background:var(--green-mid);}
+.act-body{flex:1;}
+.act-title{font-size:14px;font-weight:700;}
+.act-meta{font-size:12px;color:var(--text-secondary);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+.stop-chip{background:var(--gray-bg);border:0.5px solid var(--gray-border);border-radius:99px;padding:3px 9px;font-size:12px;white-space:nowrap;}
+.arrow-chip{font-size:12px;color:var(--text-secondary);}
+.transit-chip{background:var(--amber-light);color:var(--amber);border-radius:99px;padding:3px 9px;font-size:11px;font-weight:600;}
+.act-date{font-size:12px;color:var(--text-secondary);text-align:right;flex-shrink:0;}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(80px);background:#1A1A1A;color:#fff;padding:12px 22px;border-radius:var(--radius-xl);font-size:14px;font-weight:500;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:9999;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:none;align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--gray-card);border-radius:var(--radius-xl);padding:24px;width:100%;max-width:400px;}
+.modal-title{font-size:17px;font-weight:700;margin-bottom:4px;}
+.modal-sub{font-size:13px;color:var(--text-secondary);margin-bottom:20px;}
+.modal-actions{display:flex;gap:8px;margin-top:16px;}
+.modal-actions .btn{flex:1;padding:11px;font-size:14px;}
+.empty{text-align:center;padding:40px 20px;color:var(--text-secondary);}
+.empty svg{width:40px;height:40px;margin-bottom:12px;opacity:.4;}
+.empty p{font-size:14px;}
+.sec-title{font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.07em;margin:20px 0 8px;}
+.sec-title:first-child{margin-top:0;}
+@media(max-width:500px){.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <div class="logo">
+    <div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+    <div><div class="logo-text">LCA Pointage</div><div class="logo-sub">Liege Cargo Agency</div></div>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab active" onclick="switchTab('driver')" id="tab-driver">Chauffeur</button>
+  <button class="tab" onclick="switchTab('manager')" id="tab-manager">Manager</button>
+</div>
+
+<!-- ============================================================ -->
+<!-- DRIVER VIEW                                                    -->
+<!-- ============================================================ -->
+<div class="view active" id="view-driver">
+
+  <!-- IDLE: start mission -->
+  <div id="state-idle">
+    <p class="sec-title">Nouvelle mission</p>
+    <div class="card">
+      <div class="card-title">Chauffeur</div>
+      <div class="form-group">
+        <label class="form-label">Nom / Matricule</label>
+        <input class="form-input" type="text" id="d-name" placeholder="Ex: Marc D. · CH-04"/>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Plaque véhicule</label>
+        <input class="form-input" type="text" id="d-plate" placeholder="Ex: 1-ABC-234" style="text-transform:uppercase;"/>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="startMission()">Démarrer une mission</button>
+  </div>
+
+  <!-- ACTIVE MISSION -->
+  <div id="state-mission" style="display:none;">
+
+    <!-- Completed stops timeline -->
+    <div id="stops-timeline"></div>
+
+    <!-- TRANSIT bar -->
+    <div id="transit-bar" class="transit-bar" style="display:none;">
+      <div class="tbar-header">
+        <div>
+          <div class="tbar-title">🚛 En transit…</div>
+          <div class="tbar-sub" id="transit-route">—</div>
+        </div>
+        <div class="tbar-timer" id="transit-timer">00:00</div>
+      </div>
+    </div>
+
+    <!-- ACTIVE stop bar -->
+    <div id="active-stop-bar" style="display:none;">
+      <div class="active-bar">
+        <div class="active-loc" id="as-loc">—</div>
+        <div class="active-op" id="as-op">—</div>
+        <div class="timer-grid">
+          <div class="timer-box"><div class="tb-label">Arrivée</div><div class="tb-val" id="as-arrival">—</div></div>
+          <div class="timer-box"><div class="tb-label">Temps écoulé</div><div class="tb-val tb-live" id="as-timer">00:00</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Document CMR</div>
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('cmr-file').click()">
+          <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <p>Photographier le CMR</p>
+          <p style="font-size:12px;margin-top:4px;color:var(--text-hint);">ou sélectionner depuis la galerie</p>
+        </div>
+        <input type="file" id="cmr-file" accept="image/*" capture="environment" onchange="handleCMR(event)"/>
+        <div id="cmr-preview" class="cmr-preview" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Marchandise</div>
+        <div class="form-group">
+          <div style="display:flex;gap:8px;">
+            <label class="cargo-type-btn" id="btn-loose" onclick="switchCargo('loose')"><input type="radio" name="ctype" value="loose" style="display:none;"/> 📦 Loose</label>
+            <label class="cargo-type-btn" id="btn-uld" onclick="switchCargo('uld')"><input type="radio" name="ctype" value="uld" style="display:none;"/> 🛄 ULD</label>
+          </div>
+        </div>
+        <div id="cargo-loose" style="display:none;">
+          <div id="loose-items">
+            <div class="cargo-item">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;color:var(--text-secondary);">Expédition 1</span></div>
+              <div style="display:grid;grid-template-columns:90px 1fr;gap:8px;">
+                <div><label class="form-label">Nb pièces</label><input class="form-input" type="number" min="1" placeholder="12" data-field="pieces"/></div>
+                <div><label class="form-label">N° AWB</label><input class="form-input awb-input" type="text" placeholder="123-4567 8901" maxlength="12" data-field="awb" oninput="fmtAWB(this)"/></div>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-outline" style="padding:8px;font-size:13px;margin-top:0;" onclick="addLoose()">+ Ajouter une expédition</button>
+        </div>
+        <div id="cargo-uld" style="display:none;">
+          <div id="uld-items">
+            <div class="cargo-item">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;color:var(--text-secondary);">ULD 1</span></div>
+              <div style="margin-bottom:8px;"><label class="form-label">N° ULD <span style="font-weight:400;color:var(--text-hint);">3 lettres-5 chiffres-2 car.</span></label><input class="form-input uld-input" type="text" placeholder="PMC-12345-LG" maxlength="11" data-field="uld" oninput="fmtULD(this)"/></div>
+              <div><label class="form-label">N° AWB</label><input class="form-input awb-input" type="text" placeholder="123-4567 8901" maxlength="12" data-field="awb" oninput="fmtAWB(this)"/></div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-outline" style="padding:8px;font-size:13px;margin-top:8px;" onclick="addULD()">+ Ajouter un ULD</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Commentaire (optionnel)</div>
+        <textarea class="form-input" id="stop-comment" placeholder="Longue attente, incident, dock…"></textarea>
+      </div>
+
+      <button class="btn btn-success" onclick="closeStop()">Terminer ce stop →</button>
+    </div>
+
+    <!-- NEXT STOP FORM -->
+    <div id="next-stop-form" style="display:none;">
+      <div class="card" style="border-color:var(--blue);">
+        <div class="card-title" id="nst-title" style="color:var(--blue);">Premier arrêt</div>
+        <div class="form-group">
+          <label class="form-label">Lieu</label>
+          <select class="form-input" id="ns-loc">
+            <option value="">— Sélectionner le lieu —</option>
+            <optgroup label="WFS"><option>WFS 32</option><option>WFS 24</option></optgroup>
+            <optgroup label="Challenge"><option>Challenge 76</option><option>Challenge 24</option><option>Challenge Selys</option></optgroup>
+            <optgroup label="Swissport"><option>Swissport</option><option>Swissport Cargo Solution</option></optgroup>
+            <optgroup label="LCA"><option>LCA Nord</option><option>LCA Selys</option></optgroup>
+            <optgroup label="Autres"><option>FMCS</option><option>BAS</option><option>Fedex</option></optgroup>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type d'opération</label>
+          <select class="form-input" id="ns-op">
+            <option>Chargement</option><option>Déchargement</option><option>Chargement + Déchargement</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Référence CMR</label>
+          <input class="form-input" type="text" id="ns-ref" placeholder="Ex: CMR-001"/>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="arriveStop()">Je suis arrivé à ce lieu</button>
+      <button class="btn btn-outline" id="btn-end-mission" style="display:none;color:var(--red);border-color:rgba(163,45,45,0.4);" onclick="confirmEnd()">Terminer la mission</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- MANAGER VIEW                                                   -->
+<!-- ============================================================ -->
+<div class="view wide" id="view-manager">
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-label">Missions</div><div class="stat-value" id="stat-m">0</div><div class="stat-sub">aujourd'hui</div></div>
+    <div class="stat-card"><div class="stat-label">Stops total</div><div class="stat-value" id="stat-s">0</div><div class="stat-sub">passages enregistrés</div></div>
+    <div class="stat-card"><div class="stat-label">Attente moy.</div><div class="stat-value" id="stat-a">—</div><div class="stat-sub">min / stop</div></div>
+    <div class="stat-card"><div class="stat-label">Transit moy.</div><div class="stat-value" id="stat-t">—</div><div class="stat-sub">min entre sites</div></div>
+  </div>
+  <div class="toolbar">
+    <select id="f-loc" onchange="renderManager()"><option value="">Tous les lieux</option></select>
+    <select id="f-date" onchange="renderManager()"><option value="">Toutes les dates</option></select>
+    <button class="btn btn-outline btn-sm" onclick="exportCSV()">Exporter CSV</button>
+    <button class="btn btn-outline btn-sm" onclick="printReport()">Imprimer</button>
+    <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:rgba(163,45,45,0.4);" onclick="document.getElementById('clear-modal').classList.add('open')">Effacer</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Temps d'attente par lieu</div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Lieu</th><th>Passages</th><th>Moy.</th><th>Max</th><th>Min</th><th>Dernière visite</th></tr></thead>
+      <tbody id="rep-wait"></tbody></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Temps de transit entre sites 🚛</div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Trajet</th><th>Passages</th><th>Transit moy.</th><th>Transit max</th></tr></thead>
+      <tbody id="rep-transit"></tbody></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Journal des missions</div>
+    <div id="act-list"><div class="empty"><svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><p>Aucune mission enregistrée.</p></div></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="end-modal">
+  <div class="modal">
+    <div class="modal-title">Terminer la mission ?</div>
+    <div class="modal-sub">Tous les stops seront clôturés. Assurez-vous d'avoir enregistré le dernier arrêt.</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="document.getElementById('end-modal').classList.remove('open')">Annuler</button>
+      <button class="btn btn-primary" onclick="endMission()">Terminer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="clear-modal">
+  <div class="modal">
+    <div class="modal-title">Effacer toutes les données ?</div>
+    <div class="modal-sub">Action irréversible. Exportez le CSV d'abord si nécessaire.</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="document.getElementById('clear-modal').classList.remove('open')">Annuler</button>
+      <button class="btn btn-primary" style="background:var(--red);" onclick="doClear()">Effacer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let missions=[];
+let activeMission=null;
+let activeStop=null;
+let transitStart=null;
+let ticker=null;
+
+try{ missions=JSON.parse(localStorage.getItem('lca_v2')||'[]'); }catch(e){}
+
+// ============================================================
+// UTILS
+// ============================================================
+function nowTime(){const d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes());}
+function pad(n){return String(n).padStart(2,'0');}
+function today(){return new Date().toLocaleDateString('fr-BE');}
+function dur(min){if(min===null||min===undefined||isNaN(min))return'—';if(min<60)return min+' min';return Math.floor(min/60)+'h'+pad(min%60);}
+function calcMin(a,b){const[ah,am]=a.split(':').map(Number);const[bh,bm]=b.split(':').map(Number);let d=(bh*60+bm)-(ah*60+am);if(d<0)d+=1440;return d;}
+function save(){try{localStorage.setItem('lca_v2',JSON.stringify(missions));}catch(e){}}
+function toast(msg,err){const t=document.getElementById('toast');t.textContent=msg;t.style.background=err?'#A32D2D':'#1A1A1A';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
+function show(id,v){document.getElementById(id).style.display=v?'':'none';}
+function switchTab(tab){
+  ['driver','manager'].forEach(t=>{
+    document.getElementById('tab-'+t).classList.toggle('active',t===tab);
+    document.getElementById('view-'+t).classList.toggle('active',t===tab);
+  });
+  if(tab==='manager')renderManager();
+}
+
+// ============================================================
+// MISSION START
+// ============================================================
+function startMission(){
+  const name=document.getElementById('d-name').value.trim();
+  const plate=document.getElementById('d-plate').value.trim().toUpperCase();
+  if(!name){toast('Veuillez indiquer votre nom.',true);return;}
+  activeMission={id:Date.now(),driver:name,plate,date:today(),startTs:Date.now(),stops:[],completed:false,_cmr:null};
+  show('state-idle',false);show('state-mission',true);
+  show('active-stop-bar',false);show('transit-bar',false);show('next-stop-form',true);
+  show('btn-end-mission',false);
+  document.getElementById('nst-title').textContent='Premier arrêt';
+  renderTimeline();
+}
+
+// ============================================================
+// ARRIVE AT STOP
+// ============================================================
+function arriveStop(){
+  const loc=document.getElementById('ns-loc').value;
+  const op=document.getElementById('ns-op').value;
+  const ref=document.getElementById('ns-ref').value.trim();
+  if(!loc){toast('Veuillez sélectionner un lieu.',true);return;}
+
+  let transitMin=null;
+  if(transitStart!==null){
+    transitMin=Math.round((Date.now()-transitStart)/60000);
+    transitStart=null;
+  }
+
+  activeStop={id:Date.now(),location:loc,operation:op,ref,
+    arrivalTime:nowTime(),arrivalTs:Date.now(),
+    departureTime:null,durationMin:null,
+    transitFromPrev:transitMin,
+    cargoType:'',cargo:[],cmrData:null,comment:''};
+
+  // reset form
+  document.getElementById('ns-loc').value='';
+  document.getElementById('ns-ref').value='';
+
+  show('next-stop-form',false);show('transit-bar',false);
+  show('active-stop-bar',true);
+  document.getElementById('as-loc').textContent=loc;
+  document.getElementById('as-op').textContent=op+(ref?' · '+ref:'');
+  document.getElementById('as-arrival').textContent=activeStop.arrivalTime;
+  renderTimeline();
+  startTicker('stop');
+}
+
+// ============================================================
+// CLOSE STOP
+// ============================================================
+function closeStop(){
+  if(!activeStop)return;
+  const dep=nowTime();
+  activeStop.departureTime=dep;
+  activeStop.durationMin=calcMin(activeStop.arrivalTime,dep);
+  activeStop.comment=document.getElementById('stop-comment').value;
+  activeStop.cargoType=document.querySelector('input[name="ctype"]:checked')?.value||'';
+  activeStop.cargo=collectCargo();
+  activeStop.cmrData=activeMission._cmr||null;
+  activeMission.stops.push({...activeStop});
+  activeMission._cmr=null;
+  activeStop=null;
+  transitStart=Date.now();
+
+  // reset stop UI
+  document.getElementById('stop-comment').value='';
+  resetCargo();
+  document.getElementById('cmr-preview').style.display='none';
+  resetUploadZone();
+  show('active-stop-bar',false);
+
+  // show transit + next stop form
+  show('transit-bar',true);
+  show('next-stop-form',true);
+  show('btn-end-mission',true);
+  document.getElementById('nst-title').textContent='Stop suivant';
+  const lastLoc=activeMission.stops[activeMission.stops.length-1].location;
+  startTicker('transit',lastLoc);
+  renderTimeline();
+  toast('Stop enregistré ✓ — En route vers le prochain lieu.');
+}
+
+// ============================================================
+// END MISSION
+// ============================================================
+function confirmEnd(){
+  if(activeMission.stops.length===0){toast('Aucun stop enregistré.',true);return;}
+  document.getElementById('end-modal').classList.add('open');
+}
+function endMission(){
+  document.getElementById('end-modal').classList.remove('open');
+  activeMission.endTs=Date.now();
+  activeMission.completed=true;
+  missions.push(JSON.parse(JSON.stringify(activeMission)));
+  save();
+  activeMission=null;activeStop=null;transitStart=null;
+  stopTicker();
+  show('state-mission',false);show('state-idle',true);
+  show('transit-bar',false);show('active-stop-bar',false);show('next-stop-form',false);
+  document.getElementById('stops-timeline').innerHTML='';
+  toast('Mission clôturée et enregistrée ✓');
+}
+
+// ============================================================
+// TIMELINE
+// ============================================================
+function renderTimeline(){
+  const tl=document.getElementById('stops-timeline');
+  if(!activeMission||!activeMission.stops.length){tl.innerHTML='';return;}
+  let html='';
+  activeMission.stops.forEach((s,i)=>{
+    if(i>0) html+='<div class="stop-connector"></div>';
+    const dc=s.durationMin>60?'dur-long':s.durationMin>30?'dur-med':'dur-ok';
+    const cargo=s.cargo&&s.cargo.length?' · '+s.cargo.map(c=>c.type==='uld'?(c.uld||'ULD'):((c.pieces||'')+'pc '+(c.awb||''))).join(', '):'';
+    html+=`<div class="stop-done">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:22px;height:22px;border-radius:50%;background:var(--green-mid);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i+1}</div>
+          <div><div class="stop-loc">${s.location}</div><div class="stop-op">${s.operation}${s.ref?' · '+s.ref:''}${cargo}</div></div>
+        </div>
+        <span class="dur-pill ${dc}" style="margin-left:8px;white-space:nowrap;">${dur(s.durationMin)}</span>
+      </div>
+      <div class="stop-times">
+        <div class="time-pill"><span>Arr.</span>${s.arrivalTime}</div>
+        <div class="time-pill"><span>Dép.</span>${s.departureTime}</div>
+        ${i>0&&s.transitFromPrev!=null?`<div class="transit-pill">🚛 ${dur(s.transitFromPrev)} transit</div>`:''}
+      </div>
+      ${s.comment?`<div style="font-size:12px;color:var(--text-secondary);margin-top:6px;font-style:italic;">${s.comment}</div>`:''}
+    </div>`;
+  });
+  tl.innerHTML=html;
+}
+
+// ============================================================
+// TICKER
+// ============================================================
+function startTicker(mode,fromLoc){
+  stopTicker();
+  ticker=setInterval(()=>{
+    if(mode==='stop'&&activeStop){
+      const sec=Math.floor((Date.now()-activeStop.arrivalTs)/1000);
+      const el=document.getElementById('as-timer');
+      if(el) el.textContent=pad(Math.floor(sec/60))+':'+pad(sec%60);
+    }
+    if(mode==='transit'&&transitStart!==null){
+      const sec=Math.floor((Date.now()-transitStart)/1000);
+      const el=document.getElementById('transit-timer');
+      if(el) el.textContent=pad(Math.floor(sec/60))+':'+pad(sec%60);
+      const nextLoc=document.getElementById('ns-loc').value||'?';
+      const re=document.getElementById('transit-route');
+      if(re) re.textContent=(fromLoc||'')+(nextLoc?' → '+nextLoc:'');
+    }
+  },1000);
+}
+function stopTicker(){clearInterval(ticker);ticker=null;}
+
+// ============================================================
+// CMR
+// ============================================================
+function handleCMR(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    if(activeMission) activeMission._cmr=ev.target.result;
+    const z=document.getElementById('upload-zone');
+    z.classList.add('has-file');
+    z.innerHTML='<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:28px;height:28px;margin-bottom:8px;"><polyline points="20 6 9 17 4 12"/></svg><p>CMR joint ✓</p>';
+    const p=document.getElementById('cmr-preview');
+    p.innerHTML='<img src="'+ev.target.result+'"/>';p.style.display='';
+  };
+  r.readAsDataURL(f);
+}
+function resetUploadZone(){
+  const z=document.getElementById('upload-zone');
+  z.classList.remove('has-file');
+  z.innerHTML='<svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:28px;height:28px;margin-bottom:8px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><p>Photographier le CMR</p><p style="font-size:12px;margin-top:4px;color:var(--text-hint);">ou sélectionner depuis la galerie</p>';
+}
+
+// ============================================================
+// CARGO
+// ============================================================
+function switchCargo(type){
+  document.getElementById('btn-loose').classList.toggle('selected',type==='loose');
+  document.getElementById('btn-uld').classList.toggle('selected',type==='uld');
+  document.querySelectorAll('input[name="ctype"]').forEach(r=>r.checked=(r.value===type));
+  show('cargo-loose',type==='loose');show('cargo-uld',type==='uld');
+}
+function fmtAWB(inp){
+  let v=inp.value.replace(/\D/g,'').slice(0,11);
+  if(v.length<=3) inp.value=v;
+  else if(v.length<=7) inp.value=v.slice(0,3)+'-'+v.slice(3);
+  else inp.value=v.slice(0,3)+'-'+v.slice(3,7)+' '+v.slice(7);
+}
+function fmtULD(inp){
+  let v=inp.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(v.length<=3) inp.value=v;
+  else if(v.length<=8) inp.value=v.slice(0,3)+'-'+v.slice(3);
+  else inp.value=v.slice(0,3)+'-'+v.slice(3,8)+'-'+v.slice(8,10);
+}
+function addLoose(){
+  const c=document.getElementById('loose-items');
+  const n=c.querySelectorAll('.cargo-item').length+1;
+  const d=document.createElement('div');d.className='cargo-item';
+  d.innerHTML=`<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;color:var(--text-secondary);">Expédition ${n}</span><button type="button" class="rm-btn" onclick="this.closest('.cargo-item').remove()">✕</button></div><div style="display:grid;grid-template-columns:90px 1fr;gap:8px;"><div><label class="form-label">Nb pièces</label><input class="form-input" type="number" min="1" placeholder="12" data-field="pieces"/></div><div><label class="form-label">N° AWB</label><input class="form-input awb-input" type="text" placeholder="123-4567 8901" maxlength="12" data-field="awb" oninput="fmtAWB(this)"/></div></div>`;
+  c.appendChild(d);
+}
+function addULD(){
+  const c=document.getElementById('uld-items');
+  const n=c.querySelectorAll('.cargo-item').length+1;
+  const d=document.createElement('div');d.className='cargo-item';
+  d.innerHTML=`<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;color:var(--text-secondary);">ULD ${n}</span><button type="button" class="rm-btn" onclick="this.closest('.cargo-item').remove()">✕</button></div><div style="margin-bottom:8px;"><label class="form-label">N° ULD</label><input class="form-input uld-input" type="text" placeholder="PMC-12345-LG" maxlength="11" data-field="uld" oninput="fmtULD(this)"/></div><div><label class="form-label">N° AWB</label><input class="form-input awb-input" type="text" placeholder="123-4567 8901" maxlength="12" data-field="awb" oninput="fmtAWB(this)"/></div>`;
+  c.appendChild(d);
+}
+function collectCargo(){
+  const t=document.querySelector('input[name="ctype"]:checked');
+  if(!t)return[];
+  const res=[];
+  const sel=t.value==='loose'?'#loose-items':'#uld-items';
+  document.querySelectorAll(sel+' .cargo-item').forEach(item=>{
+    const u=item.querySelector('[data-field="uld"]')?.value||'';
+    const p=item.querySelector('[data-field="pieces"]')?.value||'';
+    const a=item.querySelector('[data-field="awb"]')?.value||'';
+    if(u||p||a) res.push({type:t.value,uld:u,pieces:p,awb:a});
+  });
+  return res;
+}
+function resetCargo(){
+  document.querySelectorAll('input[name="ctype"]').forEach(r=>r.checked=false);
+  ['btn-loose','btn-uld'].forEach(id=>document.getElementById(id).classList.remove('selected'));
+  show('cargo-loose',false);show('cargo-uld',false);
+  ['loose-items','uld-items'].forEach(id=>{
+    const c=document.getElementById(id);
+    c.querySelectorAll('.cargo-item:not(:first-child)').forEach(e=>e.remove());
+    c.querySelectorAll('input').forEach(i=>i.value='');
+  });
+}
+
+// ============================================================
+// MANAGER
+// ============================================================
+function renderManager(){
+  const fl=document.getElementById('f-loc').value;
+  const fd=document.getElementById('f-date').value;
+
+  const allLocs=[...new Set(missions.flatMap(m=>m.stops.map(s=>s.location)))].filter(Boolean).sort();
+  const allDates=[...new Set(missions.map(m=>m.date))].filter(Boolean).sort().reverse();
+  document.getElementById('f-loc').innerHTML='<option value="">Tous les lieux</option>'+allLocs.map(l=>`<option${l===fl?' selected':''}>${l}</option>`).join('');
+  document.getElementById('f-date').innerHTML='<option value="">Toutes les dates</option>'+allDates.map(d=>`<option${d===fd?' selected':''}>${d}</option>`).join('');
+
+  let fm=missions.filter(m=>m.completed);
+  if(fd) fm=fm.filter(m=>m.date===fd);
+
+  let allStops=fm.flatMap(m=>m.stops.map(s=>({...s,driver:m.driver,plate:m.plate,date:m.date})));
+  if(fl) allStops=allStops.filter(s=>s.location===fl);
+  const done=allStops.filter(s=>s.durationMin!=null);
+
+  document.getElementById('stat-m').textContent=fm.length;
+  document.getElementById('stat-s').textContent=allStops.length;
+  if(done.length) document.getElementById('stat-a').textContent=Math.round(done.reduce((s,e)=>s+e.durationMin,0)/done.length);
+  else document.getElementById('stat-a').textContent='—';
+
+  const transits=fm.flatMap(m=>m.stops.slice(1).map(s=>s.transitFromPrev).filter(t=>t!=null));
+  if(transits.length) document.getElementById('stat-t').textContent=Math.round(transits.reduce((a,b)=>a+b,0)/transits.length);
+  else document.getElementById('stat-t').textContent='—';
+
+  // Wait table
+  const byLoc={};
+  done.forEach(s=>{if(!byLoc[s.location])byLoc[s.location]={d:[],dates:[]};byLoc[s.location].d.push(s.durationMin);byLoc[s.location].dates.push(s.date);});
+  const wb=document.getElementById('rep-wait');
+  const wrows=Object.entries(byLoc);
+  if(!wrows.length){wb.innerHTML='<tr><td colspan="6"><div class="empty"><p>Aucune donnée.</p></div></td></tr>';}
+  else{wb.innerHTML=wrows.sort((a,b)=>b[1].d.length-a[1].d.length).map(([loc,{d,dates}])=>{
+    const avg=Math.round(d.reduce((a,b)=>a+b,0)/d.length);
+    const col=avg>60?'color:var(--red)':avg>30?'color:var(--amber)':'color:var(--green)';
+    return `<tr><td style="font-weight:700;">${loc}</td><td>${d.length}</td><td style="${col};font-weight:700;">${dur(avg)}</td><td style="color:var(--red);">${dur(Math.max(...d))}</td><td style="color:var(--green);">${dur(Math.min(...d))}</td><td style="color:var(--text-secondary);font-size:12px;">${[...dates].sort().reverse()[0]}</td></tr>`;
+  }).join('');}
+
+  // Transit table
+  const pairs={};
+  fm.forEach(m=>{for(let i=1;i<m.stops.length;i++){const k=m.stops[i-1].location+' → '+m.stops[i].location;const t=m.stops[i].transitFromPrev;if(t!=null){if(!pairs[k])pairs[k]=[];pairs[k].push(t);}}});
+  const tb=document.getElementById('rep-transit');
+  const trows=Object.entries(pairs);
+  if(!trows.length){tb.innerHTML='<tr><td colspan="4"><div class="empty"><p>Données disponibles dès la 2ème mission multi-stops.</p></div></td></tr>';}
+  else{tb.innerHTML=trows.sort((a,b)=>b[1].length-a[1].length).map(([k,ts])=>{
+    const avg=Math.round(ts.reduce((a,b)=>a+b,0)/ts.length);
+    return `<tr><td style="font-weight:600;">🚛 ${k}</td><td>${ts.length}</td><td style="font-weight:700;">${dur(avg)}</td><td style="color:var(--amber);">${dur(Math.max(...ts))}</td></tr>`;
+  }).join('');}
+
+  // Activity log
+  const al=document.getElementById('act-list');
+  const recent=[...fm].reverse().slice(0,10);
+  if(!recent.length){al.innerHTML='<div class="empty"><svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:40px;height:40px;margin-bottom:12px;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><p>Aucune mission.</p></div>';return;}
+  al.innerHTML=recent.map(m=>{
+    const tot=m.stops.reduce((s,st)=>s+(st.durationMin||0),0);
+    const chain=m.stops.map((s,i)=>{
+      const transit=i>0&&s.transitFromPrev!=null?`<span class="transit-chip">🚛 ${dur(s.transitFromPrev)}</span>`:i>0?'<span class="arrow-chip">→</span>':'';
+      const dc=s.durationMin>60?'dur-long':s.durationMin>30?'dur-med':'dur-ok';
+      return `${transit}<span class="stop-chip">${s.location} <span class="dur-pill ${dc}" style="padding:2px 6px;font-size:11px;">${dur(s.durationMin)}</span></span>`;
+    }).join('');
+    return `<div class="act-item"><div class="act-dot"></div><div class="act-body"><div class="act-title">${m.driver}${m.plate?' · '+m.plate:''} <span style="font-size:12px;font-weight:400;color:var(--text-secondary);">${m.stops.length} stop${m.stops.length>1?'s':''} · ${dur(tot)} total</span></div><div class="act-meta">${chain}</div></div><div class="act-date">${m.date}</div></div>`;
+  }).join('');
+}
+
+// ============================================================
+// CSV
+// ============================================================
+function exportCSV(){
+  if(!missions.length){toast('Aucune donnée.',true);return;}
+  const H=['Date','Chauffeur','Plaque','Stop#','Lieu','Opération','Réf','Type cargo','ULD/Pièces','AWB','Arrivée','Départ','Durée (min)','Transit préc. (min)','Commentaire'];
+  const rows=[];
+  missions.filter(m=>m.completed).forEach(m=>{
+    m.stops.forEach((s,i)=>{
+      const cargo=s.cargo&&s.cargo.length?s.cargo:[{}];
+      cargo.forEach((c,ci)=>{
+        rows.push([ci===0?m.date:'',ci===0?m.driver:'',ci===0?m.plate:'',ci===0?i+1:'',ci===0?s.location:'',ci===0?s.operation:'',ci===0?(s.ref||''):'',ci===0?(s.cargoType||''):'',c.type==='uld'?(c.uld||''):(c.pieces?c.pieces+' pcs':''),c.awb||'',ci===0?(s.arrivalTime||''):'',ci===0?(s.departureTime||''):'',ci===0?(s.durationMin!=null?s.durationMin:''):'',ci===0&&i>0?(s.transitFromPrev!=null?s.transitFromPrev:''):'',ci===0?(s.comment||'').replace(/;/g,','):''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';'));
+      });
+    });
+  });
+  const csv=[H.join(';'),...rows].join('\r\n');
+  const b=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const u=URL.createObjectURL(b);
+  const a=document.createElement('a');a.href=u;a.download='LCA_missions_'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(u);
+  toast('CSV téléchargé.');
+}
+
+// ============================================================
+// PRINT
+// ============================================================
+function printReport(){
+  const fl=document.getElementById('f-loc').value;
+  const fd=document.getElementById('f-date').value;
+  let fm=missions.filter(m=>m.completed);
+  if(fd)fm=fm.filter(m=>m.date===fd);
+  const byLoc={};
+  fm.forEach(m=>m.stops.forEach(s=>{if(!fl||s.location===fl){if(!byLoc[s.location])byLoc[s.location]=[];if(s.durationMin!=null)byLoc[s.location].push(s.durationMin);}}));
+  const locR=Object.entries(byLoc).map(([l,d])=>{if(!d.length)return'';const avg=Math.round(d.reduce((a,b)=>a+b,0)/d.length);return`<tr><td><b>${l}</b></td><td>${d.length}</td><td>${avg} min</td><td>${Math.max(...d)} min</td><td>${Math.min(...d)} min</td></tr>`;}).join('');
+  const pairs={};fm.forEach(m=>{for(let i=1;i<m.stops.length;i++){const k=m.stops[i-1].location+' → '+m.stops[i].location;const t=m.stops[i].transitFromPrev;if(t!=null){if(!pairs[k])pairs[k]=[];pairs[k].push(t);}}});
+  const tR=Object.entries(pairs).map(([k,ts])=>`<tr><td>${k}</td><td>${ts.length}</td><td>${Math.round(ts.reduce((a,b)=>a+b,0)/ts.length)} min</td><td>${Math.max(...ts)} min</td></tr>`).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rapport LCA</title><style>body{font-family:Arial,sans-serif;font-size:12px;padding:24px;}h1{font-size:18px;}h2{font-size:14px;margin:20px 0 8px;color:#444;}table{width:100%;border-collapse:collapse;margin-bottom:16px;}th{background:#185FA5;color:#fff;padding:7px 10px;text-align:left;font-size:11px;}td{padding:6px 10px;border-bottom:1px solid #ddd;}</style></head><body><h1>Rapport LCA — ${fl||'Tous sites'} · ${fd||'Toutes dates'}</h1><p style="color:#666;font-size:12px;">Généré le ${new Date().toLocaleString('fr-BE')}</p><h2>Temps d'attente par lieu</h2><table><thead><tr><th>Lieu</th><th>Passages</th><th>Moy.</th><th>Max</th><th>Min</th></tr></thead><tbody>${locR||'<tr><td colspan="5">Aucune donnée</td></tr>'}</tbody></table><h2>Temps de transit entre sites</h2><table><thead><tr><th>Trajet</th><th>Passages</th><th>Transit moy.</th><th>Max</th></tr></thead><tbody>${tR||'<tr><td colspan="4">Aucune donnée</td></tr>'}</tbody></table></body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+}
+
+// ============================================================
+// CLEAR
+// ============================================================
+function doClear(){missions=[];save();document.getElementById('clear-modal').classList.remove('open');toast('Données effacées.');renderManager();}
+</script>
+</body>
+</html>
