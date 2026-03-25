@@ -3,20 +3,70 @@ const SUPABASE_ANON = 'sb_publishable_biUSd_hIHmFdN0egFbyNCQ_MoTcNrdc';
 
 console.log('[Supabase] Initializing with URL:', SUPABASE_URL);
 
-// Check if supabase library is loaded
 if (typeof supabase === 'undefined') {
   console.error('[Supabase] Library not loaded! CDN script may have failed.');
 } else {
   console.log('[Supabase] Library loaded successfully');
 }
 
-// Initialize Supabase
 let supabaseClient = null;
 try {
   supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
   console.log('[Supabase] Client created successfully');
 } catch (e) {
   console.error('[Supabase] Failed to create client:', e.message);
+}
+
+// ============================================================
+// UTILS — conversion timestamps
+// ============================================================
+
+// Convertit un timestamp Unix (ms) ou une valeur déjà ISO en TIMESTAMPTZ ISO
+// Retourne null si la valeur est absente/nulle
+function toISO(val) {
+  if (!val) return null;
+  // Déjà une string ISO (ex: "2026-03-25T23:25:13.000Z")
+  if (typeof val === 'string') return val;
+  // Unix ms (number)
+  return new Date(val).toISOString();
+}
+
+// Convertit une TIMESTAMPTZ Supabase (string ISO) en Unix ms
+// pour que le reste du code JS continue à fonctionner avec des timestamps ms
+function fromISO(val) {
+  if (!val) return null;
+  if (typeof val === 'number') return val;
+  return new Date(val).getTime();
+}
+
+// Convertit tous les timestamps d'un stop (JSONB) de ms → ISO pour le stockage
+function stopToStorage(stop) {
+  if (!stop) return stop;
+  return {
+    ...stop,
+    tArrival:      toISO(stop.tArrival),
+    tDockAssigned: toISO(stop.tDockAssigned),
+    tDockReady:    toISO(stop.tDockReady),
+    tOpsStart:     toISO(stop.tOpsStart),
+    tOpsEnd:       toISO(stop.tOpsEnd),
+    tDoc:          toISO(stop.tDoc),
+    tDepart:       toISO(stop.tDepart),
+  };
+}
+
+// Reconvertit un stop stocké (ISO) en timestamps ms pour le JS
+function stopFromStorage(stop) {
+  if (!stop) return stop;
+  return {
+    ...stop,
+    tArrival:      fromISO(stop.tArrival),
+    tDockAssigned: fromISO(stop.tDockAssigned),
+    tDockReady:    fromISO(stop.tDockReady),
+    tOpsStart:     fromISO(stop.tOpsStart),
+    tOpsEnd:       fromISO(stop.tOpsEnd),
+    tDoc:          fromISO(stop.tDoc),
+    tDepart:       fromISO(stop.tDepart),
+  };
 }
 
 // ============================================================
@@ -33,13 +83,22 @@ async function loadMissionsFromSupabase() {
       .from('missions')
       .select('*')
       .order('daystartts', { ascending: false });
-    
+
     if (error) {
       console.warn('[Supabase] Error loading missions:', error.message);
       return [];
     }
-    console.log('[Supabase] Loaded', data?.length || 0, 'missions from Supabase');
-    return data || [];
+
+    // Reconvertir les TIMESTAMPTZ → Unix ms pour le reste du code
+    const missions = (data || []).map(m => ({
+      ...m,
+      dayStartTs: fromISO(m.daystartts),
+      dayEndTs:   fromISO(m.dayendts),
+      stops: (m.stops || []).map(stopFromStorage),
+    }));
+
+    console.log('[Supabase] Loaded', missions.length, 'missions from Supabase');
+    return missions;
   } catch (e) {
     console.warn('[Supabase] Mission load failed:', e.message);
     return [];
@@ -53,23 +112,21 @@ async function saveMissionToSupabase(mission) {
   }
   try {
     console.log('[Supabase] Saving mission:', mission.id, mission.driver);
-    
-    const { data, error } = await supabaseClient
+
+    const { error } = await supabaseClient
       .from('missions')
-      .upsert([
-        {
-          id: mission.id,
-          driver: mission.driver,
-          plate: mission.plate || '',
-          date: mission.date,
-          daystartts: mission.dayStartTs,
-          dayendts: mission.dayEndTs || null,
-          completed: mission.completed || false,
-          stops: mission.stops || [],
-          updatedat: new Date().toISOString()
-        }
-      ], { onConflict: 'id' });
-    
+      .upsert([{
+        id:         mission.id,
+        driver:     mission.driver,
+        plate:      mission.plate || '',
+        date:       mission.date,
+        daystartts: toISO(mission.dayStartTs),   // ← Unix ms → ISO
+        dayendts:   toISO(mission.dayEndTs),      // ← Unix ms → ISO (ou null)
+        completed:  mission.completed || false,
+        stops:      (mission.stops || []).map(stopToStorage), // ← timestamps des stops → ISO
+        updatedat:  new Date().toISOString()
+      }], { onConflict: 'id' });
+
     if (error) {
       console.error('[Supabase] ❌ Error saving mission:', {
         message: error.message,
@@ -101,13 +158,20 @@ async function loadMessagesFromSupabase() {
       .from('messages')
       .select('*')
       .order('ts', { ascending: true });
-    
+
     if (error) {
       console.warn('[Supabase] Error loading messages:', error.message);
       return [];
     }
-    console.log('[Supabase] Loaded', data?.length || 0, 'messages from Supabase');
-    return data || [];
+
+    // Reconvertir ts (TIMESTAMPTZ) → Unix ms
+    const messages = (data || []).map(m => ({
+      ...m,
+      ts: fromISO(m.ts),
+    }));
+
+    console.log('[Supabase] Loaded', messages.length, 'messages from Supabase');
+    return messages;
   } catch (e) {
     console.warn('[Supabase] Message load failed:', e.message);
     return [];
@@ -121,22 +185,20 @@ async function saveMessageToSupabase(message) {
   }
   try {
     console.log('[Supabase] Saving message:', message.id, 'from:', message.from);
-    
-    const { data, error } = await supabaseClient
+
+    const { error } = await supabaseClient
       .from('messages')
-      .insert([
-        {
-          id: message.id,
-          from: message.from,
-          fromName: message.fromName || '',
-          to: message.to,
-          toLabel: message.toLabel || '',
-          text: message.text,
-          ts: message.ts,
-          read: message.read || false
-        }
-      ]);
-    
+      .insert([{
+        id:       message.id,
+        from:     message.from,
+        fromname: message.fromName || '',
+        to:       message.to,
+        tolabel:  message.toLabel || '',
+        text:     message.text,
+        ts:       toISO(message.ts),   // ← Unix ms → ISO
+        read:     message.read || false
+      }]);
+
     if (error) {
       console.error('[Supabase] ❌ Error saving message:', {
         message: error.message,
@@ -164,7 +226,7 @@ async function updateMessageReadStatus(messageId, read) {
       .from('messages')
       .update({ read })
       .eq('id', messageId);
-    
+
     if (error) {
       console.warn('[Supabase] Error updating message:', error.message);
       return false;
@@ -177,15 +239,15 @@ async function updateMessageReadStatus(messageId, read) {
 }
 
 // ============================================================
-// Initialization - Auto-load from Supabase
+// Initialization
 // ============================================================
 
 async function initSupabase() {
   console.log('[Supabase] Starting initialization...');
-  
+
   const sbMissions = await loadMissionsFromSupabase();
   const sbMessages = await loadMessagesFromSupabase();
-  
+
   if (sbMissions.length > 0) {
     window.missionsFromSupabase = sbMissions;
     console.log('[Supabase] Missions loaded into window');
@@ -194,24 +256,22 @@ async function initSupabase() {
     window.messagesFromSupabase = sbMessages;
     console.log('[Supabase] Messages loaded into window');
   }
-  
+
   console.log('[Supabase] Initialization complete');
 }
 
-// Make functions globally accessible
-window.saveMissionToSupabase = saveMissionToSupabase;
-window.saveMessageToSupabase = saveMessageToSupabase;
-window.updateMessageReadStatus = updateMessageReadStatus;
+// Expose globally
+window.saveMissionToSupabase    = saveMissionToSupabase;
+window.saveMessageToSupabase    = saveMessageToSupabase;
+window.updateMessageReadStatus  = updateMessageReadStatus;
 window.loadMissionsFromSupabase = loadMissionsFromSupabase;
 window.loadMessagesFromSupabase = loadMessagesFromSupabase;
-window.initSupabase = initSupabase;
-window.supabaseClient = supabaseClient; // expose for realtime subscriptions
+window.initSupabase             = initSupabase;
+window.supabaseClient           = supabaseClient; // pour les subscriptions realtime
 
 console.log('[Supabase] Functions registered globally');
 
-// Wait for Supabase library to load
 if (typeof supabase !== 'undefined') {
-  console.log('[Supabase] Starting initialization...');
   initSupabase().catch(e => console.warn('[Supabase] Init error:', e.message));
 } else {
   console.error('[Supabase] Library still not loaded!');
