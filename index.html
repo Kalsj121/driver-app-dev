@@ -6,52 +6,62 @@
 <title>LCA · Transfert</title>
 <style>
 :root{
-  --blue:#185FA5;--bdk:#0C447C;--blt:#E6F1FB;
+  --blue:#4da9be;--bdk:#3a8fa3;--blt:#e8f6f9;
   --green:#0F6E56;--glt:#E1F5EE;--gmid:#1D9E75;
   --amber:#BA7517;--alt:#FAEEDA;
   --red:#A32D2D;--rlt:#FCEBEB;
-  --bg:#F5F5F3;--card:#FFFFFF;
-  --b1:rgba(0,0,0,0.12);--b2:rgba(0,0,0,0.22);
-  --t1:#1A1A1A;--t2:#6B6B68;--t3:#9E9E9A;
+  --bg:#f5f5f5;--card:#ffffff;--subcard:#f1f1f1;
+  --b1:rgba(0,0,0,0.10);--b2:rgba(0,0,0,0.18);
+  --t1:#333333;--t2:#6B6B68;--t3:#9E9E9A;
+  --header:#4da9be;
   --rmd:8px;--rlg:12px;--rxl:16px;
 }
-@media(prefers-color-scheme:dark){:root{
-  --bg:#141414;--card:#1E1E1E;
-  --b1:rgba(255,255,255,0.1);--b2:rgba(255,255,255,0.2);
-  --t1:#F0F0EE;--t2:#A0A09C;--t3:#6A6A68;
-  --blt:#0C2740;--glt:#042920;--alt:#2A1C04;
-}}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;}
 
+/* LOGIN SCREEN */
+#login-screen{position:fixed;inset:0;background:var(--header);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;padding:24px;}
+#login-screen.hidden{display:none;}
+.login-box{background:#fff;border-radius:18px;padding:28px 24px;width:100%;max-width:380px;box-shadow:0 8px 40px rgba(0,0,0,0.18);}
+.login-logo{text-align:center;margin-bottom:20px;}
+.login-logo img{width:64px;height:64px;object-fit:contain;}
+.login-title{font-size:20px;font-weight:700;color:var(--t1);text-align:center;margin-bottom:4px;}
+.login-sub{font-size:13px;color:var(--t2);text-align:center;margin-bottom:22px;}
+.login-fg{margin-bottom:14px;}
+.login-fg label{font-size:13px;color:var(--t2);font-weight:500;display:block;margin-bottom:5px;}
+.login-fg input{width:100%;padding:11px 14px;font-size:15px;border:1px solid var(--b2);border-radius:var(--rmd);background:var(--bg);color:var(--t1);outline:none;font-family:inherit;}
+.login-fg input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,169,190,0.15);}
+.login-btn{width:100%;padding:13px;font-size:15px;font-weight:700;background:var(--header);color:#fff;border:none;border-radius:var(--rmd);cursor:pointer;font-family:inherit;margin-top:4px;}
+.login-btn:active{opacity:.9;}
+.login-err{font-size:13px;color:var(--red);text-align:center;margin-top:10px;display:none;}
+
 /* HEADER */
-.hdr{background:var(--card);border-bottom:0.5px solid var(--b1);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.hdr{background:var(--header);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
 .logo{display:flex;align-items:center;gap:10px;}
-.lmk{width:30px;height:30px;background:var(--blue);border-radius:7px;display:flex;align-items:center;justify-content:center;}
-.lmk svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2;}
-.ltx{font-size:15px;font-weight:700;letter-spacing:-.02em;}
-.lsb{font-size:11px;color:var(--t2);}
-.dayhdr{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--blue);background:var(--blt);padding:5px 12px;border-radius:99px;display:none;letter-spacing:.02em;}
+.logo-img{width:32px;height:32px;object-fit:contain;border-radius:6px;background:#fff;padding:2px;}
+.ltx{font-size:15px;font-weight:700;color:#fff;letter-spacing:-.02em;}
+.lsb{font-size:11px;color:rgba(255,255,255,0.75);}
+.dayhdr{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;background:rgba(255,255,255,0.2);padding:5px 12px;border-radius:99px;display:none;letter-spacing:.02em;}
 
 /* TABS */
-.tabs{display:flex;background:var(--card);border-bottom:0.5px solid var(--b1);}
+.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--b1);}
 .tab{flex:1;padding:11px;text-align:center;font-size:14px;font-weight:500;color:var(--t2);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;}
 .tab.on{color:var(--blue);border-bottom-color:var(--blue);}
 
 /* VIEWS */
 .view{display:none;padding:16px;max-width:560px;margin:0 auto;}
 .view.on{display:block;}
-.wide{max-width:1000px;}
 
 /* CARD */
-.card{background:var(--card);border:0.5px solid var(--b1);border-radius:var(--rlg);padding:14px 16px;margin-bottom:10px;}
+.card{background:var(--card);border:1px solid var(--b1);border-radius:var(--rlg);padding:14px 16px;margin-bottom:10px;}
+.subcard{background:var(--subcard);border:1px solid var(--b1);border-radius:var(--rmd);padding:12px 14px;margin-bottom:8px;}
 .ctit{font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;}
 
 /* FORM */
 .fg{margin-bottom:12px;}
 .fl{font-size:13px;color:var(--t2);display:block;margin-bottom:5px;font-weight:500;}
-.fi{width:100%;padding:10px 12px;font-size:15px;border:0.5px solid var(--b2);border-radius:var(--rmd);background:var(--bg);color:var(--t1);outline:none;font-family:inherit;}
-.fi:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(24,95,165,0.1);}
+.fi{width:100%;padding:10px 12px;font-size:15px;border:1px solid var(--b2);border-radius:var(--rmd);background:var(--bg);color:var(--t1);outline:none;font-family:inherit;}
+.fi:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,169,190,0.12);}
 select.fi{cursor:pointer;}
 textarea.fi{resize:vertical;min-height:64px;}
 
@@ -62,8 +72,11 @@ textarea.fi{resize:vertical;min-height:64px;}
 .bp{background:var(--blue);color:#fff;}
 .bg{background:var(--green);color:#fff;}
 .ba{background:var(--amber);color:#fff;}
-.bo{background:none;border:0.5px solid var(--b2);color:var(--t1);}
+.bo{background:none;border:1px solid var(--b2);color:var(--t1);}
 .bsm{width:auto;padding:6px 12px;font-size:12px;font-weight:500;}
+/* Back button */
+.btn-back{display:flex;align-items:center;gap:6px;background:none;border:1px solid var(--b2);color:var(--t2);border-radius:var(--rmd);padding:7px 12px;font-size:13px;font-weight:500;cursor:pointer;width:auto;margin-bottom:10px;}
+.btn-back:active{opacity:.7;}
 
 /* PROGRESS BAR */
 .pbar{display:flex;gap:3px;margin-bottom:10px;}
@@ -73,11 +86,11 @@ textarea.fi{resize:vertical;min-height:64px;}
 
 /* LIVE TIMER BANNER */
 .banner{border-radius:var(--rlg);padding:14px 16px;margin-bottom:10px;}
-.bn-gray{background:var(--card);border:0.5px solid var(--b1);}
-.bn-blue{background:var(--blt);border:0.5px solid rgba(24,95,165,0.25);}
-.bn-amber{background:var(--alt);border:0.5px solid rgba(186,117,23,0.3);}
-.bn-green{background:var(--glt);border:0.5px solid rgba(29,158,117,0.3);}
-.bn-transit{background:rgba(186,117,23,0.08);border:0.5px solid rgba(186,117,23,0.2);}
+.bn-gray{background:var(--card);border:1px solid var(--b1);}
+.bn-blue{background:var(--blt);border:1px solid rgba(77,169,190,0.3);}
+.bn-amber{background:var(--alt);border:1px solid rgba(186,117,23,0.3);}
+.bn-green{background:var(--glt);border:1px solid rgba(29,158,117,0.3);}
+.bn-transit{background:rgba(186,117,23,0.08);border:1px solid rgba(186,117,23,0.2);}
 .bn-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;}
 .bn-blue .bn-label{color:var(--blue);}
 .bn-amber .bn-label{color:var(--amber);}
@@ -89,7 +102,7 @@ textarea.fi{resize:vertical;min-height:64px;}
 /* TIMER GRID */
 .tgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;}
 .tgrid.cols3{grid-template-columns:repeat(3,1fr);}
-.tbox{background:var(--card);border-radius:var(--rmd);padding:9px 11px;border:0.5px solid var(--b1);}
+.tbox{background:var(--card);border-radius:var(--rmd);padding:9px 11px;border:1px solid var(--b1);}
 .tb-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--t2);margin-bottom:3px;}
 .tb-val{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;}
 .tc-blue{color:var(--blue);}
@@ -97,14 +110,14 @@ textarea.fi{resize:vertical;min-height:64px;}
 .tc-green{color:var(--gmid);}
 .tc-gray{color:var(--t2);}
 
-/* TRANSIT STRIP (between stops) */
-.transit-strip{background:var(--alt);border:0.5px solid rgba(186,117,23,0.3);border-radius:var(--rlg);padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+/* TRANSIT STRIP */
+.transit-strip{background:var(--alt);border:1px solid rgba(186,117,23,0.3);border-radius:var(--rlg);padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
 .ts-label{font-size:12px;font-weight:700;color:var(--amber);}
 .ts-sub{font-size:12px;color:var(--amber);opacity:.75;}
 .ts-timer{font-size:26px;font-weight:700;color:var(--amber);font-variant-numeric:tabular-nums;}
 
 /* STOP DONE CARD */
-.sdone{background:var(--glt);border:0.5px solid rgba(29,158,117,0.3);border-radius:var(--rlg);padding:12px 14px;margin-bottom:4px;}
+.sdone{background:var(--glt);border:1px solid rgba(29,158,117,0.3);border-radius:var(--rlg);padding:12px 14px;margin-bottom:4px;}
 .sconn{width:2px;height:12px;background:var(--gmid);margin:0 0 4px 16px;}
 .sdn{font-size:14px;font-weight:700;}
 .sdop{font-size:12px;color:var(--t2);margin-top:1px;margin-bottom:8px;}
@@ -113,12 +126,12 @@ textarea.fi{resize:vertical;min-height:64px;}
 .c-b{background:var(--blt);color:var(--blue);}
 .c-a{background:var(--alt);color:var(--amber);}
 .c-g{background:var(--glt);color:var(--green);}
-.c-gr{background:var(--bg);color:var(--t2);border:0.5px solid var(--b1);}
+.c-gr{background:var(--bg);color:var(--t2);border:1px solid var(--b1);}
 
 /* CARGO */
-.ctyp{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border:0.5px solid var(--b2);border-radius:var(--rmd);cursor:pointer;font-size:14px;font-weight:500;background:var(--bg);user-select:none;}
+.ctyp{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border:1px solid var(--b2);border-radius:var(--rmd);cursor:pointer;font-size:14px;font-weight:500;background:var(--bg);user-select:none;}
 .ctyp.on{background:var(--blt);border-color:var(--blue);color:var(--blue);}
-.ci{background:var(--bg);border:0.5px solid var(--b1);border-radius:var(--rmd);padding:11px;margin-bottom:8px;}
+.ci{background:var(--subcard);border:1px solid var(--b1);border-radius:var(--rmd);padding:11px;margin-bottom:8px;}
 .ci .fl{font-size:12px;}
 .ci .fi{font-size:14px;padding:8px 10px;}
 .awb{font-family:'Courier New',monospace;letter-spacing:.08em;}
@@ -127,51 +140,31 @@ textarea.fi{resize:vertical;min-height:64px;}
 .rmbtn:hover{color:var(--red);background:var(--rlt);}
 
 /* CMR */
-.upzone{border:1.5px dashed var(--b2);border-radius:var(--rmd);padding:18px;text-align:center;cursor:pointer;background:var(--bg);}
-.upzone:hover{border-color:var(--blue);background:var(--blt);}
-.upzone.ok{border-color:var(--gmid);border-style:solid;background:var(--glt);}
-.upzone svg{width:26px;height:26px;margin-bottom:6px;}
-.upzone p{font-size:13px;color:var(--t2);}
-.upzone.ok p{color:var(--green);font-weight:600;}
+.cmr-opts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+.cmr-opt{border:2px dashed var(--b2);border-radius:var(--rmd);padding:16px 12px;text-align:center;cursor:pointer;background:var(--bg);transition:all .15s;}
+.cmr-opt:hover{border-color:var(--blue);background:var(--blt);}
+.cmr-opt.ok{border-color:var(--gmid);border-style:solid;background:var(--glt);}
+.cmr-opt svg{width:28px;height:28px;margin-bottom:6px;display:block;margin-left:auto;margin-right:auto;}
+.cmr-opt p{font-size:12px;color:var(--t2);font-weight:500;}
+.cmr-opt.ok p{color:var(--green);font-weight:600;}
 input[type=file]{display:none;}
 .cprev{margin-top:8px;border-radius:var(--rmd);overflow:hidden;max-height:130px;}
 .cprev img{width:100%;height:130px;object-fit:cover;display:block;}
+.cmr-valid-note{font-size:12px;color:var(--amber);background:var(--alt);border-radius:6px;padding:7px 10px;margin-top:6px;display:none;}
 
-/* MANAGER */
-.sgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:14px;}
-.sc{background:var(--card);border:0.5px solid var(--b1);border-radius:var(--rlg);padding:12px 14px;}
-.sc-l{font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;}
-.sc-v{font-size:22px;font-weight:700;letter-spacing:-.02em;}
-.sc-s{font-size:11px;color:var(--t2);margin-top:2px;}
-.toolbar{display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap;align-items:center;}
-.toolbar select{flex:1;min-width:120px;padding:7px 10px;font-size:13px;border:0.5px solid var(--b2);border-radius:var(--rmd);background:var(--card);color:var(--t1);font-family:inherit;}
-.tw{overflow-x:auto;}
-table{width:100%;border-collapse:collapse;font-size:13px;}
-th{text-align:left;font-size:10px;font-weight:700;color:var(--t2);padding:7px 10px;border-bottom:0.5px solid var(--b1);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;}
-td{padding:8px 10px;border-bottom:0.5px solid var(--b1);vertical-align:middle;}
-tr:last-child td{border-bottom:none;}
-tr:hover td{background:var(--bg);}
-.ai{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:0.5px solid var(--b1);}
-.ai:last-child{border-bottom:none;}
-.adot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px;background:var(--gmid);}
-.ab{flex:1;}
-.at{font-size:14px;font-weight:700;}
-.am{font-size:12px;color:var(--t2);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
-.ad{font-size:11px;color:var(--t2);flex-shrink:0;}
 /* MESSAGES */
 .msg-bubble{border-radius:12px;padding:10px 14px;margin-bottom:8px;max-width:85%;}
-.msg-bureau{background:var(--blt);border:0.5px solid rgba(24,95,165,0.2);margin-right:auto;}
-.msg-driver{background:var(--glt);border:0.5px solid rgba(29,158,117,0.2);margin-left:auto;text-align:right;}
+.msg-bureau{background:var(--blt);border:1px solid rgba(77,169,190,0.2);margin-right:auto;}
+.msg-driver{background:var(--glt);border:1px solid rgba(29,158,117,0.2);margin-left:auto;text-align:right;}
 .msg-meta{font-size:11px;color:var(--t2);margin-bottom:3px;}
 .msg-txt{font-size:14px;color:var(--t1);line-height:1.4;}
 .msg-time{font-size:10px;color:var(--t3);margin-top:4px;}
 .msg-unread{border-left:3px solid var(--blue);}
-
 .empty{text-align:center;padding:32px 20px;color:var(--t2);}
 .empty p{font-size:14px;}
 
 /* TOAST & MODAL */
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(70px);background:#1A1A1A;color:#fff;padding:11px 20px;border-radius:var(--rxl);font-size:14px;font-weight:500;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:9999;white-space:nowrap;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(70px);background:#333;color:#fff;padding:11px 20px;border-radius:var(--rxl);font-size:14px;font-weight:500;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:9999;white-space:nowrap;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 .mov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:none;align-items:center;justify-content:center;padding:20px;}
 .mov.open{display:flex;}
@@ -180,17 +173,48 @@ tr:hover td{background:var(--bg);}
 .modal p{font-size:13px;color:var(--t2);margin-bottom:18px;}
 .mbtns{display:flex;gap:8px;}
 .mbtns .btn{flex:1;padding:10px;font-size:14px;margin-top:0;}
-@media(max-width:500px){.sgrid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+/* VERSION */
+.version-footer{font-size:11px;color:var(--t3);text-align:right;padding:8px 16px 16px;max-width:560px;margin:0 auto;}
+
+/* ACCOUNT CREATE PANEL */
+.account-section{background:var(--subcard);border-radius:var(--rlg);padding:14px 16px;margin-bottom:10px;}
 </style>
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <img src="./cropped-logo.webp" alt="LCA Logo" onerror="this.style.display='none'"/>
+    </div>
+    <div class="login-title">LCA Transfert</div>
+    <div class="login-sub">Liege Cargo Agency · Connexion chauffeur</div>
+    <div class="login-fg">
+      <label>Login</label>
+      <input type="text" id="l-login" placeholder="Votre identifiant" autocomplete="username"/>
+    </div>
+    <div class="login-fg">
+      <label>Mot de passe</label>
+      <input type="password" id="l-password" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <div class="login-fg">
+      <label>Plaque véhicule</label>
+      <input type="text" id="l-plate" placeholder="Ex: 1-ABC-234" style="text-transform:uppercase;"/>
+    </div>
+    <button class="login-btn" onclick="doLogin()">Se connecter</button>
+    <div class="login-err" id="login-err">Identifiants incorrects. Veuillez réessayer.</div>
+  </div>
+</div>
+
+<!-- MAIN APP (hidden until login) -->
+<div id="main-app" style="display:none;">
+
 <!-- HEADER -->
 <div class="hdr">
   <div class="logo">
-    <div class="lmk" style="background:var(--red);">
-      <svg viewBox="0 0 24 24"><path d="M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h11a2 2 0 012 2v3"/><rect x="9" y="11" width="14" height="10" rx="2"/><path d="M13 16h2m2 0h2"/></svg>
-    </div>
+    <img class="logo-img" src="./cropped-logo.webp" alt="LCA" onerror="this.style.display='none'"/>
     <div><div class="ltx">LCA Transfert</div><div class="lsb">Liege Cargo Agency</div></div>
   </div>
   <div class="dayhdr" id="dayhdr">00:00:00</div>
@@ -198,8 +222,8 @@ tr:hover td{background:var(--bg);}
 
 <!-- TABS -->
 <div class="tabs">
-  <button class="tab on" onclick="switchTab('driver')" id="tab-driver">Chauffeur</button>
-  <button class="tab" onclick="switchTab('messages')" id="tab-messages">Messages <span id="msg-badge" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;">0</span></button>
+  <button class="tab on" onclick="switchTab('driver')" id="tab-driver">🚛 Chauffeur</button>
+  <button class="tab" onclick="switchTab('messages')" id="tab-messages">💬 Messages <span id="msg-badge" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;">0</span></button>
 </div>
 
 <!-- ============================================================ DRIVER -->
@@ -209,8 +233,8 @@ tr:hover td{background:var(--bg);}
   <div id="ph0">
     <div class="card" style="margin-top:8px;">
       <div class="ctit">Informations chauffeur</div>
-      <div class="fg"><label class="fl">Nom / Matricule</label><input class="fi" type="text" id="d-name" placeholder="Ex: Marc D. · CH-04"/></div>
-      <div class="fg" style="margin-bottom:0;"><label class="fl">Plaque véhicule</label><input class="fi" type="text" id="d-plate" placeholder="Ex: 1-ABC-234" style="text-transform:uppercase;"/></div>
+      <div class="fg"><label class="fl">Nom / Matricule</label><input class="fi" type="text" id="d-name" placeholder="Ex: Marc D. · CH-04" readonly/></div>
+      <div class="fg" style="margin-bottom:0;"><label class="fl">Plaque véhicule</label><input class="fi" type="text" id="d-plate" placeholder="Ex: 1-ABC-234" style="text-transform:uppercase;" readonly/></div>
     </div>
     <button class="btn bp" onclick="startDay()">▶ Démarrer ma journée</button>
   </div>
@@ -219,8 +243,6 @@ tr:hover td{background:var(--bg);}
   <div id="ph-mission" style="display:none;">
     <div id="stops-tl"></div>
     <div id="live-banner"></div>
-
-    <!-- FORMS (one visible at a time) -->
 
     <!-- Step 1: arrival -->
     <div id="f1" style="display:none;">
@@ -252,6 +274,7 @@ tr:hover td{background:var(--bg);}
 
     <!-- Step 2: dock attributed -->
     <div id="f2" style="display:none;">
+      <button class="btn-back" onclick="goBack()">← Retour</button>
       <div class="card" style="border-color:var(--blue);">
         <div class="ctit" style="color:var(--blue);">Quai attribué</div>
         <div class="fg" style="margin-bottom:0;"><label class="fl">Numéro de quai</label><input class="fi" type="text" id="f-dock" placeholder="Ex: 3 / Quai B / Porte 12"/></div>
@@ -261,33 +284,51 @@ tr:hover td{background:var(--bg);}
 
     <!-- Step 3: at dock (physically) -->
     <div id="f3" style="display:none;">
+      <button class="btn-back" onclick="goBack()">← Retour</button>
       <button class="btn bp" onclick="doDockReady()">Confirmer — je suis physiquement à quai</button>
     </div>
 
     <!-- Step 4: ops start -->
     <div id="f4" style="display:none;">
+      <button class="btn-back" onclick="goBack()">← Retour</button>
       <button class="btn ba" onclick="doOpsStart()">▶ Début du chargement / déchargement</button>
     </div>
 
     <!-- Step 5: ops end -->
     <div id="f5" style="display:none;">
+      <button class="btn-back" onclick="goBack()">← Retour</button>
       <button class="btn ba" onclick="doOpsEnd()">■ Fin du chargement / déchargement</button>
     </div>
 
     <!-- Step 6: documentation -->
     <div id="f6" style="display:none;">
+      <button class="btn-back" onclick="goBack()">← Retour</button>
       <div class="card" style="border-color:var(--green);">
         <div class="ctit" style="color:var(--green);">Documentation reçue</div>
+
+        <!-- CMR UPLOAD — 2 options -->
         <div class="fg">
-          <label class="fl">Photo du CMR signé</label>
-          <div class="upzone" id="upzone" onclick="document.getElementById('cmr-file').click()">
-            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-            <p>Photographier le CMR signé</p>
-            <p style="font-size:11px;margin-top:3px;color:var(--t3);">ou sélectionner depuis la galerie</p>
+          <label class="fl">Photo du CMR signé <span style="color:var(--red);">*</span></label>
+          <div class="cmr-opts">
+            <!-- Option A: camera -->
+            <div class="cmr-opt" id="cmr-opt-camera" onclick="triggerCamera()">
+              <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <p>Prendre une photo</p>
+            </div>
+            <!-- Option B: gallery (requires AWB or ULD) -->
+            <div class="cmr-opt" id="cmr-opt-gallery" onclick="triggerGallery()">
+              <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              <p>Depuis la galerie</p>
+            </div>
           </div>
-          <input type="file" id="cmr-file" accept="image/*" capture="environment" onchange="handleCMR(event)"/>
+          <!-- hidden file inputs -->
+          <input type="file" id="cmr-file-camera" accept="image/*" capture="environment" onchange="handleCMR(event,'camera')"/>
+          <input type="file" id="cmr-file-gallery" accept="image/*" onchange="handleCMR(event,'gallery')"/>
           <div id="cmr-prev" class="cprev" style="display:none;"></div>
+          <div class="cmr-valid-note" id="cmr-gallery-note">⚠️ Pour utiliser la galerie, veuillez d'abord encoder un AWB ou un numéro ULD ci-dessous.</div>
         </div>
+
+        <!-- Cargo type -->
         <div class="fg">
           <label class="fl">Type de marchandise <span style="font-weight:400;color:var(--t3);">(sélection multiple possible)</span></label>
           <div style="display:flex;gap:8px;">
@@ -303,8 +344,8 @@ tr:hover td{background:var(--bg);}
             <div class="ci">
               <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;color:var(--t2);">Expédition 1</span></div>
               <div style="display:grid;grid-template-columns:80px 1fr;gap:8px;">
-                <div><label class="fl">Pièces</label><input class="fi" type="number" min="1" placeholder="12" data-field="pieces"/></div>
-                <div><label class="fl">N° AWB <span style="font-weight:400;color:var(--t3);">123-4567 8901</span></label><input class="fi awb" type="text" inputmode="numeric" placeholder="123-4567 8901" maxlength="13" data-field="awb" oninput="fmtAWB(this)"/></div>
+                <div><label class="fl">Pièces</label><input class="fi" type="number" min="1" placeholder="12" data-field="pieces" oninput="checkCMRGalleryEligibility()"/></div>
+                <div><label class="fl">N° AWB <span style="font-weight:400;color:var(--t3);">123-4567 8901</span></label><input class="fi awb" type="text" inputmode="numeric" placeholder="123-4567 8901" maxlength="13" data-field="awb" oninput="fmtAWB(this);checkCMRGalleryEligibility()"/></div>
               </div>
             </div>
           </div>
@@ -317,12 +358,13 @@ tr:hover td{background:var(--bg);}
           <div id="uld-items">
             <div class="ci">
               <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;color:var(--t2);">ULD 1</span></div>
-              <div style="margin-bottom:8px;"><label class="fl">N° ULD <span style="font-weight:400;color:var(--t3);">3L-5N-2C ex: PMC-12345-LG</span></label><input class="fi uldi" type="text" placeholder="PMC-12345-LG" maxlength="11" data-field="uld" oninput="fmtULD(this)"/></div>
-              <div><label class="fl">N° AWB <span style="font-weight:400;color:var(--t3);">123-4567 8901</span></label><input class="fi awb" type="text" inputmode="numeric" placeholder="123-4567 8901" maxlength="13" data-field="awb" oninput="fmtAWB(this)"/></div>
+              <div style="margin-bottom:8px;"><label class="fl">N° ULD <span style="font-weight:400;color:var(--t3);">Ex: PMC-8712-XF</span></label><input class="fi uldi" type="text" placeholder="PMC-8712-XF" data-field="uld" oninput="fmtULD(this);checkCMRGalleryEligibility()"/></div>
+              <div><label class="fl">N° AWB <span style="font-weight:400;color:var(--t3);">123-4567 8901</span></label><input class="fi awb" type="text" inputmode="numeric" placeholder="123-4567 8901" maxlength="13" data-field="awb" oninput="fmtAWB(this);checkCMRGalleryEligibility()"/></div>
             </div>
           </div>
           <button type="button" class="btn bo" style="padding:7px;font-size:13px;margin-top:4px;" onclick="addULD()">+ ULD</button>
         </div>
+
         <div class="fg" style="margin-top:10px;margin-bottom:0;">
           <label class="fl">Commentaire / incident</label>
           <textarea class="fi" id="f-comment" placeholder="Anomalie, avarie, retard…"></textarea>
@@ -347,45 +389,18 @@ tr:hover td{background:var(--bg);}
 <!-- ============================================================ MESSAGES -->
 <div class="view" id="view-messages">
 
-  <!-- DRIVER PANEL: receives from bureau, replies -->
+  <!-- DRIVER PANEL -->
   <div id="msg-driver-panel">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
       <p style="font-size:15px;font-weight:700;">Messages du bureau</p>
       <span style="font-size:11px;color:var(--t3);" id="msg-lastcheck">—</span>
     </div>
     <div id="msg-list-driver"><div class="empty"><p>Aucun message.</p></div></div>
-    <div style="margin-top:16px;background:var(--card);border:0.5px solid var(--b1);border-radius:var(--rlg);padding:14px 16px;">
+    <div style="margin-top:16px;background:var(--card);border:1px solid var(--b1);border-radius:var(--rlg);padding:14px 16px;">
       <label class="fl">Répondre au bureau</label>
       <textarea class="fi" id="driver-reply" placeholder="Votre message…" style="min-height:68px;margin-bottom:8px;"></textarea>
       <button class="btn bp" onclick="sendDriverMessage()">📨 Envoyer au bureau</button>
     </div>
-  </div>
-
-  <!-- MANAGER PANEL: send to individual driver or all + full thread -->
-  <div id="msg-manager-panel" style="display:none;">
-    <div class="card" style="border-color:var(--blue);margin-bottom:12px;">
-      <div class="ctit" style="color:var(--blue);">Nouveau message</div>
-      <div class="fg">
-        <label class="fl">Destinataire</label>
-        <select class="fi" id="msg-to">
-          <option value="all">📢 Tous les chauffeurs</option>
-        </select>
-      </div>
-      <div class="fg" style="margin-bottom:0;">
-        <label class="fl">Message</label>
-        <textarea class="fi" id="msg-text" placeholder="Ex: Attention — retard prévu à WFS 32, attendre consignes…" style="min-height:80px;"></textarea>
-      </div>
-    </div>
-    <button class="btn bp" onclick="sendManagerMessage()">📨 Envoyer</button>
-
-    <!-- Filter thread by driver -->
-    <div style="display:flex;align-items:center;gap:8px;margin:18px 0 8px;">
-      <p style="font-size:12px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;flex:1;">Fil des messages</p>
-      <select class="fi" id="msg-filter" onchange="renderMessages()" style="width:auto;font-size:12px;padding:5px 8px;">
-        <option value="all">Tous</option>
-      </select>
-    </div>
-    <div id="msg-list-manager"><div class="empty"><p>Aucun message.</p></div></div>
   </div>
 </div>
 
@@ -394,11 +409,12 @@ tr:hover td{background:var(--bg);}
   <div class="modal"><h3>Terminer la journée ?</h3><p>Tous les stops seront clôturés et la mission enregistrée.</p>
   <div class="mbtns"><button class="btn bo" onclick="document.getElementById('end-modal').classList.remove('open')">Annuler</button><button class="btn bp" onclick="endDay()">Terminer</button></div></div>
 </div>
-<div class="mov" id="clear-modal">
-  <div class="modal"><h3>Effacer toutes les données ?</h3><p>Action irréversible. Exportez le CSV d'abord.</p>
-  <div class="mbtns"><button class="btn bo" onclick="document.getElementById('clear-modal').classList.remove('open')">Annuler</button><button class="btn bp" style="background:var(--red);" onclick="doClear()">Effacer</button></div></div>
-</div>
 <div class="toast" id="toast"></div>
+
+<!-- VERSION FOOTER -->
+<div class="version-footer">Version 1.01 (release: 26 mars 2026) — © Kalsj121</div>
+
+</div><!-- /main-app -->
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -406,37 +422,121 @@ tr:hover td{background:var(--bg);}
 
 <script defer>
 'use strict';
+
+// ============================================================
+// AUTH — Driver accounts stored in Supabase (table: driver_accounts)
+// Fallback: localStorage for offline use
+// ============================================================
+let currentDriver = null; // {username, fullName, plate, login}
+
+// Built-in fallback accounts (if Supabase not ready)
+// Format: {username, password, fullName}
+// Dashboard creates real accounts in Supabase table driver_accounts
+const FALLBACK_ACCOUNTS = [
+  // Empty by default — accounts created from dashboard
+];
+
+async function getDriverAccounts() {
+  if (window.supabaseClient) {
+    try {
+      const { data, error } = await window.supabaseClient
+        .from('driver_accounts')
+        .select('*');
+      if (!error && data && data.length > 0) return data;
+    } catch(e) {}
+  }
+  // Fallback to localStorage
+  try {
+    const stored = JSON.parse(localStorage.getItem('lca_driver_accounts') || '[]');
+    return stored;
+  } catch(e) { return []; }
+}
+
+async function doLogin() {
+  const login = document.getElementById('l-login').value.trim();
+  const password = document.getElementById('l-password').value;
+  const plate = document.getElementById('l-plate').value.trim().toUpperCase();
+  const errEl = document.getElementById('login-err');
+  const btn = document.querySelector('.login-btn');
+  errEl.style.display = 'none';
+
+  if (!login || !password || !plate) {
+    errEl.textContent = 'Veuillez remplir tous les champs.';
+    errEl.style.display = '';
+    return;
+  }
+
+  // Show loading state
+  btn.disabled = true;
+  btn.textContent = 'Connexion…';
+
+  // Wait for Supabase client AND initSupabase() to finish (max 8s)
+  let waitMs = 0;
+  while (waitMs < 8000) {
+    if (window.supabaseClient && window._supabaseReady) break;
+    await new Promise(r => setTimeout(r, 150));
+    waitMs += 150;
+  }
+
+  // If Supabase never became ready, try anyway (will fall back to localStorage)
+  const accounts = await getDriverAccounts();
+  const account = accounts.find(a => a.username === login && a.password === password);
+
+  btn.disabled = false;
+  btn.textContent = 'Se connecter';
+
+  if (!account) {
+    errEl.textContent = accounts.length === 0
+      ? 'Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.'
+      : 'Identifiants incorrects. Veuillez réessayer.';
+    errEl.style.display = '';
+    return;
+  }
+
+  // Login success
+  currentDriver = { username: login, fullName: account.fullname || account.username, plate };
+  localStorage.setItem('lca_current_driver', JSON.stringify({...currentDriver, plate}));
+
+  // Pre-fill driver fields
+  document.getElementById('d-name').value = currentDriver.fullName;
+  document.getElementById('d-plate').value = plate;
+
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('main-app').style.display = '';
+
+  await initMissions();
+  await initMessages();
+}
+
+// Auto-restore session
+(async function tryRestore() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('lca_current_driver') || 'null');
+    if (saved && saved.username) {
+      currentDriver = saved;
+      document.getElementById('d-name').value = currentDriver.fullName;
+      document.getElementById('d-plate').value = currentDriver.plate || '';
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('main-app').style.display = '';
+    }
+  } catch(e) {}
+})();
+
 // ============================================================
 // DATA MODEL
-// stop = {
-//   id, location, operation, dock,
-//   tArrival      — arrivée au lieu
-//   tDockAssigned — quai attribué
-//   tDockReady    — physiquement à quai
-//   tOpsStart     — début opération
-//   tOpsEnd       — fin opération
-//   tDoc          — CMR remis
-//   tDepart       — départ vers suivant
-//   transitFromPrev — ms depuis départ stop précédent
-//   minTransit, minWait, minDock, minOps, minDoc, minTotal
-//   cargoType, cargo[], cmrData, comment
-// }
 // ============================================================
 let missions = [];
-let active   = null;  // mission courante
-let curStop  = null;  // stop en cours
-let step     = 0;     // étape courante (1-7)
+let active   = null;
+let curStop  = null;
+let step     = 0;
 let ticker   = null;
 let dayStart = null;
 
-// Load from Supabase on startup
 async function initMissions() {
   if (window.missionsFromSupabase && window.missionsFromSupabase.length > 0) {
     missions = window.missionsFromSupabase;
   } else {
-    try {
-      missions = JSON.parse(localStorage.getItem('lca_v4') || '[]');
-    } catch(e) {}
+    try { missions = JSON.parse(localStorage.getItem('lca_v4') || '[]'); } catch(e) {}
   }
 }
 
@@ -452,42 +552,28 @@ function tsStr(ts) { if(!ts)return'—'; return new Date(ts).toLocaleTimeString(
 function todayStr() { return new Date().toLocaleDateString('fr-BE'); }
 function ms2min(ms) { return Math.round(ms/60000); }
 function avg(arr) { return arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null; }
-async function save() { 
-  // Save to localStorage as backup
+
+async function save() {
   try { localStorage.setItem('lca_v4', JSON.stringify(missions)); } catch(e) {}
-  // Save current mission to Supabase if active
-  if (active) {
-    await saveMissionToSupabase(active);
-  }
+  if (active) await saveMissionToSupabase(active);
 }
+
 function toast(msg, err) {
-  const t=$('toast'); t.textContent=msg; t.style.background=err?'#A32D2D':'#1A1A1A';
+  const t=$('toast'); t.textContent=msg; t.style.background=err?'#A32D2D':'#333';
   t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800);
 }
+
 function switchTab(tab) {
   ['driver','messages'].forEach(t => {
     const te=$('tab-'+t), ve=$('view-'+t);
     if(te) te.classList.toggle('on', t===tab);
     if(ve) ve.classList.toggle('on', t===tab);
   });
-  if (tab === 'driver') {
-    currentRole = 'driver';
-  }
-  if (tab === 'messages') {
-    if (currentRole === 'manager') {
-      show('msg-manager-panel', true);
-      show('msg-driver-panel', false);
-      buildDriverList();
-    } else {
-      show('msg-driver-panel', true);
-      show('msg-manager-panel', false);
-    }
-    renderMessages();
-  }
+  if (tab === 'messages') { renderMessages(); }
 }
 
 // ============================================================
-// STEP CONTROL
+// STEP CONTROL & BACK NAVIGATION
 // ============================================================
 function setStep(s) {
   step = s;
@@ -497,8 +583,21 @@ function setStep(s) {
   if(s>=1&&s<=7) show('f'+s, true);
 }
 
+// Go back one step (undo last action)
+function goBack() {
+  if (step <= 1) return;
+  const prev = step - 1;
+  // Revert timestamps so logic is consistent
+  if (step === 2 && curStop) { curStop.tArrival = null; curStop = null; setStep(1); return; }
+  if (step === 3 && curStop) { curStop.tDockAssigned = null; setStep(2); return; }
+  if (step === 4 && curStop) { curStop.tDockReady = null; setStep(3); return; }
+  if (step === 5 && curStop) { curStop.tOpsStart = null; setStep(4); return; }
+  if (step === 6 && curStop) { curStop.tOpsEnd = null; resetCargo(); resetCMR(); setStep(5); return; }
+  setStep(prev);
+}
+
 // ============================================================
-// LIVE BANNER — always accurate via ticker
+// LIVE BANNER
 // ============================================================
 const STEP_LABELS = ['','Arrivée — attente attribution quai','Quai attribué — mise à quai en cours','À quai — attente début opération','Opération en cours','Opération terminée — en attente CMR','CMR reçu — prêt à partir','En transit'];
 const STEP_COLORS = ['','bn-blue','bn-blue','bn-amber','bn-amber','bn-green','bn-gray','bn-transit'];
@@ -506,76 +605,46 @@ const STEP_COLORS = ['','bn-blue','bn-blue','bn-amber','bn-amber','bn-green','bn
 function updateBanner() {
   const el = $('live-banner');
   if(!active) { el.innerHTML=''; return; }
-
-  // Progress bar (6 segments = steps 1-6)
   let pb='<div class="pbar">';
   for(let i=1;i<=6;i++) pb+='<div class="ps'+(i<step?' done':i===step?' act':'')+'"></div>';
   pb+='</div>';
-
   const col = (step>=1&&step<=7) ? STEP_COLORS[step] : 'bn-gray';
   const lbl = (step>=1&&step<=7) ? STEP_LABELS[step] : '';
-
-  // Build timer boxes
   const now = Date.now();
   let boxes = [];
-
-  // Day elapsed — always shown
   if(dayStart) boxes.push({lbl:'Journée',val:'<span id="t-day" class="tc-gray">'+hms(now-dayStart)+'</span>'});
-
   if(curStop) {
-    if(step===1 && curStop.tArrival) {
-      boxes.push({lbl:'Attente quai',val:'<span id="t-wait" class="tc-blue">'+dur(ms2min(now-curStop.tArrival))+'</span>'});
-    }
-    if(step===2 && curStop.tDockAssigned) {
-      boxes.push({lbl:'Att. quai',val:dur(ms2min(curStop.tDockAssigned-curStop.tArrival))});
-      boxes.push({lbl:'Mise à quai',val:'<span id="t-dock" class="tc-blue">'+dur(ms2min(now-curStop.tDockAssigned))+'</span>'});
-    }
-    if(step===3 && curStop.tDockReady) {
-      boxes.push({lbl:'Att. quai',val:dur(ms2min(curStop.tDockAssigned-curStop.tArrival))});
-      boxes.push({lbl:'Mise quai',val:dur(ms2min(curStop.tDockReady-curStop.tDockAssigned))});
-    }
-    if(step===4 && curStop.tOpsStart) {
-      boxes.push({lbl:'Opération',val:'<span id="t-ops" class="tc-amber">'+dur(ms2min(now-curStop.tOpsStart))+'</span>'});
-    }
-    if(step===5 && curStop.tOpsEnd) {
-      boxes.push({lbl:'Opération',val:dur(ms2min(curStop.tOpsEnd-curStop.tOpsStart))});
-      boxes.push({lbl:'Documentation',val:'<span id="t-doc" class="tc-green">'+dur(ms2min(now-curStop.tOpsEnd))+'</span>'});
-    }
-    if(step===6) {
-      if(curStop.tArrival) boxes.push({lbl:'Total stop',val:'<span id="t-total" class="tc-blue">'+dur(ms2min(now-curStop.tArrival))+'</span>'});
-    }
+    if(step===1 && curStop.tArrival) boxes.push({lbl:'Attente quai',val:'<span id="t-wait" class="tc-blue">'+dur(ms2min(now-curStop.tArrival))+'</span>'});
+    if(step===2 && curStop.tDockAssigned) { boxes.push({lbl:'Att. quai',val:dur(ms2min(curStop.tDockAssigned-curStop.tArrival))}); boxes.push({lbl:'Mise à quai',val:'<span id="t-dock" class="tc-blue">'+dur(ms2min(now-curStop.tDockAssigned))+'</span>'}); }
+    if(step===3 && curStop.tDockReady) { boxes.push({lbl:'Att. quai',val:dur(ms2min(curStop.tDockAssigned-curStop.tArrival))}); boxes.push({lbl:'Mise quai',val:dur(ms2min(curStop.tDockReady-curStop.tDockAssigned))}); }
+    if(step===4 && curStop.tOpsStart) boxes.push({lbl:'Opération',val:'<span id="t-ops" class="tc-amber">'+dur(ms2min(now-curStop.tOpsStart))+'</span>'});
+    if(step===5 && curStop.tOpsEnd) { boxes.push({lbl:'Opération',val:dur(ms2min(curStop.tOpsEnd-curStop.tOpsStart))}); boxes.push({lbl:'Documentation',val:'<span id="t-doc" class="tc-green">'+dur(ms2min(now-curStop.tOpsEnd))+'</span>'}); }
+    if(step===6 && curStop.tArrival) boxes.push({lbl:'Total stop',val:'<span id="t-total" class="tc-blue">'+dur(ms2min(now-curStop.tArrival))+'</span>'});
   }
-
-  // Transit state (step 7 = after depart, before next arrival)
   if(step===7) {
     boxes=[];
     if(dayStart) boxes.push({lbl:'Journée',val:'<span id="t-day" class="tc-gray">'+hms(now-dayStart)+'</span>'});
     const lastStop=active.stops.length?active.stops[active.stops.length-1]:null;
     if(lastStop&&lastStop.tDepart) boxes.push({lbl:'Transit',val:'<span id="t-transit" class="tc-amber">'+dur(ms2min(now-lastStop.tDepart))+'</span>'});
   }
-
   const cols = boxes.length>=3 ? 'tgrid cols3' : 'tgrid';
   const timerHtml = boxes.length ? '<div class="'+cols+'">'+boxes.map(b=>'<div class="tbox"><div class="tb-lbl">'+b.lbl+'</div><div class="tb-val">'+b.val+'</div></div>').join('')+'</div>' : '';
-
   const locLine = curStop && step<=6
     ? '<div class="bn-loc">'+curStop.location+'</div><div class="bn-sub">'+lbl+'</div>'
     : step===7 ? '<div class="bn-sub">'+lbl+'</div>' : '';
-
   el.className = 'banner '+col;
   el.innerHTML = pb+'<div class="bn-label '+(col.replace('bn-',''))+'">Étape '+Math.min(step,6)+'/6</div>'+locLine+timerHtml;
 }
 
 // ============================================================
-// TICKER — runs continuously while day is active
+// TICKER
 // ============================================================
 function startTicker() {
   clearInterval(ticker);
   ticker = setInterval(() => {
     if(!dayStart) return;
     const now = Date.now();
-    // Day timer in header
     const dh=$('dayhdr'); if(dh) dh.textContent=hms(now-dayStart);
-    // Inline live spans
     const up=(id,val)=>{ const e=document.getElementById(id); if(e) e.textContent=val; };
     up('t-day', hms(now-dayStart));
     if(step===1&&curStop?.tArrival)    up('t-wait',   dur(ms2min(now-curStop.tArrival)));
@@ -591,26 +660,21 @@ function startTicker() {
 }
 
 // ============================================================
-// ACTIONS
+// SUPABASE SYNC
 // ============================================================
-// ── SUPABASE LIVE SYNC ────────────────────────────────────────
-// Saves the active mission to Supabase immediately.
-// Called after every step change so the dashboard is always up to date.
 function syncActive() {
   if (!active) return;
-  // Build a snapshot: include curStop in progress (not yet in active.stops)
   const snapshot = JSON.parse(JSON.stringify(active));
-  if (curStop) {
-    // Attach curStop as the last element so dashboard can read current phase
-    snapshot.stops = [...(active.stops || []), curStop];
-  }
-  saveMissionToSupabase(snapshot).catch(e =>
-    console.warn('[Sync] Supabase save failed:', e.message)
-  );
+  if (curStop) snapshot.stops = [...(active.stops || []), curStop];
+  saveMissionToSupabase(snapshot).catch(e => console.warn('[Sync] failed:', e.message));
 }
 
+// ============================================================
+// ACTIONS
+// ============================================================
 function startDay() {
-  const name=$('d-name').value.trim(), plate=$('d-plate').value.trim().toUpperCase();
+  const name = document.getElementById('d-name').value.trim();
+  const plate = document.getElementById('d-plate').value.trim().toUpperCase();
   if(!name){toast('Veuillez indiquer votre nom.',true);return;}
   dayStart=Date.now();
   active={id:Date.now(),driver:name,plate,date:todayStr(),dayStartTs:dayStart,stops:[],completed:false,_cmr:null};
@@ -619,28 +683,38 @@ function startDay() {
   $('dayhdr').style.display='';
   startTicker();
   setStep(1);
-  syncActive(); // ← créer la ligne dans Supabase dès le démarrage
+  syncActive();
   toast('Bonne journée '+name+' !');
+
+  // Save driver as active in Supabase
+  registerActiveDriver(name, plate);
+}
+
+async function registerActiveDriver(name, plate) {
+  if (!window.supabaseClient) return;
+  try {
+    await window.supabaseClient.from('active_drivers').upsert([{
+      username: currentDriver?.username || name,
+      fullname: name,
+      plate: plate,
+      lastseen: new Date().toISOString()
+    }], { onConflict: 'username' });
+  } catch(e) { console.warn('[Driver register]', e.message); }
 }
 
 function doArrival() {
   const loc=$('f-loc').value, op=$('f-op').value;
   if(!loc){toast('Veuillez sélectionner un lieu.',true);return;}
   let transitMs=null;
-  if(active.stops.length>0){
-    const prev=active.stops[active.stops.length-1];
-    if(prev.tDepart) transitMs=Date.now()-prev.tDepart;
-  }
-  curStop={
-    id:Date.now(),location:loc,operation:op,dock:'',
+  if(active.stops.length>0){const prev=active.stops[active.stops.length-1];if(prev.tDepart) transitMs=Date.now()-prev.tDepart;}
+  curStop={id:Date.now(),location:loc,operation:op,dock:'',
     tArrival:Date.now(),tDockAssigned:null,tDockReady:null,tOpsStart:null,tOpsEnd:null,tDoc:null,tDepart:null,
     transitFromPrev: transitMs!=null ? ms2min(transitMs) : null,
     minTransit:null,minWait:null,minDock:null,minOps:null,minDoc:null,minTotal:null,
-    cargoType:'',cargo:[],cmrData:null,comment:''
-  };
+    cargoType:'',cargo:[],cmrData:null,comment:''};
   $('f-loc').value='';
   setStep(2);
-  syncActive(); // ← étape 1 : arrivée
+  syncActive();
   toast('Arrivée confirmée à '+loc);
 }
 
@@ -649,41 +723,30 @@ function doDockAssigned() {
   if(!dock){toast('Veuillez indiquer le numéro de quai.',true);return;}
   curStop.dock=dock; curStop.tDockAssigned=Date.now();
   $('f-dock').value='';
-  setStep(3);
-  syncActive(); // ← étape 2 : quai attribué
+  setStep(3); syncActive();
   toast('Quai '+dock+' attribué ✓');
 }
 
-function doDockReady() {
-  curStop.tDockReady=Date.now();
-  setStep(4);
-  syncActive(); // ← étape 3 : à quai
-  toast('À quai ✓ — prêt pour l\'opération');
-}
-
-function doOpsStart() {
-  curStop.tOpsStart=Date.now();
-  setStep(5);
-  syncActive(); // ← étape 4 : opération démarrée
-  toast('Opération démarrée ▶');
-}
-
-function doOpsEnd() {
-  curStop.tOpsEnd=Date.now();
-  resetCargo(); resetCMR();
-  setStep(6);
-  syncActive(); // ← étape 5 : opération terminée
-  toast('Opération terminée ■');
-}
+function doDockReady() { curStop.tDockReady=Date.now(); setStep(4); syncActive(); toast('À quai ✓'); }
+function doOpsStart() { curStop.tOpsStart=Date.now(); setStep(5); syncActive(); toast('Opération démarrée ▶'); }
+function doOpsEnd() { curStop.tOpsEnd=Date.now(); resetCargo(); resetCMR(); setStep(6); syncActive(); toast('Opération terminée ■'); }
 
 function doDoc() {
+  // Validation: need either (camera photo) OR (gallery photo AND (AWB or ULD encoded))
+  if (!active._cmr) {
+    toast('Veuillez joindre une photo du CMR avant de confirmer.', true);
+    return;
+  }
+  if (active._cmrSource === 'gallery' && !hasCargoEncoded()) {
+    toast('Pour la galerie, encodez d\'abord un AWB ou un N° ULD.', true);
+    return;
+  }
   curStop.tDoc=Date.now();
   curStop.comment=$('f-comment').value;
   curStop.cargoType=document.querySelector('input[name="ctype"]:checked')?.value||'';
   curStop.cargo=collectCargo();
   curStop.cmrData=active._cmr||null;
-  active._cmr=null;
-  // Compute all durations
+  active._cmr=null; active._cmrSource=null;
   curStop.minTransit= curStop.transitFromPrev;
   curStop.minWait   = curStop.tDockAssigned ? ms2min(curStop.tDockAssigned - curStop.tArrival) : null;
   curStop.minDock   = (curStop.tDockAssigned&&curStop.tDockReady) ? ms2min(curStop.tDockReady - curStop.tDockAssigned) : null;
@@ -692,17 +755,14 @@ function doDoc() {
   curStop.minTotal  = ms2min(curStop.tDoc - curStop.tArrival);
   active.stops.push(Object.assign({}, curStop));
   $('f-comment').value='';
-  setStep(7);
-  syncActive(); // ← étape 6 : CMR reçu, stop terminé
+  setStep(7); syncActive();
   toast('CMR enregistré ✓ — stop terminé');
 }
 
 function doDepart() {
   const last=active.stops[active.stops.length-1];
   last.tDepart=Date.now(); save();
-  curStop=null;
-  syncActive(); // ← étape 7 : en transit
-  setStep(1);
+  curStop=null; syncActive(); setStep(1);
   toast('🚛 Bon trajet !');
 }
 
@@ -711,7 +771,7 @@ function endDay() {
   active.dayEndTs=Date.now(); active.completed=true;
   missions.push(JSON.parse(JSON.stringify(active)));
   save();
-  saveMissionToSupabase(active).catch(e => console.warn('Failed to save to Supabase:', e));
+  saveMissionToSupabase(active).catch(e => console.warn('Save failed:', e));
   active=null; curStop=null; step=0; dayStart=null;
   clearInterval(ticker);
   show('ph-mission',false); show('ph0',true);
@@ -719,6 +779,43 @@ function endDay() {
   $('stops-tl').innerHTML=''; $('live-banner').innerHTML='';
   for(let i=1;i<=7;i++) show('f'+i,false);
   toast('Journée clôturée et enregistrée ✓');
+
+  // Archive to Supabase
+  archiveMissionData(active);
+}
+
+// Archive completed mission data
+async function archiveMissionData(mission) {
+  if (!window.supabaseClient || !mission) return;
+  try {
+    await window.supabaseClient.from('missions_archive').upsert([{
+      id: mission.id,
+      driver: mission.driver,
+      plate: mission.plate || '',
+      date: mission.date,
+      daystartts: new Date(mission.dayStartTs).toISOString(),
+      dayendts: mission.dayEndTs ? new Date(mission.dayEndTs).toISOString() : null,
+      completed: true,
+      stops: mission.stops || [],
+      archivedat: new Date().toISOString()
+    }], { onConflict: 'id' });
+    console.log('[Archive] Mission archived successfully');
+  } catch(e) { console.warn('[Archive] Failed:', e.message); }
+}
+
+function endMissionNewOne() {
+  active.dayEndTs = null; active.completed = true;
+  missions.push(JSON.parse(JSON.stringify(active)));
+  save();
+  saveMissionToSupabase(active).catch(e => console.warn('Save failed:', e));
+  archiveMissionData(active);
+  const prevDriver = active.driver, prevPlate = active.plate, prevDate = active.date;
+  active = {id:Date.now(),driver:prevDriver,plate:prevPlate,date:prevDate,dayStartTs:dayStart,stops:[],completed:false,_cmr:null};
+  curStop = null;
+  for(let i=1;i<=7;i++) show('f'+i,false);
+  $('stops-tl').innerHTML = '';
+  setStep(1);
+  toast('Mission terminée ✓ — nouvelle mission démarrée');
 }
 
 // ============================================================
@@ -756,71 +853,117 @@ function renderTimeline() {
 }
 
 // ============================================================
-// CMR
+// CMR — two modes: camera (always ok) | gallery (needs AWB/ULD)
 // ============================================================
-function handleCMR(e) {
+function triggerCamera() {
+  document.getElementById('cmr-file-camera').click();
+}
+
+function triggerGallery() {
+  // Check if AWB or ULD is already filled
+  if (!hasCargoEncoded()) {
+    // Show warning note, don't block but warn
+    document.getElementById('cmr-gallery-note').style.display = '';
+    toast('Attention: encodez un AWB ou ULD pour utiliser la galerie.', false);
+  }
+  document.getElementById('cmr-file-gallery').click();
+}
+
+function hasCargoEncoded() {
+  // Check if at least one AWB or ULD value is filled
+  const awbs = document.querySelectorAll('#loose-items [data-field="awb"], #uld-items [data-field="awb"]');
+  const ulds = document.querySelectorAll('#uld-items [data-field="uld"]');
+  for (const el of [...awbs, ...ulds]) { if (el.value.trim().length > 0) return true; }
+  return false;
+}
+
+function checkCMRGalleryEligibility() {
+  const note = document.getElementById('cmr-gallery-note');
+  if (note) note.style.display = hasCargoEncoded() ? 'none' : 'none'; // hide when filled
+}
+
+function handleCMR(e, source) {
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
   r.onload=ev=>{
-    if(active) active._cmr=ev.target.result;
-    const z=$('upzone'); z.classList.add('ok');
-    z.innerHTML='<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:26px;height:26px;margin-bottom:6px;"><polyline points="20 6 9 17 4 12"/></svg><p>CMR joint ✓</p>';
-    $('cmr-prev').innerHTML='<img src="'+ev.target.result+'"/>'; $('cmr-prev').style.display='';
+    if(active) { active._cmr=ev.target.result; active._cmrSource=source; }
+    // Mark correct option as ok
+    document.getElementById('cmr-opt-camera').classList.remove('ok');
+    document.getElementById('cmr-opt-gallery').classList.remove('ok');
+    document.getElementById('cmr-opt-'+source).classList.add('ok');
+    document.getElementById('cmr-gallery-note').style.display='none';
+    const prev = document.getElementById('cmr-prev');
+    prev.innerHTML='<img src="'+ev.target.result+'"/>'; prev.style.display='';
   };
   r.readAsDataURL(f);
 }
+
 function resetCMR() {
-  const z=$('upzone'); z.classList.remove('ok');
-  z.innerHTML='<svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:26px;height:26px;margin-bottom:6px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><p>Photographier le CMR signé</p><p style="font-size:11px;margin-top:3px;color:var(--t3);">ou sélectionner depuis la galerie</p>';
-  $('cmr-prev').style.display='none';
+  if(active){ active._cmr=null; active._cmrSource=null; }
+  document.getElementById('cmr-opt-camera').classList.remove('ok');
+  document.getElementById('cmr-opt-gallery').classList.remove('ok');
+  document.getElementById('cmr-prev').style.display='none';
+  document.getElementById('cmr-gallery-note').style.display='none';
 }
 
 // ============================================================
-// CARGO & AWB FIX
+// CARGO
 // ============================================================
 function toggleCargo(type) {
-  const ck = $('ck-'+type);
   const btn = $('btn-'+type);
   const panel = $('cargo-'+type);
-  // Toggle checkbox state
   const isOn = !btn.classList.contains('on');
   btn.classList.toggle('on', isOn);
   panel.style.display = isOn ? '' : 'none';
 }
 
-// AWB format: 123-4567 8901 (3 digits - 4 digits space 4 digits)
 function fmtAWB(inp) {
-  const raw = inp.value.replace(/\D/g, '');          // digits only
-  const d = raw.slice(0, 11);                        // max 11 digits
+  const raw = inp.value.replace(/\D/g, '');
+  const d = raw.slice(0, 11);
   let out = '';
-  if (d.length <= 3)       out = d;
-  else if (d.length <= 7)  out = d.slice(0,3) + '-' + d.slice(3);
-  else                     out = d.slice(0,3) + '-' + d.slice(3,7) + ' ' + d.slice(7,11);
+  if (d.length <= 3)      out = d;
+  else if (d.length <= 7) out = d.slice(0,3) + '-' + d.slice(3);
+  else                    out = d.slice(0,3) + '-' + d.slice(3,7) + ' ' + d.slice(7,11);
   inp.value = out;
 }
 
+// ULD format: flexible prefix (2-4 chars) - variable middle - variable suffix
+// e.g. PMC-8712-XF, AKE-12345-LH, etc.
 function fmtULD(inp) {
-  let v=inp.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
-  if(v.length<=3) inp.value=v;
-  else if(v.length<=8) inp.value=v.slice(0,3)+'-'+v.slice(3);
-  else inp.value=v.slice(0,3)+'-'+v.slice(3,8)+'-'+v.slice(8,10);
+  let v = inp.value.toUpperCase().replace(/[^A-Z0-9\-]/g, '');
+  // Auto-insert hyphens intelligently: after 2-4 alpha chars, then after digits
+  // Only format if no hyphens present (let user type freely with hyphens)
+  if (!v.includes('-')) {
+    // Auto-format: split alpha prefix from rest
+    const prefixMatch = v.match(/^([A-Z]{2,4})([0-9A-Z].*)$/);
+    if (prefixMatch) {
+      const prefix = prefixMatch[1];
+      const rest = prefixMatch[2];
+      const numMatch = rest.match(/^([0-9]+)([A-Z].*)$/);
+      if (numMatch) v = prefix + '-' + numMatch[1] + '-' + numMatch[2];
+      else if (rest.length > 0) v = prefix + '-' + rest;
+      else v = prefix;
+    }
+  }
+  inp.value = v;
 }
 
 function addLoose() {
   const c=$('loose-items'), n=c.querySelectorAll('.ci').length+1;
   const d=document.createElement('div'); d.className='ci';
-  d.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;color:var(--t2);">Expédition '+n+'</span><button type="button" class="rmbtn" onclick="this.closest(\'.ci\').remove()">✕</button></div><div style="display:grid;grid-template-columns:80px 1fr;gap:8px;"><div><label class="fl">Pièces</label><input class="fi" type="number" min="1" placeholder="12" data-field="pieces"/></div><div><label class="fl">N° AWB</label><input class="fi awb" type="text" inputmode="numeric" placeholder="123-4567 8901" maxlength="13" data-field="awb" oninput="fmtAWB(this)"/></div></div>';
+  d.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;color:var(--t2);">Expédition '+n+'</span><button type="button" class="rmbtn" onclick="this.closest(\'.ci\').remove()">✕</button></div><div style="display:grid;grid-template-columns:80px 1fr;gap:8px;"><div><label class="fl">Pièces</label><input class="fi" type="number" min="1" placeholder="12" data-field="pieces" oninput="checkCMRGalleryEligibility()"/></div><div><label class="fl">N° AWB</label><input class="fi awb" type="text" inputmode="numeric" placeholder="123-4567 8901" maxlength="13" data-field="awb" oninput="fmtAWB(this);checkCMRGalleryEligibility()"/></div></div>';
   c.appendChild(d);
 }
+
 function addULD() {
   const c=$('uld-items'), n=c.querySelectorAll('.ci').length+1;
   const d=document.createElement('div'); d.className='ci';
-  d.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;color:var(--t2);">ULD '+n+'</span><button type="button" class="rmbtn" onclick="this.closest(\'.ci\').remove()">✕</button></div><div style="margin-bottom:8px;"><label class="fl">N° ULD</label><input class="fi uldi" type="text" placeholder="PMC-12345-LG" maxlength="11" data-field="uld" oninput="fmtULD(this)"/></div><div><label class="fl">N° AWB</label><input class="fi awb" type="text" inputmode="numeric" placeholder="123-4567 8901" maxlength="13" data-field="awb" oninput="fmtAWB(this)"/></div>';
+  d.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:12px;font-weight:700;color:var(--t2);">ULD '+n+'</span><button type="button" class="rmbtn" onclick="this.closest(\'.ci\').remove()">✕</button></div><div style="margin-bottom:8px;"><label class="fl">N° ULD</label><input class="fi uldi" type="text" placeholder="PMC-8712-XF" data-field="uld" oninput="fmtULD(this);checkCMRGalleryEligibility()"/></div><div><label class="fl">N° AWB</label><input class="fi awb" type="text" inputmode="numeric" placeholder="123-4567 8901" maxlength="13" data-field="awb" oninput="fmtAWB(this);checkCMRGalleryEligibility()"/></div>';
   c.appendChild(d);
 }
+
 function collectCargo() {
   const res = [];
-  // Collect loose if active
   if ($('btn-loose').classList.contains('on')) {
     document.querySelectorAll('#loose-items .ci').forEach(item => {
       const p = item.querySelector('[data-field="pieces"]')?.value || '';
@@ -828,7 +971,6 @@ function collectCargo() {
       if (p || a) res.push({type:'loose', pieces:p, awb:a, uld:''});
     });
   }
-  // Collect ULD if active
   if ($('btn-uld').classList.contains('on')) {
     document.querySelectorAll('#uld-items .ci').forEach(item => {
       const u = item.querySelector('[data-field="uld"]')?.value || '';
@@ -838,6 +980,7 @@ function collectCargo() {
   }
   return res;
 }
+
 function resetCargo() {
   ['btn-loose','btn-uld'].forEach(id => $(id).classList.remove('on'));
   show('cargo-loose', false); show('cargo-uld', false);
@@ -849,259 +992,10 @@ function resetCargo() {
 }
 
 // ============================================================
-// MANAGER
-// ============================================================
-function getFilteredStops() {
-  const fl=$('f-floc').value, fd=$('f-fdate').value, fop=$('f-fop').value;
-  let fm=missions.filter(m=>m.completed);
-  if(fd) fm=fm.filter(m=>m.date===fd);
-  let stops=fm.flatMap(m=>m.stops.map(s=>Object.assign({},s,{driver:m.driver,plate:m.plate,date:m.date})));
-  if(fl)  stops=stops.filter(s=>s.location===fl);
-  if(fop) stops=stops.filter(s=>s.operation&&s.operation.startsWith(fop));
-  return {stops,fm};
-}
-
-function renderMgr() {
-  const fl=$('f-floc').value, fd=$('f-fdate').value;
-  const allLocs=[...new Set(missions.flatMap(m=>m.stops.map(s=>s.location)))].filter(Boolean).sort();
-  const allDates=[...new Set(missions.map(m=>m.date))].filter(Boolean).sort().reverse();
-  $('f-floc').innerHTML='<option value="">Tous les lieux</option>'+allLocs.map(l=>'<option'+(l===fl?' selected':'')+'>'+l+'</option>').join('');
-  $('f-fdate').innerHTML='<option value="">Toutes les dates</option>'+allDates.map(d=>'<option'+(d===fd?' selected':'')+'>'+d+'</option>').join('');
-
-  const {stops,fm}=getFilteredStops();
-
-  $('sm').textContent=fm.length;
-  $('sa').textContent=avg(stops.map(s=>s.minWait).filter(v=>v!=null))??'—';
-  $('so').textContent=avg(stops.map(s=>s.minOps).filter(v=>v!=null))??'—';
-  $('st').textContent=avg(fm.flatMap(m=>m.stops.slice(1).map(s=>s.transitFromPrev).filter(t=>t!=null)))??'—';
-
-  // Synthèse par lieu (5 timers)
-  const byLoc={};
-  stops.forEach(s=>{
-    if(!byLoc[s.location]) byLoc[s.location]={tr:[],w:[],dk:[],o:[],d:[],tot:[]};
-    if(s.minTransit!=null) byLoc[s.location].tr.push(s.minTransit);
-    if(s.minWait!=null)    byLoc[s.location].w.push(s.minWait);
-    if(s.minDock!=null)    byLoc[s.location].dk.push(s.minDock);
-    if(s.minOps!=null)     byLoc[s.location].o.push(s.minOps);
-    if(s.minDoc!=null)     byLoc[s.location].d.push(s.minDoc);
-    if(s.minTotal!=null)   byLoc[s.location].tot.push(s.minTotal);
-  });
-  const rl=$('rep-loc');
-  const locRows=Object.entries(byLoc);
-  if(!locRows.length) { rl.innerHTML='<tr><td colspan="9"><div class="empty"><p>Aucune donnée.</p></div></td></tr>'; }
-  else { rl.innerHTML=locRows.sort((a,b)=>b[1].tot.length-a[1].tot.length).map(([loc,v])=>{
-    const aw=avg(v.w);
-    const col=aw>30?'color:var(--red)':aw>15?'color:var(--amber)':'color:var(--green)';
-    return '<tr>'
-      +'<td style="font-weight:700;">'+loc+'</td><td>'+v.tot.length+'</td>'
-      +'<td style="background:rgba(24,95,165,0.05);">'+dur(avg(v.tr))+'</td>'
-      +'<td style="font-weight:700;'+col+';background:rgba(24,95,165,0.05);">'+dur(aw)+'</td>'
-      +'<td style="background:rgba(24,95,165,0.05);">'+dur(avg(v.dk))+'</td>'
-      +'<td style="background:rgba(186,117,23,0.05);">'+dur(avg(v.o))+'</td>'
-      +'<td style="background:rgba(29,158,117,0.05);">'+dur(avg(v.d))+'</td>'
-      +'<td style="font-weight:700;">'+dur(avg(v.tot))+'</td>'
-      +'<td><button class="btn bo bsm" style="font-size:11px;" onclick="printClientReport(\''+loc.replace(/'/g,"\\'")+'\')" >Fiche client</button></td>'
-      +'</tr>';
-  }).join('');}
-
-  // Détail stop par stop
-  const rd=$('rep-detail');
-  if(!stops.length){rd.innerHTML='<tr><td colspan="18"><div class="empty"><p>Aucune donnée.</p></div></td></tr>';}
-  else{rd.innerHTML=[...stops].reverse().map(s=>{
-    const wc=s.minWait>30?'color:var(--red)':s.minWait>15?'color:var(--amber)':s.minWait!=null?'color:var(--green)':'';
-    const oc=s.minOps>60?'color:var(--red)':s.minOps>30?'color:var(--amber)':'';
-    return '<tr>'
-      +'<td style="font-size:12px;white-space:nowrap;">'+s.date+'</td>'
-      +'<td style="font-size:12px;white-space:nowrap;">'+s.driver+'</td>'
-      +'<td style="font-weight:700;white-space:nowrap;">'+s.location+'</td>'
-      +'<td style="font-size:12px;">'+s.operation+'</td>'
-      +'<td style="font-size:12px;">'+(s.dock||'—')+'</td>'
-      +'<td style="font-size:11px;font-variant-numeric:tabular-nums;">'+tsStr(s.tArrival)+'</td>'
-      +'<td style="font-size:11px;font-variant-numeric:tabular-nums;">'+tsStr(s.tDockAssigned)+'</td>'
-      +'<td style="font-size:11px;font-variant-numeric:tabular-nums;">'+tsStr(s.tDockReady)+'</td>'
-      +'<td style="font-size:11px;font-variant-numeric:tabular-nums;">'+tsStr(s.tOpsStart)+'</td>'
-      +'<td style="font-size:11px;font-variant-numeric:tabular-nums;">'+tsStr(s.tOpsEnd)+'</td>'
-      +'<td style="font-size:11px;font-variant-numeric:tabular-nums;">'+tsStr(s.tDoc)+'</td>'
-      +'<td style="font-size:11px;font-variant-numeric:tabular-nums;">'+tsStr(s.tDepart)+'</td>'
-      +'<td style="background:rgba(24,95,165,0.05);text-align:center;">'+dur(s.minTransit)+'</td>'
-      +'<td style="font-weight:700;'+wc+';background:rgba(24,95,165,0.05);text-align:center;">'+dur(s.minWait)+'</td>'
-      +'<td style="background:rgba(24,95,165,0.05);text-align:center;">'+dur(s.minDock)+'</td>'
-      +'<td style="font-weight:700;'+oc+';background:rgba(186,117,23,0.05);text-align:center;">'+dur(s.minOps)+'</td>'
-      +'<td style="background:rgba(29,158,117,0.05);text-align:center;">'+dur(s.minDoc)+'</td>'
-      +'<td style="font-weight:700;text-align:center;">'+dur(s.minTotal)+'</td>'
-      +'</tr>';
-  }).join('');}
-
-  // Transit pairs
-  const pairs={};
-  fm.forEach(m=>{for(let i=1;i<m.stops.length;i++){
-    const k=m.stops[i-1].location+' → '+m.stops[i].location, t=m.stops[i].transitFromPrev;
-    if(t!=null){if(!pairs[k])pairs[k]=[];pairs[k].push(t);}
-  }});
-  const rt=$('rep-transit');
-  const trows=Object.entries(pairs);
-  if(!trows.length){rt.innerHTML='<tr><td colspan="4"><div class="empty"><p>Données disponibles après la 1ère mission multi-stops.</p></div></td></tr>';}
-  else{rt.innerHTML=trows.sort((a,b)=>b[1].length-a[1].length).map(([k,ts])=>{
-    const av=Math.round(ts.reduce((a,b)=>a+b,0)/ts.length);
-    return '<tr><td style="font-weight:600;">🚛 '+k+'</td><td>'+ts.length+'</td><td style="font-weight:700;">'+dur(av)+'</td><td style="color:var(--amber);">'+dur(Math.max(...ts))+'</td></tr>';
-  }).join('');}
-
-  // Activity log
-  const al=$('act-list');
-  const recent=[...fm].reverse().slice(0,10);
-  if(!recent.length){al.innerHTML='<div class="empty"><p>Aucune mission enregistrée.</p></div>';return;}
-  al.innerHTML=recent.map(m=>{
-    const chain=m.stops.map((s,i)=>{
-      const tr=i>0&&s.transitFromPrev!=null?'<span class="chip c-gr" style="font-size:10px;">🚛 '+dur(s.transitFromPrev)+'</span> ':'';
-      return tr+'<span class="chip c-g" style="font-size:11px;">'+s.location+' <b>'+dur(s.minTotal)+'</b></span>';
-    }).join(' ');
-    return '<div class="ai"><div class="adot"></div><div class="ab"><div class="at">'+m.driver+(m.plate?' · '+m.plate:'')+' <span style="font-size:12px;font-weight:400;color:var(--t2);">'+m.stops.length+' stop'+(m.stops.length>1?'s':'')+'</span></div><div class="am">'+chain+'</div></div><div class="ad">'+m.date+'</div></div>';
-  }).join('');
-}
-
-// ============================================================
-// CSV
-// ============================================================
-function buildCSV(stops) {
-  const H=['Date','Chauffeur','Plaque','Lieu','Opération','Quai','Type cargo','ULD/Pièces','AWB',
-    'H.arrivée','H.quai attrib.','H.à quai','H.déb.opé.','H.fin opé.','H.CMR','H.départ',
-    'Transit(min)','Att.quai(min)','Mise quai(min)','Opération(min)','Doc(min)','TOTAL(min)','Commentaire'];
-  const rows=[];
-  stops.forEach((s,si)=>{
-    const cargo=s.cargo&&s.cargo.length?s.cargo:[{}];
-    cargo.forEach((c,ci)=>{
-      rows.push([
-        ci===0?s.date:'',ci===0?s.driver:'',ci===0?(s.plate||''):'',
-        ci===0?s.location:'',ci===0?s.operation:'',ci===0?(s.dock||''):'',
-        ci===0?(s.cargoType||''):'',
-        c.type==='uld'?(c.uld||''):(c.pieces?c.pieces+' pcs':''),c.awb||'',
-        ci===0?tsStr(s.tArrival):'',ci===0?tsStr(s.tDockAssigned):'',
-        ci===0?tsStr(s.tDockReady):'',ci===0?tsStr(s.tOpsStart):'',
-        ci===0?tsStr(s.tOpsEnd):'',ci===0?tsStr(s.tDoc):'',ci===0?tsStr(s.tDepart):'',
-        ci===0?(s.minTransit??''):'',ci===0?(s.minWait??''):'',ci===0?(s.minDock??''):'',
-        ci===0?(s.minOps??''):'',ci===0?(s.minDoc??''):'',ci===0?(s.minTotal??''):'',
-        ci===0?(s.comment||'').replace(/;/g,','):''
-      ].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';'));
-    });
-  });
-  return [H.join(';'),...rows].join('\r\n');
-}
-function dlCSV(content,filename){
-  const b=new Blob(['\uFEFF'+content],{type:'text/csv;charset=utf-8;'});
-  const u=URL.createObjectURL(b);
-  const a=document.createElement('a');a.href=u;a.download=filename;
-  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(u);
-}
-function exportCSV(){ const {stops}=getFilteredStops(); if(!stops.length){toast('Aucune donnée.',true);return;} dlCSV(buildCSV(stops),'LCA_complet_'+new Date().toISOString().slice(0,10)+'.csv'); toast('CSV téléchargé — '+stops.length+' passage(s).'); }
-function exportCSVDetail(){ const {stops}=getFilteredStops(); if(!stops.length){toast('Aucune donnée.',true);return;} const fl=$('f-floc').value; dlCSV(buildCSV(stops),'LCA_detail'+(fl?'_'+fl.replace(/[^a-zA-Z0-9]/g,'_'):'')+'.csv'); toast('CSV détail téléchargé.'); }
-function exportCSVByLoc(){
-  if(!missions.length){toast('Aucune donnée.',true);return;}
-  const fd=$('f-fdate').value;
-  let fm=missions.filter(m=>m.completed); if(fd) fm=fm.filter(m=>m.date===fd);
-  const all=fm.flatMap(m=>m.stops.map(s=>Object.assign({},s,{driver:m.driver,plate:m.plate,date:m.date})));
-  const byLoc={};
-  all.forEach(s=>{if(!byLoc[s.location])byLoc[s.location]=[];byLoc[s.location].push(s);});
-  const locs=Object.keys(byLoc);
-  if(!locs.length){toast('Aucune donnée.',true);return;}
-  locs.forEach(loc=>dlCSV(buildCSV(byLoc[loc]),'LCA_'+loc.replace(/[^a-zA-Z0-9]/g,'_')+'.csv'));
-  toast(locs.length+' fichier(s) téléchargé(s).');
-}
-
-// ============================================================
-// PRINT
-// ============================================================
-function printReport() {
-  const {stops,fm}=getFilteredStops();
-  const fl=$('f-floc').value, fd=$('f-fdate').value;
-  const buildTable=opF=>{
-    const s=opF?stops.filter(s=>s.operation&&s.operation.startsWith(opF)):stops;
-    const b={};
-    s.forEach(x=>{if(!b[x.location])b[x.location]={w:[],dk:[],o:[],d:[],tot:[]};
-      if(x.minWait!=null)b[x.location].w.push(x.minWait);if(x.minDock!=null)b[x.location].dk.push(x.minDock);
-      if(x.minOps!=null)b[x.location].o.push(x.minOps);if(x.minDoc!=null)b[x.location].d.push(x.minDoc);
-      if(x.minTotal!=null)b[x.location].tot.push(x.minTotal);});
-    return Object.entries(b).map(([l,v])=>'<tr><td><b>'+l+'</b></td><td>'+v.tot.length+'</td><td>'+(avg(v.w)??'—')+' min</td><td>'+(avg(v.dk)??'—')+' min</td><td>'+(avg(v.o)??'—')+' min</td><td>'+(avg(v.d)??'—')+' min</td><td><b>'+(avg(v.tot)??'—')+' min</b></td></tr>').join('')||'<tr><td colspan="7" style="color:#999;">Aucun passage</td></tr>';
-  };
-  const pairs={};fm.forEach(m=>{for(let i=1;i<m.stops.length;i++){const k=m.stops[i-1].location+' → '+m.stops[i].location,t=m.stops[i].transitFromPrev;if(t!=null){if(!pairs[k])pairs[k]=[];pairs[k].push(t);}}});
-  const tR=Object.entries(pairs).map(([k,ts])=>'<tr><td>'+k+'</td><td>'+ts.length+'</td><td>'+Math.round(ts.reduce((a,b)=>a+b,0)/ts.length)+' min</td><td>'+Math.max(...ts)+' min</td></tr>').join('');
-  const detR=stops.map(s=>'<tr><td>'+s.date+'</td><td>'+s.driver+'</td><td>'+s.location+'</td><td>'+s.operation+'</td><td>'+(s.dock||'—')+'</td><td>'+tsStr(s.tArrival)+'</td><td>'+tsStr(s.tDockAssigned)+'</td><td>'+tsStr(s.tDockReady)+'</td><td>'+tsStr(s.tOpsStart)+'</td><td>'+tsStr(s.tOpsEnd)+'</td><td>'+tsStr(s.tDoc)+'</td><td>'+tsStr(s.tDepart)+'</td><td style="background:#e8f4ee;font-weight:bold;">'+(s.minWait??'—')+' min</td><td>'+(s.minDock??'—')+' min</td><td style="background:#fef3e2;">'+(s.minOps??'—')+' min</td><td>'+(s.minDoc??'—')+' min</td><td style="font-weight:bold;">'+(s.minTotal??'—')+' min</td></tr>').join('');
-  const S='body{font-family:Arial,sans-serif;font-size:11px;padding:20px;}h1{font-size:17px;}h2{font-size:13px;margin:16px 0 7px;padding-bottom:3px;}table{width:100%;border-collapse:collapse;margin-bottom:12px;}th{padding:6px 8px;text-align:left;font-size:10px;color:#fff;}td{padding:5px 8px;border-bottom:1px solid #eee;}tr:nth-child(even) td{background:#f8f8f8;}';
-  const html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rapport LCA</title><style>'+S+'</style></head><body>'
-    +'<h1>Rapport Liege Cargo Agency</h1><p style="color:#666;font-size:11px;">'+(fl||'Tous sites')+' · '+(fd||'Toutes dates')+' · '+new Date().toLocaleString('fr-BE')+'</p>'
-    +'<h2 style="color:#185FA5;border-bottom:2px solid #185FA5;">Chargement</h2><table><thead><tr><th style="background:#185FA5;">Lieu</th><th style="background:#185FA5;">Passages</th><th style="background:#185FA5;">Att.quai</th><th style="background:#185FA5;">Mise quai</th><th style="background:#185FA5;">Opération</th><th style="background:#185FA5;">Doc</th><th style="background:#185FA5;">TOTAL</th></tr></thead><tbody>'+buildTable('Chargement')+'</tbody></table>'
-    +'<h2 style="color:#BA7517;border-bottom:2px solid #BA7517;">Déchargement</h2><table><thead><tr><th style="background:#BA7517;">Lieu</th><th style="background:#BA7517;">Passages</th><th style="background:#BA7517;">Att.quai</th><th style="background:#BA7517;">Mise quai</th><th style="background:#BA7517;">Opération</th><th style="background:#BA7517;">Doc</th><th style="background:#BA7517;">TOTAL</th></tr></thead><tbody>'+buildTable('Déchargement')+'</tbody></table>'
-    +'<h2 style="color:#555;border-bottom:2px solid #555;">Transit entre sites</h2><table><thead><tr><th style="background:#555;">Trajet</th><th style="background:#555;">Passages</th><th style="background:#555;">Moy.</th><th style="background:#555;">Max</th></tr></thead><tbody>'+(tR||'<tr><td colspan="4">Aucune donnée</td></tr>')+'</tbody></table>'
-    +'<h2 style="color:#555;border-bottom:2px solid #555;">Détail complet</h2><table><thead><tr><th style="background:#555;">Date</th><th style="background:#555;">Chauffeur</th><th style="background:#555;">Lieu</th><th style="background:#555;">Opé.</th><th style="background:#555;">Quai</th><th style="background:#555;">Arr.</th><th style="background:#555;">Quai att.</th><th style="background:#555;">À quai</th><th style="background:#555;">Déb.opé.</th><th style="background:#555;">Fin opé.</th><th style="background:#555;">CMR</th><th style="background:#555;">Départ</th><th style="background:#1a6e40;">Att.(min)</th><th style="background:#555;">Quai(min)</th><th style="background:#7a5a00;">Opé.(min)</th><th style="background:#555;">Doc(min)</th><th style="background:#555;">TOTAL</th></tr></thead><tbody>'+(detR||'<tr><td colspan="17">Aucune donnée</td></tr>')+'</tbody></table>'
-    +'</body></html>';
-  const w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
-}
-
-function printClientReport(loc){
-  const fd=$('f-fdate').value;
-  let fm=missions.filter(m=>m.completed);if(fd)fm=fm.filter(m=>m.date===fd);
-  const stops=fm.flatMap(m=>m.stops.map(s=>Object.assign({},s,{driver:m.driver,plate:m.plate,date:m.date}))).filter(s=>s.location===loc);
-  if(!stops.length){toast('Aucune donnée pour '+loc,true);return;}
-  const aw=avg(stops.map(s=>s.minWait).filter(v=>v!=null));
-  const ao=avg(stops.map(s=>s.minOps).filter(v=>v!=null));
-  const ad=avg(stops.map(s=>s.minDoc).filter(v=>v!=null));
-  const at=avg(stops.map(s=>s.minTotal).filter(v=>v!=null));
-  const vc=(v,hi,med)=>v!=null?(v>hi?'#A32D2D':v>med?'#BA7517':'#0F6E56'):'#888';
-  const detR=stops.map(s=>'<tr><td>'+s.date+'</td><td>'+s.driver+'</td><td>'+s.operation+'</td><td>'+(s.dock||'—')+'</td><td>'+tsStr(s.tArrival)+'</td><td>'+tsStr(s.tDockAssigned)+'</td><td>'+tsStr(s.tDockReady)+'</td><td>'+tsStr(s.tOpsStart)+'</td><td>'+tsStr(s.tOpsEnd)+'</td><td>'+tsStr(s.tDoc)+'</td><td>'+tsStr(s.tDepart)+'</td><td style="background:#e8f4ee;font-weight:bold;">'+(s.minWait??'—')+'</td><td>'+(s.minDock??'—')+'</td><td style="background:#fef3e2;">'+(s.minOps??'—')+'</td><td>'+(s.minDoc??'—')+'</td><td style="font-weight:bold;">'+(s.minTotal??'—')+'</td></tr>').join('');
-  const html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rapport LCA — '+loc+'</title>'
-    +'<style>body{font-family:Arial,sans-serif;font-size:11px;padding:28px;color:#111;}h1{font-size:20px;margin-bottom:2px;}.sub{color:#666;font-size:12px;margin-bottom:24px;}.summ{display:flex;gap:12px;margin-bottom:24px;}.sc{border:1px solid #ddd;border-radius:8px;padding:12px 16px;flex:1;text-align:center;}.sc .lb{font-size:10px;color:#888;text-transform:uppercase;margin-bottom:4px;}.sc .vl{font-size:22px;font-weight:bold;}table{width:100%;border-collapse:collapse;}th{background:#185FA5;color:#fff;padding:6px 8px;text-align:left;font-size:10px;}td{padding:5px 8px;border-bottom:1px solid #eee;}tr:nth-child(even) td{background:#fafafa;}.foot{margin-top:20px;font-size:10px;color:#999;border-top:1px solid #eee;padding-top:10px;}</style></head><body>'
-    +'<h1>Rapport de passage — '+loc+'</h1><div class="sub">Liege Cargo Agency · '+new Date().toLocaleString('fr-BE')+(fd?' · Période : '+fd:'')+'</div>'
-    +'<div class="summ"><div class="sc"><div class="lb">Passages</div><div class="vl">'+stops.length+'</div></div><div class="sc"><div class="lb">Attente quai</div><div class="vl" style="color:'+vc(aw,30,15)+'">'+(aw??'—')+' min</div></div><div class="sc"><div class="lb">Mise à quai</div><div class="vl">'+(avg(stops.map(s=>s.minDock).filter(v=>v!=null))??'—')+' min</div></div><div class="sc"><div class="lb">Opération</div><div class="vl">'+(ao??'—')+' min</div></div><div class="sc"><div class="lb">Documentation</div><div class="vl">'+(ad??'—')+' min</div></div><div class="sc"><div class="lb">TOTAL moy.</div><div class="vl">'+(at??'—')+' min</div></div></div>'
-    +'<table><thead><tr><th>Date</th><th>Chauffeur</th><th>Opération</th><th>Quai</th><th>Arrivée</th><th>Quai att.</th><th>À quai</th><th>Déb.opé.</th><th>Fin opé.</th><th>CMR</th><th>Départ</th><th style="background:#1a6e40;">Att.q.</th><th>Quai</th><th style="background:#7a5a00;">Opé.</th><th>Doc</th><th>TOTAL</th></tr></thead><tbody>'+detR+'</tbody></table>'
-    +'<div class="foot">Rapport LCA Pointage Chauffeurs — Liege Cargo Agency</div></body></html>';
-  const w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
-}
-
-// ============================================================
-// END MISSION — START NEW ONE (same day)
-// ============================================================
-function endMissionNewOne() {
-  // Save current mission as complete, start fresh mission same day
-  active.dayEndTs = null; // day continues
-  active.completed = true;
-  missions.push(JSON.parse(JSON.stringify(active)));
-  save();
-  // Also save to Supabase
-  saveMissionToSupabase(active).catch(e => console.warn('Failed to save to Supabase:', e));
-  // Reset mission state but keep day running
-  const prevDriver = active.driver;
-  const prevPlate  = active.plate;
-  const prevDate   = active.date;
-  active = {
-    id: Date.now(), driver: prevDriver, plate: prevPlate,
-    date: prevDate, dayStartTs: dayStart,
-    stops: [], completed: false, _cmr: null
-  };
-  curStop = null;
-  for(let i=1;i<=7;i++) show('f'+i, false);
-  $('stops-tl').innerHTML = '';
-  setStep(1);
-  toast('Mission terminée ✓ — nouvelle mission démarrée');
-}
-
-// ============================================================
-// WARNING THRESHOLDS — LCA sites = 30 min, others = 60 min
-// ============================================================
-const LCA_SITES = ['LCA Nord', 'LCA Selys'];
-function getWarningThreshold(location) {
-  return LCA_SITES.includes(location) ? 30 : 60;
-}
-
-// ============================================================
-// MESSAGING (localStorage-based, works standalone)
-// When connected to server → API calls replace localStorage
-// ============================================================
-// ============================================================
 // MESSAGING
 // ============================================================
 let messages = [];
-let currentRole = 'driver';
 
-// Load from Supabase on startup
 async function initMessages() {
   if (window.messagesFromSupabase && window.messagesFromSupabase.length > 0) {
     messages = window.messagesFromSupabase;
@@ -1110,139 +1004,55 @@ async function initMessages() {
   }
 }
 
-async function saveMsgs() { 
-  // Save to localStorage as backup
-  try { localStorage.setItem('lca_msgs', JSON.stringify(messages)); } catch(e) {} 
-}
-
-// Build driver list from missions for the "msg-to" dropdown
-function buildDriverList() {
-  const drivers = [...new Set(missions.flatMap(m => [m.driver]).filter(Boolean))];
-  const sel = $('msg-to');
-  if (!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="all">📢 Tous les chauffeurs</option>'
-    + drivers.map(d => `<option value="${d}"${d===cur?' selected':''}>${d}</option>`).join('');
-
-  // Also update filter dropdown
-  const flt = $('msg-filter');
-  if (flt) {
-    const fc = flt.value;
-    flt.innerHTML = '<option value="all">Tous</option>'
-      + drivers.map(d => `<option value="${d}"${d===fc?' selected':''}>${d}</option>`).join('');
-  }
-}
-
-function sendManagerMessage() {
-  const to  = $('msg-to')?.value || 'all';
-  const txt = $('msg-text')?.value.trim();
-  if (!txt) { toast('Veuillez saisir un message.', true); return; }
-  const toLabel = to === 'all' ? 'Tous' : to;
-  const msg = { id: Date.now(), from: 'bureau', fromName: 'Bureau', to, toLabel, text: txt, ts: Date.now(), read: false };
-  messages.push(msg);
-  saveMsgs();
-  // Also save to Supabase
-  saveMessageToSupabase(msg).catch(e => console.warn('Failed to save to Supabase:', e));
-  if ($('msg-text')) $('msg-text').value = '';
-  renderMessages();
-  toast('Message envoyé à ' + toLabel + ' ✓');
+async function saveMsgs() {
+  try { localStorage.setItem('lca_msgs', JSON.stringify(messages)); } catch(e) {}
 }
 
 function sendDriverMessage() {
   const txt = $('driver-reply')?.value.trim();
   if (!txt) { toast('Veuillez saisir un message.', true); return; }
-  const driverName = active ? active.driver : ($('d-name')?.value.trim() || 'Chauffeur');
-  const msg = { id: Date.now(), from: 'driver', fromName: driverName, to: 'bureau', toLabel: 'Bureau', text: txt, ts: Date.now(), read: false };
-  messages.push(msg);
-  saveMsgs();
-  // Also save to Supabase
-  saveMessageToSupabase(msg).catch(e => console.warn('Failed to save to Supabase:', e));
-  if ($('driver-reply')) $('driver-reply').value = '';
+  const driverName = active ? active.driver : (currentDriver?.fullName || 'Chauffeur');
+  const msg = {id:Date.now(),from:'driver',fromName:driverName,to:'bureau',toLabel:'Bureau',text:txt,ts:Date.now(),read:false};
+  messages.push(msg); saveMsgs();
+  saveMessageToSupabase(msg).catch(e => console.warn('Msg save failed:', e));
+  if($('driver-reply')) $('driver-reply').value='';
   renderMessages();
   toast('Message envoyé au bureau ✓');
 }
 
 function renderMessages() {
-  const driverName = active ? active.driver : ($('d-name')?.value.trim() || '');
-
-  // Unread count for driver
-  const unread = messages.filter(m =>
-    m.from === 'bureau' && !m.read && (m.to === 'all' || m.to === driverName)
-  ).length;
+  const driverName = active ? active.driver : (currentDriver?.fullName || '');
+  const unread = messages.filter(m => m.from==='bureau'&&!m.read&&(m.to==='all'||m.to===driverName)).length;
   const badge = $('msg-badge');
-  if (badge) { badge.textContent = unread; badge.style.display = unread > 0 && currentRole !== 'manager' ? '' : 'none'; }
-
-  const fmtTime = ts => new Date(ts).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'})
-    + '  ' + new Date(ts).toLocaleDateString('fr-BE',{day:'2-digit',month:'2-digit'});
-
-  if (currentRole === 'manager') {
-    buildDriverList();
-    const filterDriver = $('msg-filter')?.value || 'all';
-    let shown = [...messages];
-    if (filterDriver !== 'all') {
-      shown = shown.filter(m =>
-        (m.from === 'bureau' && (m.to === 'all' || m.to === filterDriver)) ||
-        (m.from === 'driver' && m.fromName === filterDriver)
-      );
-    }
-    const container = $('msg-list-manager');
-    if (!container) return;
-    if (!shown.length) { container.innerHTML = '<div class="empty"><p>Aucun message.</p></div>'; return; }
-    container.innerHTML = [...shown].reverse().map(m => {
-      const isBureau = m.from === 'bureau';
-      const cls = isBureau ? 'msg-bureau' : 'msg-driver';
-      const who = isBureau
-        ? '📨 Bureau → ' + m.toLabel
-        : '🚛 ' + (m.fromName || 'Chauffeur');
-      return `<div class="msg-bubble ${cls}">
-        <div class="msg-meta">${who}</div>
-        <div class="msg-txt">${m.text}</div>
-        <div class="msg-time">${fmtTime(m.ts)}</div>
-      </div>`;
-    }).join('');
-
-  } else {
-    // Driver view — show only messages addressed to them or all
-    const container = $('msg-list-driver');
-    if (!container) return;
-    const myMsgs = messages.filter(m =>
-      (m.from === 'bureau' && (m.to === 'all' || m.to === driverName)) ||
-      (m.from === 'driver' && m.fromName === driverName)
-    );
-    if (!myMsgs.length) { container.innerHTML = '<div class="empty"><p>Aucun message du bureau.</p></div>'; return; }
-    container.innerHTML = [...myMsgs].reverse().map(m => {
-      const isBureau = m.from === 'bureau';
-      const cls = isBureau ? 'msg-bureau' + (m.read ? '' : ' msg-unread') : 'msg-driver';
-      return `<div class="msg-bubble ${cls}">
-        ${isBureau ? '<div class="msg-meta">Bureau</div>' : ''}
-        <div class="msg-txt">${m.text}</div>
-        <div class="msg-time">${fmtTime(m.ts)}</div>
-      </div>`;
-    }).join('');
-    // Mark as read
-    messages.forEach(m => {
-      if (m.from === 'bureau' && (m.to === 'all' || m.to === driverName)) m.read = true;
-    });
-    saveMsgs();
-    if ($('msg-lastcheck')) $('msg-lastcheck').textContent = 'Lu à ' + new Date().toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'});
-    // Update badge
-    if (badge) badge.style.display = 'none';
-  }
+  if(badge){badge.textContent=unread;badge.style.display=unread>0?'':'none';}
+  const fmtTime = ts => new Date(ts).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'})+'  '+new Date(ts).toLocaleDateString('fr-BE',{day:'2-digit',month:'2-digit'});
+  const container = $('msg-list-driver');
+  if (!container) return;
+  const myMsgs = messages.filter(m =>
+    (m.from==='bureau'&&(m.to==='all'||m.to===driverName)) ||
+    (m.from==='driver'&&m.fromName===driverName)
+  );
+  if(!myMsgs.length){container.innerHTML='<div class="empty"><p>Aucun message du bureau.</p></div>';return;}
+  container.innerHTML=[...myMsgs].reverse().map(m=>{
+    const isBureau=m.from==='bureau';
+    const cls=isBureau?'msg-bubble msg-bureau'+(m.read?'':' msg-unread'):'msg-bubble msg-driver';
+    return `<div class="${cls}">${isBureau?'<div class="msg-meta">Bureau</div>':''}<div class="msg-txt">${m.text}</div><div class="msg-time">${fmtTime(m.ts)}</div></div>`;
+  }).join('');
+  messages.forEach(m=>{if(m.from==='bureau'&&(m.to==='all'||m.to===driverName))m.read=true;});
+  saveMsgs();
+  if($('msg-lastcheck'))$('msg-lastcheck').textContent='Lu à '+new Date().toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'});
+  if(badge)badge.style.display='none';
 }
 
 // ============================================================
-// CLEAR
+// INIT
 // ============================================================
-function doClear(){missions=[];save();$('clear-modal').classList.remove('open');toast('Données effacées.');renderMgr();}
-
-// ============================================================
-// INITIALIZATION
-// ============================================================
-// Initialize data from Supabase on page load
 document.addEventListener('DOMContentLoaded', async () => {
-  await initMissions();
-  await initMessages();
-  console.log('Data loaded: ' + missions.length + ' missions, ' + messages.length + ' messages');
+  // If already logged in (session restored), init data
+  if (currentDriver) {
+    await initMissions();
+    await initMessages();
+  }
 });
 </script>
 </body>

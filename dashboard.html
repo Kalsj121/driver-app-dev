@@ -6,39 +6,49 @@
 <title>LCA Transfert · Bureau</title>
 <style>
 :root{
-  --blue:#185FA5;--bdk:#0C447C;--blt:#E6F1FB;
+  --blue:#4da9be;--bdk:#3a8fa3;--blt:#e8f6f9;
   --green:#0F6E56;--glt:#E1F5EE;--gmid:#1D9E75;
   --amber:#BA7517;--alt:#FAEEDA;
   --red:#A32D2D;--rlt:#FCEBEB;
-  --bg:#F0F0EE;--card:#FFFFFF;
+  --bg:#f5f5f5;--card:#ffffff;--subcard:#f1f1f1;
   --b1:rgba(0,0,0,0.10);--b2:rgba(0,0,0,0.20);
-  --t1:#1A1A1A;--t2:#6B6B68;--t3:#9E9E9A;
+  --t1:#333333;--t2:#6B6B68;--t3:#9E9E9A;
+  --header:#4da9be;
 }
-@media(prefers-color-scheme:dark){:root{
-  --bg:#111;--card:#1C1C1C;
-  --b1:rgba(255,255,255,0.09);--b2:rgba(255,255,255,0.18);
-  --t1:#F0F0EE;--t2:#A0A09C;--t3:#6A6A68;
-  --blt:#0A1E2E;--glt:#04201A;--alt:#1E1400;--rlt:#2A0A0A;
-}}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;}
 
-.hdr{background:var(--card);border-bottom:0.5px solid var(--b1);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+/* LOGIN */
+#login-screen{position:fixed;inset:0;background:var(--header);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;}
+#login-screen.hidden{display:none;}
+.login-box{background:#fff;border-radius:18px;padding:32px 28px;width:100%;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,0.18);}
+.login-logo{text-align:center;margin-bottom:20px;}
+.login-logo img{width:64px;height:auto;}
+.login-title{font-size:22px;font-weight:700;text-align:center;margin-bottom:4px;}
+.login-sub{font-size:13px;color:var(--t2);text-align:center;margin-bottom:24px;}
+.login-fg{margin-bottom:14px;}
+.login-fg label{font-size:13px;color:var(--t2);font-weight:500;display:block;margin-bottom:5px;}
+.login-fg input{width:100%;padding:11px 14px;font-size:15px;border:1px solid var(--b2);border-radius:8px;background:var(--bg);color:var(--t1);outline:none;font-family:inherit;}
+.login-fg input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,169,190,0.15);}
+.login-btn{width:100%;padding:13px;font-size:15px;font-weight:700;background:var(--header);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;margin-top:4px;}
+.login-err{font-size:13px;color:var(--red);text-align:center;margin-top:10px;display:none;}
+
+/* HEADER */
+.hdr{background:var(--header);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
 .logo{display:flex;align-items:center;gap:10px;}
-.lmk{width:32px;height:32px;background:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;}
-.lmk svg{width:17px;height:17px;fill:none;stroke:#fff;stroke-width:2;}
-.ltx{font-size:15px;font-weight:700;}
-.lsb{font-size:11px;color:var(--t2);}
+.logo-img{width:32px;height:32px;object-fit:contain;background:#fff;border-radius:6px;padding:2px;}
+.ltx{font-size:15px;font-weight:700;color:#fff;}
+.lsb{font-size:11px;color:rgba(255,255,255,0.75);}
 .hdr-right{display:flex;align-items:center;gap:12px;}
-.live-badge{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--gmid);}
-.live-dot{width:8px;height:8px;border-radius:50%;background:var(--gmid);animation:pulse 1.5s infinite;}
+.live-badge{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:rgba(255,255,255,0.9);}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#fff;animation:pulse 1.5s infinite;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.user-pill{font-size:12px;color:var(--t2);background:var(--bg);border:0.5px solid var(--b2);border-radius:99px;padding:4px 10px;}
-.btn-logout{font-size:12px;color:var(--red);background:none;border:0.5px solid rgba(163,45,45,0.3);border-radius:6px;padding:5px 10px;cursor:pointer;}
+.user-pill{font-size:12px;color:rgba(255,255,255,0.9);background:rgba(255,255,255,0.2);border-radius:99px;padding:4px 10px;}
+.btn-logout{font-size:12px;color:#fff;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:5px 10px;cursor:pointer;}
 
 /* TABS */
-.tabs{display:flex;background:var(--card);border-bottom:0.5px solid var(--b1);}
-.tab{flex:1;padding:11px;text-align:center;font-size:13px;font-weight:500;color:var(--t2);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;max-width:200px;}
+.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--b1);}
+.tab{flex:1;padding:11px;text-align:center;font-size:13px;font-weight:500;color:var(--t2);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;max-width:220px;}
 .tab.on{color:var(--blue);border-bottom-color:var(--blue);}
 .msg-badge{display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;}
 
@@ -49,10 +59,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .page-narrow{padding:20px 24px;max-width:900px;margin:0 auto;}
 
 /* CARDS */
-.card{background:var(--card);border:0.5px solid var(--b1);border-radius:12px;padding:14px 18px;margin-bottom:12px;}
+.card{background:var(--card);border:1px solid var(--b1);border-radius:12px;padding:14px 18px;margin-bottom:12px;}
+.subcard{background:var(--subcard);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;margin-bottom:8px;}
 .ctit{font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;}
-.fi{width:100%;padding:10px 12px;font-size:14px;border:0.5px solid var(--b2);border-radius:8px;background:var(--bg);color:var(--t1);outline:none;font-family:inherit;}
-.fi:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(24,95,165,0.1);}
+.fi{width:100%;padding:10px 12px;font-size:14px;border:1px solid var(--b2);border-radius:8px;background:var(--bg);color:var(--t1);outline:none;font-family:inherit;}
+.fi:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,169,190,0.12);}
 select.fi{cursor:pointer;}
 textarea.fi{resize:vertical;min-height:72px;}
 .fl{font-size:13px;color:var(--t2);display:block;margin-bottom:5px;font-weight:500;}
@@ -62,83 +73,125 @@ textarea.fi{resize:vertical;min-height:72px;}
 .btn:active{transform:scale(.98);}
 .bp{background:var(--blue);color:#fff;}
 .bp:hover{background:var(--bdk);}
-.bo{background:none;border:0.5px solid var(--b2);color:var(--t1);}
-.bsm{width:auto;padding:6px 12px;font-size:12px;font-weight:500;}
+.bo{background:none;border:1px solid var(--b2);color:var(--t1);}
+.bsm{width:auto;padding:6px 14px;font-size:12px;font-weight:500;}
 
 /* STATS */
 .stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:18px;}
-.sc{background:var(--card);border:0.5px solid var(--b1);border-radius:12px;padding:12px 14px;}
+.sc{background:var(--card);border:1px solid var(--b1);border-radius:12px;padding:12px 14px;}
 .sc-l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t2);margin-bottom:5px;}
 .sc-v{font-size:22px;font-weight:700;letter-spacing:-.02em;}
 .sc-s{font-size:11px;color:var(--t2);margin-top:2px;}
 
 /* ALERTS */
 .alerts{margin-bottom:14px;}
-.alert-item{display:flex;align-items:center;gap:10px;background:var(--rlt);border:0.5px solid rgba(163,45,45,0.3);border-radius:10px;padding:10px 14px;margin-bottom:6px;}
-.alert-item:last-child{margin-bottom:0;}
+.alert-item{display:flex;align-items:center;gap:10px;background:var(--rlt);border:1px solid rgba(163,45,45,0.3);border-radius:10px;padding:10px 14px;margin-bottom:6px;}
 .alert-txt{font-size:13px;font-weight:600;color:var(--red);flex:1;}
 .alert-dur{font-size:13px;font-weight:700;color:var(--red);font-variant-numeric:tabular-nums;}
 
 /* SETTINGS */
-.settings-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;background:var(--card);border:0.5px solid var(--b1);border-radius:10px;padding:10px 14px;}
+.settings-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;background:var(--card);border:1px solid var(--b1);border-radius:10px;padding:10px 14px;}
 .settings-bar label{font-size:12px;color:var(--t2);font-weight:500;}
-.settings-bar input[type=number]{width:60px;padding:5px 8px;font-size:13px;border:0.5px solid var(--b2);border-radius:6px;background:var(--card);color:var(--t1);}
+.settings-bar input[type=number]{width:60px;padding:5px 8px;font-size:13px;border:1px solid var(--b2);border-radius:6px;background:var(--card);color:var(--t1);}
 .btn-sm-act{padding:6px 14px;font-size:12px;font-weight:600;border:none;border-radius:6px;background:var(--blue);color:#fff;cursor:pointer;}
 
 /* DRIVER GRID */
 .driver-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;}
-.dcard{background:var(--card);border:0.5px solid var(--b1);border-radius:14px;padding:15px 17px;}
+.dcard{background:var(--card);border:1px solid var(--b1);border-radius:14px;padding:15px 17px;}
 .dcard.c-alert{border-color:rgba(163,45,45,0.5);background:var(--rlt);}
 .dcard.c-transit{border-color:rgba(186,117,23,0.4);}
-.dcard.c-ops{border-color:rgba(24,95,165,0.35);}
+.dcard.c-ops{border-color:rgba(77,169,190,0.35);}
 .dcard.c-doc{border-color:rgba(29,158,117,0.4);}
 .dc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;}
 .dc-name{font-size:14px;font-weight:700;}
 .dc-plate{font-size:11px;color:var(--t2);margin-top:2px;}
 .phase-pill{font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;white-space:nowrap;flex-shrink:0;margin-left:8px;}
 .pp-transit{background:var(--alt);color:#633806;}
-.pp-wait{background:var(--blt);color:#0C447C;}
+.pp-wait{background:var(--blt);color:var(--bdk);}
 .pp-ops{background:var(--alt);color:#633806;}
 .pp-doc{background:var(--glt);color:#085041;}
 .pp-idle{background:rgba(0,0,0,0.06);color:var(--t2);}
 .dc-loc{font-size:13px;font-weight:600;margin-bottom:2px;}
 .dc-sub{font-size:12px;color:var(--t2);margin-bottom:10px;}
 .tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
-.tbox{background:var(--bg);border-radius:7px;padding:7px 9px;}
+.tbox{background:var(--subcard);border-radius:7px;padding:7px 9px;}
 .tb-l{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t2);margin-bottom:2px;}
 .tb-v{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;}
 .tv-r{color:var(--red);}.tv-a{color:var(--amber);}.tv-b{color:var(--blue);}.tv-g{color:var(--gmid);}.tv-gr{color:var(--t2);}
 .dc-upd{font-size:10px;color:var(--t3);margin-top:8px;text-align:right;}
-/* Quick message button on card */
-.dc-msg-btn{width:100%;margin-top:8px;padding:6px;font-size:12px;font-weight:500;border:0.5px solid var(--b2);border-radius:7px;background:none;color:var(--blue);cursor:pointer;}
+.dc-msg-btn{width:100%;margin-top:8px;padding:6px;font-size:12px;font-weight:500;border:1px solid var(--b2);border-radius:7px;background:none;color:var(--blue);cursor:pointer;}
 .dc-msg-btn:hover{background:var(--blt);}
 
+/* ACTIVE DRIVERS TABLE */
+.reg-table{width:100%;border-collapse:collapse;font-size:13px;}
+.reg-table th{text-align:left;font-size:10px;font-weight:700;color:var(--t2);padding:7px 10px;border-bottom:1px solid var(--b1);text-transform:uppercase;letter-spacing:.05em;}
+.reg-table td{padding:8px 10px;border-bottom:1px solid var(--b1);vertical-align:middle;}
+.reg-table tr:last-child td{border-bottom:none;}
+.online-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--gmid);margin-right:6px;}
+
 /* MESSAGES */
-.msg-compose{background:var(--card);border:0.5px solid var(--b1);border-radius:12px;padding:16px;margin-bottom:14px;}
+.msg-compose{background:var(--card);border:1px solid var(--b1);border-radius:12px;padding:16px;margin-bottom:14px;}
 .msg-thread{display:flex;flex-direction:column;gap:8px;}
 .msg-bubble{border-radius:12px;padding:10px 14px;max-width:80%;}
-.msg-bureau{background:var(--blt);border:0.5px solid rgba(24,95,165,0.15);margin-right:auto;}
-.msg-driver{background:var(--glt);border:0.5px solid rgba(29,158,117,0.15);margin-left:auto;text-align:right;}
+.msg-bureau{background:var(--blt);border:1px solid rgba(77,169,190,0.15);margin-right:auto;}
+.msg-driver{background:var(--glt);border:1px solid rgba(29,158,117,0.15);margin-left:auto;text-align:right;}
 .msg-meta{font-size:11px;color:var(--t2);margin-bottom:3px;font-weight:600;}
 .msg-txt{font-size:14px;color:var(--t1);line-height:1.4;}
 .msg-time{font-size:10px;color:var(--t3);margin-top:4px;}
 .msg-unread-dot{display:inline-block;width:7px;height:7px;background:var(--blue);border-radius:50%;margin-right:6px;vertical-align:middle;}
 .filter-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
-.ftab{padding:5px 12px;font-size:12px;font-weight:500;border:0.5px solid var(--b2);border-radius:99px;background:none;color:var(--t2);cursor:pointer;}
+.ftab{padding:5px 12px;font-size:12px;font-weight:500;border:1px solid var(--b2);border-radius:99px;background:none;color:var(--t2);cursor:pointer;}
 .ftab.on{background:var(--blue);color:#fff;border-color:var(--blue);}
+
+/* ACCOUNTS PANEL */
+.acc-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px;}
+.acc-table th{font-size:10px;font-weight:700;color:var(--t2);padding:7px 10px;border-bottom:1px solid var(--b1);text-align:left;text-transform:uppercase;letter-spacing:.05em;}
+.acc-table td{padding:8px 10px;border-bottom:1px solid var(--b1);vertical-align:middle;}
+.acc-table tr:last-child td{border-bottom:none;}
+.del-btn{background:none;border:none;cursor:pointer;color:var(--red);font-size:13px;padding:3px 6px;border-radius:4px;}
+.del-btn:hover{background:var(--rlt);}
 
 .empty{text-align:center;padding:40px 20px;color:var(--t2);}
 .empty p{font-size:14px;}
+
+/* VERSION */
+.version-footer{font-size:11px;color:var(--t3);text-align:right;padding:8px 24px 16px;max-width:1400px;margin:0 auto;}
+
+/* TOAST */
+#_toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(70px);background:#333;color:#fff;padding:11px 20px;border-radius:99px;font-size:14px;font-weight:500;opacity:0;transition:all .25s;pointer-events:none;z-index:9999;white-space:nowrap;}
+
 @media(max-width:700px){.stats{grid-template-columns:repeat(3,minmax(0,1fr));}.page{padding:14px;}}
 @media(max-width:400px){.stats{grid-template-columns:repeat(2,minmax(0,1fr));}}
 </style>
 </head>
 <body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <img src="./cropped-logo.webp" alt="LCA" onerror="this.style.display='none'"/>
+    </div>
+    <div class="login-title">LCA Transfert — Bureau</div>
+    <div class="login-sub">Liege Cargo Agency · Accès Manager</div>
+    <div class="login-fg">
+      <label>Login</label>
+      <input type="text" id="l-user" placeholder="Identifiant" autocomplete="username"/>
+    </div>
+    <div class="login-fg">
+      <label>Mot de passe</label>
+      <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <button class="login-btn" onclick="doLogin()">Connexion</button>
+    <div class="login-err" id="login-err">Identifiants incorrects.</div>
+  </div>
+</div>
+
 <!-- MAIN APP -->
-<div id="main-app">
+<div id="main-app" style="display:none;">
 <div class="hdr">
   <div class="logo">
-    <div class="lmk"><svg viewBox="0 0 24 24"><path d="M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h11a2 2 0 012 2v3"/><rect x="9" y="11" width="14" height="10" rx="2"/><path d="M13 16h2m2 0h2"/></svg></div>
+    <img class="logo-img" src="./cropped-logo.webp" alt="LCA" onerror="this.style.display='none'"/>
     <div><div class="ltx">LCA Transfert — Bureau</div><div class="lsb">Liege Cargo Agency</div></div>
   </div>
   <div class="hdr-right">
@@ -152,6 +205,7 @@ textarea.fi{resize:vertical;min-height:72px;}
   <button class="tab on" onclick="switchView('dashboard')" id="tab-dashboard">📍 Temps réel</button>
   <button class="tab" onclick="switchView('messages')" id="tab-messages">💬 Messages <span class="msg-badge" id="msg-badge">0</span></button>
   <button class="tab" onclick="switchView('reports')" id="tab-reports">📊 Rapports</button>
+  <button class="tab" onclick="switchView('accounts')" id="tab-accounts">👤 Comptes</button>
 </div>
 
 <!-- ============================================================ DASHBOARD -->
@@ -165,6 +219,12 @@ textarea.fi{resize:vertical;min-height:72px;}
     <div class="sc"><div class="sc-l">À quai</div><div class="sc-v" id="s-dock">—</div><div class="sc-s">mise à quai</div></div>
     <div class="sc"><div class="sc-l">En opération</div><div class="sc-v" id="s-ops" style="color:var(--blue);">—</div><div class="sc-s">charg./décharg.</div></div>
     <div class="sc"><div class="sc-l">Documentation</div><div class="sc-v" id="s-doc" style="color:var(--gmid);">—</div><div class="sc-s">CMR en cours</div></div>
+  </div>
+
+  <!-- Active Drivers Registry -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="ctit">🟢 Chauffeurs connectés aujourd'hui</div>
+    <div id="active-drivers-table"><div class="empty"><p style="padding:8px 0;">Aucun chauffeur connecté.</p></div></div>
   </div>
 
   <div class="settings-bar">
@@ -211,6 +271,7 @@ textarea.fi{resize:vertical;min-height:72px;}
       <select class="fi" id="msg-filter" onchange="renderMessages()" style="width:auto;font-size:12px;padding:5px 8px;">
         <option value="all">Tous</option>
       </select>
+      <button class="btn bo bsm" onclick="exportMsgsCSV()" style="margin-left:4px;">CSV</button>
     </div>
   </div>
 
@@ -224,18 +285,43 @@ textarea.fi{resize:vertical;min-height:72px;}
 <div class="view" id="view-reports">
 <div class="page">
   <div class="card">
-    <div class="ctit">Données en temps réel — récupérées du serveur</div>
-    <p style="font-size:13px;color:var(--t2);margin-bottom:14px;">Les rapports complets sont disponibles dans l'onglet Manager de l'application chauffeur, ou via les exports CSV.</p>
+    <div class="ctit">Rapports & Exports</div>
+    <p style="font-size:13px;color:var(--t2);margin-bottom:14px;">Exportez les données archivées en CSV ou accédez aux rapports détaillés.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn bo bsm" onclick="exportArchiveCSV()">📥 Exporter archives CSV</button>
+      <button class="btn bo bsm" onclick="exportMsgsCSV()">📥 Exporter messages CSV</button>
       <button class="btn bo bsm" onclick="window.open('index.html#manager')">Ouvrir vue Manager</button>
-      <button class="btn bo bsm" onclick="exportMsgsCSV()">Exporter messages CSV</button>
     </div>
   </div>
-  <div id="report-summary"></div>
+  <div id="report-summary" class="card">
+    <div class="ctit">Missions archivées</div>
+    <div id="archive-list"><div class="empty"><p>Chargement…</p></div></div>
+  </div>
+</div>
+</div>
+
+<!-- ============================================================ ACCOUNTS -->
+<div class="view" id="view-accounts">
+<div class="page-narrow">
+  <div class="card">
+    <div class="ctit">Créer un compte chauffeur</div>
+    <div class="fg"><label class="fl">Nom complet</label><input class="fi" type="text" id="acc-name" placeholder="Ex: Marc Dupont"/></div>
+    <div class="fg"><label class="fl">Login (identifiant)</label><input class="fi" type="text" id="acc-login" placeholder="Ex: marc.d"/></div>
+    <div class="fg" style="margin-bottom:0;"><label class="fl">Mot de passe</label><input class="fi" type="password" id="acc-pass" placeholder="••••••••"/></div>
+    <button class="btn bp" style="margin-top:12px;" onclick="createAccount()">Créer le compte</button>
+  </div>
+
+  <div class="card">
+    <div class="ctit">Comptes chauffeurs existants</div>
+    <div id="accounts-list"><div class="empty"><p>Chargement…</p></div></div>
+  </div>
 </div>
 </div>
 
 </div><!-- /main-app -->
+
+<!-- VERSION -->
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.01 (release: 26 mars 2026) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -243,112 +329,182 @@ textarea.fi{resize:vertical;min-height:72px;}
 
 <script defer>
 'use strict';
-const LCA_SITES = ['LCA Nord','LCA Selys'];
-const STEP_LABELS = ['','Attente quai','Quai attribué','À quai','Opération','Fin opération','CMR reçu','En transit'];
-const API = './api/';
 
+// ============================================================
+// AUTH — Manager login
+// ============================================================
+const MANAGER_CREDENTIALS = { username: 'AdminLCA', password: 'LCAlgg_2704!' };
+let currentUser = null;
 
-// ── VIEWS ─────────────────────────────────────────────────────
-function switchView(v) {
-  ['dashboard','messages','reports'].forEach(id => {
-    document.getElementById('tab-'+id).classList.toggle('on', id===v);
-    document.getElementById('view-'+id).classList.toggle('on', id===v);
-  });
-  if (v === 'messages') renderMessages();
+function doLogin() {
+  const u = document.getElementById('l-user').value.trim();
+  const p = document.getElementById('l-pass').value;
+  const errEl = document.getElementById('login-err');
+  errEl.style.display = 'none';
+  if (u === MANAGER_CREDENTIALS.username && p === MANAGER_CREDENTIALS.password) {
+    currentUser = { full_name: 'Bureau', username: u };
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('main-app').style.display = '';
+    document.getElementById('ver-footer').style.display = '';
+    document.getElementById('user-name').textContent = currentUser.full_name;
+    onAppReady();
+  } else {
+    errEl.style.display = '';
+  }
 }
 
-// ── DRIVERS — fetch from Supabase missions ────────────────────
+function doLogout() {
+  showToast('Déconnexion…');
+  setTimeout(() => location.reload(), 500);
+}
+
+// Enter key on password field
+document.addEventListener('DOMContentLoaded', () => {
+  const passInput = document.getElementById('l-pass');
+  if (passInput) passInput.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+});
+
+// ============================================================
+// VIEWS
+// ============================================================
+function switchView(v) {
+  ['dashboard','messages','reports','accounts'].forEach(id => {
+    const tab = document.getElementById('tab-'+id);
+    const view = document.getElementById('view-'+id);
+    if(tab) tab.classList.toggle('on', id===v);
+    if(view) view.classList.toggle('on', id===v);
+  });
+  if (v === 'messages') renderMessages();
+  if (v === 'reports') loadArchiveList();
+  if (v === 'accounts') loadAccounts();
+}
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+const LCA_SITES = ['LCA Nord','LCA Selys'];
+const STEP_LABELS = ['','Attente quai','Quai attribué','À quai','Opération','Fin opération','CMR reçu','En transit'];
+
+// ============================================================
+// DRIVERS — fetch from Supabase missions
+// ============================================================
 let drivers = [];
 let driverTicker = null;
 
-/**
- * Convert a Supabase mission (with stops[]) to the dashboard driver format.
- * Only missions that are active (not completed, dayStartTs today) are shown.
- */
 function missionToDriverStatus(mission) {
   const stops = mission.stops || [];
-
-  // Determine current step and current stop
-  // The active stop is the last stop that hasn't been fully completed (no tDepart)
-  // or if the mission is in transit (step 7), use the last completed stop
-  let curStop = null;
-  let step = 0;
-
-  // Find the last stop in progress (no tDepart = still at this location)
+  let curStop = null, step = 0;
   for (let i = stops.length - 1; i >= 0; i--) {
     if (!stops[i].tDepart) { curStop = stops[i]; break; }
   }
-
-  // If all stops have tDepart, driver is in transit (step 7)
-  if (!curStop && stops.length > 0) {
-    curStop = stops[stops.length - 1]; // last stop for location reference
-    step = 7; // En transit
-  } else if (curStop) {
-    // Determine step from timestamps present on current stop
+  if (!curStop && stops.length > 0) { curStop = stops[stops.length-1]; step = 7; }
+  else if (curStop) {
     if      (!curStop.tArrival)      step = 0;
-    else if (!curStop.tDockAssigned) step = 1; // Attente quai
-    else if (!curStop.tDockReady)    step = 2; // Quai attribué
-    else if (!curStop.tOpsStart)     step = 3; // À quai
-    else if (!curStop.tOpsEnd)       step = 4; // Opération
-    else if (!curStop.tDoc)          step = 5; // Fin opération (attente CMR)
-    else                             step = 6; // CMR reçu
+    else if (!curStop.tDockAssigned) step = 1;
+    else if (!curStop.tDockReady)    step = 2;
+    else if (!curStop.tOpsStart)     step = 3;
+    else if (!curStop.tOpsEnd)       step = 4;
+    else if (!curStop.tDoc)          step = 5;
+    else                             step = 6;
   }
-
   const now = Date.now();
   const minJourney = mission.dayStartTs ? Math.floor((now - mission.dayStartTs) / 60000) : null;
-
   return {
-    user_id:      mission.id,
-    driver_name:  mission.driver,
-    plate:        mission.plate || '',
-    step,
-    location:     curStop ? curStop.location : '',
-    operation:    curStop ? (curStop.operation || '') : '',
-    dock:         curStop ? (curStop.dock || '') : '',
+    user_id: mission.id, driver_name: mission.driver, plate: mission.plate || '',
+    step, location: curStop ? curStop.location : '', operation: curStop ? (curStop.operation||'') : '',
+    dock: curStop ? (curStop.dock||'') : '',
     ts_arrival:       curStop?.tArrival        ? new Date(curStop.tArrival).toISOString()        : null,
     ts_dock_assigned: curStop?.tDockAssigned   ? new Date(curStop.tDockAssigned).toISOString()   : null,
     ts_dock_ready:    curStop?.tDockReady      ? new Date(curStop.tDockReady).toISOString()      : null,
     ts_ops_start:     curStop?.tOpsStart       ? new Date(curStop.tOpsStart).toISOString()       : null,
     ts_ops_end:       curStop?.tOpsEnd         ? new Date(curStop.tOpsEnd).toISOString()         : null,
-    min_wait:     curStop?.minWait   ?? null,
-    min_dock:     curStop?.minDock   ?? null,
-    min_ops:      curStop?.minOps    ?? null,
-    min_journey:  minJourney,
-    updated_at:   mission.updatedat || new Date(mission.dayStartTs || now).toISOString()
+    min_wait: curStop?.minWait??null, min_dock: curStop?.minDock??null, min_ops: curStop?.minOps??null,
+    min_journey: minJourney,
+    updated_at: mission.updatedat || new Date(mission.dayStartTs||now).toISOString()
   };
 }
 
 async function fetchDrivers() {
   try {
-    // Load all non-completed missions from Supabase
     if (window.loadMissionsFromSupabase) {
       const allMissions = await window.loadMissionsFromSupabase();
-
-      // Keep only missions active today and not completed
       const todayStr = new Date().toLocaleDateString('fr-BE');
-      const activeMissions = allMissions.filter(m =>
-        !m.completed && m.date === todayStr
-      );
-
-      drivers = activeMissions.map(missionToDriverStatus)
-        .filter(d => d.step > 0); // only show drivers who have started a stop
+      const activeMissions = allMissions.filter(m => !m.completed && m.date === todayStr);
+      drivers = activeMissions.map(missionToDriverStatus).filter(d => d.step > 0);
     }
-  } catch(e) {
-    console.warn('[Dashboard] fetchDrivers error:', e.message);
-    // Keep existing drivers on error
-  }
+  } catch(e) { console.warn('[fetchDrivers]', e.message); }
   renderDashboard();
+  renderActiveDriversTable();
   document.getElementById('last-refresh').textContent =
-    'Dernière MAJ : ' + new Date().toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  // Update driver dropdown for messaging
+    'Dernière MAJ : '+new Date().toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   buildDriverDropdown();
+}
+
+async function renderActiveDriversTable() {
+  const container = document.getElementById('active-drivers-table');
+  if (!container) return;
+
+  // Load from active_drivers table in Supabase
+  let activeDrivers = [];
+  if (window.supabaseClient) {
+    try {
+      const { data } = await window.supabaseClient
+        .from('active_drivers')
+        .select('*')
+        .order('lastseen', { ascending: false });
+      if (data) activeDrivers = data;
+    } catch(e) {}
+  }
+
+  // Also include drivers from today's missions
+  const missionDrivers = drivers.map(d => ({
+    fullname: d.driver_name,
+    plate: d.plate,
+    lastseen: d.updated_at
+  }));
+
+  // Merge, deduplicate by name
+  const all = [...activeDrivers];
+  missionDrivers.forEach(md => {
+    if (!all.find(a => a.fullname === md.fullname)) all.push(md);
+  });
+
+  if (!all.length) {
+    container.innerHTML = '<div class="empty"><p style="padding:8px 0;">Aucun chauffeur enregistré aujourd\'hui.</p></div>';
+    return;
+  }
+
+  const now = Date.now();
+  container.innerHTML = '<table class="reg-table"><thead><tr><th>Chauffeur</th><th>Plaque</th><th>Dernière activité</th><th>Statut mission</th></tr></thead><tbody>'
+    + all.map(d => {
+      const driver = drivers.find(dr => dr.driver_name === d.fullname);
+      const stepLabel = driver ? (STEP_LABELS[driver.step] || 'Actif') : '—';
+      const loc = driver ? (driver.location || '') : '';
+      const lastSeen = d.lastseen ? new Date(d.lastseen).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'}) : '—';
+      const minsAgo = d.lastseen ? Math.floor((now - new Date(d.lastseen).getTime())/60000) : null;
+      const isOnline = minsAgo !== null && minsAgo < 10;
+      return `<tr>
+        <td><span class="${isOnline?'online-dot':''}"></span><strong>${d.fullname||d.username||'—'}</strong></td>
+        <td>${d.plate||'—'}</td>
+        <td>${lastSeen}${minsAgo!==null?' (il y a '+minsAgo+' min)':''}</td>
+        <td>${driver?`<strong>${stepLabel}</strong>${loc?' — '+loc:''}`: '—'}</td>
+      </tr>`;
+    }).join('') + '</tbody></table>';
+}
+
+// IDs des cartes masquées (remis à zéro au prochain fetchDrivers automatique)
+const dismissedCards = new Set();
+
+function dismissCard(userId) {
+  dismissedCards.add(userId);
+  renderDashboard();
+  showToast("Opération masquée de la vue.");
 }
 
 function renderDashboard() {
   const thrOther = parseInt(document.getElementById('thr-other').value)||60;
   const thrLCA   = parseInt(document.getElementById('thr-lca').value)||30;
   function thr(loc) { return LCA_SITES.includes(loc) ? thrLCA : thrOther; }
-
   document.getElementById('s-active').textContent  = drivers.length;
   document.getElementById('s-transit').textContent = drivers.filter(d=>d.step==7).length;
   document.getElementById('s-wait').textContent    = drivers.filter(d=>d.step==1).length;
@@ -356,32 +512,25 @@ function renderDashboard() {
   document.getElementById('s-ops').textContent     = drivers.filter(d=>d.step==4||d.step==5).length;
   document.getElementById('s-doc').textContent     = drivers.filter(d=>d.step==6).length;
 
-  // Alerts
   const az = document.getElementById('alerts-zone');
-  const alertDs = drivers.filter(d => {
-    if (d.step==1 && d.ts_arrival) {
-      const w = elapsed(d.ts_arrival);
-      return w >= thr(d.location);
-    }
-    return false;
-  });
+  const alertDs = drivers.filter(d => d.step==1&&d.ts_arrival&&elapsed(d.ts_arrival)>=thr(d.location));
   az.innerHTML = alertDs.map(d => {
-    const w = elapsed(d.ts_arrival), t = thr(d.location);
-    return `<div class="alert-item"><span style="font-size:15px;">⚠️</span><span class="alert-txt">${d.driver_name} — ${d.location} : attente quai > ${t} min${LCA_SITES.includes(d.location)?' (LCA)':''}</span><span class="alert-dur">${w} min</span><button class="btn-logout" style="margin-left:8px;" onclick="quickMsg('${d.driver_name}')">Envoyer message</button></div>`;
+    const w=elapsed(d.ts_arrival), t=thr(d.location);
+    return `<div class="alert-item"><span style="font-size:15px;">⚠️</span><span class="alert-txt">${d.driver_name} — ${d.location} : attente quai > ${t} min${LCA_SITES.includes(d.location)?' (LCA)':''}</span><span class="alert-dur">${w} min</span><button class="bsm bo" style="cursor:pointer;border:1px solid var(--b2);border-radius:6px;padding:5px 10px;font-size:12px;background:none;margin-left:8px;" onclick="quickMsg('${d.driver_name}')">💬 Message</button></div>`;
   }).join('');
 
-  // Cards
   const grid = document.getElementById('driver-grid');
   if (!drivers.length) {
     grid.innerHTML = '<div class="empty"><p>Aucun chauffeur actif.<br><span style="font-size:12px;">Les chauffeurs apparaissent dès qu\'ils démarrent leur journée.</span></p></div>';
     return;
   }
-  grid.innerHTML = drivers.map(d => buildCard(d, thr(d.location))).join('');
-
-  // Start live tick if not running
-  if (!driverTicker) {
-    driverTicker = setInterval(liveTick, 1000);
+  const visible = drivers.filter(d => !dismissedCards.has(d.user_id));
+  if (!visible.length) {
+    grid.innerHTML = '<div class="empty"><p>Toutes les opérations ont été masquées.<br><span style="font-size:12px;">La vue se réactualisera dans 30s.</span></p></div>';
+    return;
   }
+  grid.innerHTML = visible.map(d => buildCard(d, thr(d.location))).join('');
+  if (!driverTicker) driverTicker = setInterval(liveTick, 1000);
 }
 
 function buildCard(d, threshold) {
@@ -395,9 +544,8 @@ function buildCard(d, threshold) {
   const w = e(d.ts_arrival);
   const cardCls = step===1&&w>=threshold?'dcard c-alert':step===7?'dcard c-transit':(step===4||step===5)?'dcard c-ops':step===6?'dcard c-doc':'dcard';
   const locLine = d.location
-    ? `<div class="dc-loc">${step===7?'🚛 ':' 📍'}${d.location}${d.dock?' · Quai '+d.dock:''}</div><div class="dc-sub">${d.operation||''}</div>`
+    ? `<div class="dc-loc">${step===7?'🚛 ':'📍 '}${d.location}${d.dock?' · Quai '+d.dock:''}</div><div class="dc-sub">${d.operation||''}</div>`
     : '<div class="dc-sub">—</div>';
-
   const boxes=[];
   if(step===1&&d.ts_arrival){boxes.push({l:'Att.quai',v:dur(w),cls:w>=threshold?'tv-r':w>=threshold*.7?'tv-a':'tv-b',id:'tw-'+d.user_id});}
   if(step===2&&d.ts_dock_assigned){boxes.push({l:'Att.quai',v:dur(d.min_wait),cls:'tv-gr'});boxes.push({l:'Mise quai',v:dur(e(d.ts_dock_assigned)),cls:'tv-b',id:'tdk-'+d.user_id});}
@@ -405,21 +553,21 @@ function buildCard(d, threshold) {
   if(step===5&&d.ts_ops_start){const op=e(d.ts_ops_start);boxes.push({l:'Opération',v:dur(op),cls:'tv-b',id:'top-'+d.user_id});boxes.push({l:'Doc',v:dur(e(d.ts_ops_end)),cls:'tv-g',id:'tdc-'+d.user_id});}
   if(step===7){const srv=d.updated_at?e(d.updated_at):null;boxes.push({l:'Transit',v:dur(srv),cls:'tv-a',id:'ttr-'+d.user_id});}
   if(d.min_journey)boxes.push({l:'Journée',v:dur(d.min_journey),cls:'tv-gr'});
-
   const timerHtml = boxes.length
     ? '<div class="tgrid">'+boxes.slice(0,3).map(b=>'<div class="tbox"><div class="tb-l">'+b.l+'</div><div class="tb-v '+b.cls+'"'+(b.id?' id="'+b.id+'"':'')+'>'+b.v+'</div></div>').join('')+'</div>'
     : '';
   const updSecs = d.updated_at ? Math.floor((Date.now()-new Date(d.updated_at).getTime())/1000) : null;
-
   return `<div class="${cardCls}">
     <div class="dc-top">
       <div><div class="dc-name">${d.driver_name}</div><div class="dc-plate">${d.plate||''}</div></div>
       <span class="phase-pill ${pillCls}">${eMap[step]||'—'} ${STEP_LABELS[step]||'Inactif'}</span>
     </div>
-    ${locLine}
-    ${timerHtml}
+    ${locLine}${timerHtml}
     ${updSecs!=null?'<div class="dc-upd">MAJ il y a '+updSecs+'s</div>':''}
-    <button class="dc-msg-btn" onclick="quickMsg('${d.driver_name}')">💬 Envoyer un message</button>
+    <div style="display:flex;gap:6px;margin-top:8px;">
+      <button class="dc-msg-btn" style="flex:1;margin-top:0;" onclick="quickMsg('${d.driver_name}')">💬 Message</button>
+      <button class="dc-msg-btn" style="flex:0 0 auto;margin-top:0;color:var(--red);border-color:rgba(163,45,45,0.3);" onclick="dismissCard(${d.user_id})" title="Masquer de la vue">✕ Masquer</button>
+    </div>
   </div>`;
 }
 
@@ -433,8 +581,7 @@ function liveTick() {
   const thrOther=parseInt(document.getElementById('thr-other').value)||60;
   const thrLCA=parseInt(document.getElementById('thr-lca').value)||30;
   drivers.forEach(d=>{
-    const step=parseInt(d.step)||0;
-    const thr = LCA_SITES.includes(d.location)?thrLCA:thrOther;
+    const step=parseInt(d.step)||0, thr=LCA_SITES.includes(d.location)?thrLCA:thrOther;
     if(step===1&&d.ts_arrival){const w=e(d.ts_arrival);up('tw-'+d.user_id,dur(w),w>=thr?'tv-r':w>=thr*.7?'tv-a':'tv-b');}
     if(step===2&&d.ts_dock_assigned)up('tdk-'+d.user_id,dur(e(d.ts_dock_assigned)));
     if((step===4||step===5)&&d.ts_ops_start){const op=e(d.ts_ops_start);up('top-'+d.user_id,dur(op),op>60?'tv-r':op>30?'tv-a':'tv-b');}
@@ -442,40 +589,27 @@ function liveTick() {
   });
 }
 
-// ── MESSAGES ──────────────────────────────────────────────────
+// ============================================================
+// MESSAGES
+// ============================================================
 let messages = [];
 try { messages = JSON.parse(localStorage.getItem('lca_bureau_msgs')||'[]'); } catch(e){}
 function saveMsgs(){try{localStorage.setItem('lca_bureau_msgs',JSON.stringify(messages));}catch(e){}}
 
 function loadMessages() {
-  // Load from Supabase first if available
   if (window.loadMessagesFromSupabase) {
-    window.loadMessagesFromSupabase().then(sbMessages => {
-      if (sbMessages && sbMessages.length > 0) {
-        messages = sbMessages;
-        saveMsgs();
-      }
+    window.loadMessagesFromSupabase().then(sb => {
+      if (sb && sb.length > 0) { messages = sb; saveMsgs(); }
       renderMessages();
-    }).catch(e => {
-      console.warn('Failed to load from Supabase:', e);
-      renderMessages();
-    });
-  } else {
-    renderMessages();
-  }
-  // When server connected: fetch from API
-  // fetch(API+'messages.php?action=list', {credentials:'include'}).then(r=>r.json()).then(d=>{if(d.ok)messages=d.data;renderMessages();});
+    }).catch(() => renderMessages());
+  } else { renderMessages(); }
 }
 
 function buildDriverDropdown() {
-  // Populate from active drivers + message history
-  const driverNames = [
-    ...new Set([
-      ...drivers.map(d=>d.driver_name),
-      ...messages.filter(m=>m.from==='driver').map(m=>m.fromName)
-    ].filter(Boolean))
-  ].sort();
-
+  const driverNames = [...new Set([
+    ...drivers.map(d=>d.driver_name),
+    ...messages.filter(m=>m.from==='driver').map(m=>m.fromName)
+  ].filter(Boolean))].sort();
   ['msg-to','msg-filter'].forEach(id=>{
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -488,33 +622,25 @@ function buildDriverDropdown() {
 function sendMsg() {
   const to  = document.getElementById('msg-to').value;
   const txt = document.getElementById('msg-text').value.trim();
-  if (!txt) { alert('Veuillez saisir un message.'); return; }
+  if (!txt) { showToast('Veuillez saisir un message.'); return; }
   const toLabel = to==='all'?'Tous':to;
   const msg = {id:Date.now(),from:'bureau',fromName:currentUser?.full_name||'Bureau',to,toLabel,text:txt,ts:Date.now(),read:false};
   messages.push(msg); saveMsgs();
-  // Also save to Supabase
-  if (window.saveMessageToSupabase) {
-    window.saveMessageToSupabase(msg).catch(e => console.warn('Failed to save to Supabase:', e));
-  }
+  if (window.saveMessageToSupabase) window.saveMessageToSupabase(msg).catch(()=>{});
   document.getElementById('msg-text').value='';
   renderMessages();
   showToast('Message envoyé à '+toLabel+' ✓');
-  // Server: fetch(API+'messages.php?action=send',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(msg)});
 }
 
 function quickMsg(driverName) {
   switchView('messages');
+  buildDriverDropdown();
   const sel = document.getElementById('msg-to');
   if (sel) {
-    // Make sure driver is in list
-    buildDriverDropdown();
-    sel.value = driverName;
-    if (sel.value !== driverName) {
-      const opt = document.createElement('option');
-      opt.value = driverName; opt.textContent = driverName;
-      sel.appendChild(opt);
-      sel.value = driverName;
+    if (!Array.from(sel.options).find(o=>o.value===driverName)) {
+      const opt = document.createElement('option'); opt.value=driverName; opt.textContent=driverName; sel.appendChild(opt);
     }
+    sel.value = driverName;
   }
   document.getElementById('msg-text')?.focus();
 }
@@ -531,11 +657,9 @@ function renderMessages() {
   }
   const fmtTime = ts => new Date(ts).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'})
     + ' · ' + new Date(ts).toLocaleDateString('fr-BE',{day:'2-digit',month:'2-digit'});
-
   const unread = messages.filter(m=>m.from==='driver'&&!m.read).length;
   const badge = document.getElementById('msg-badge');
   if(badge){badge.textContent=unread;badge.style.display=unread>0?'':'none';}
-
   const thread = document.getElementById('msg-thread');
   if (!thread) return;
   if (!shown.length) { thread.innerHTML='<div class="empty"><p>Aucun message.</p></div>'; return; }
@@ -544,18 +668,17 @@ function renderMessages() {
     const cls = isBureau?'msg-bubble msg-bureau':'msg-bubble msg-driver';
     const who = isBureau?('📨 '+m.fromName+' → '+(m.toLabel||m.to)):('🚛 '+m.fromName);
     return `<div class="${cls}">
-      <div class="msg-meta">${isBureau&&!m.read?'<span class="msg-unread-dot"></span>':''}${who}</div>
+      <div class="msg-meta">${!isBureau&&!m.read?'<span class="msg-unread-dot"></span>':''}${who}</div>
       <div class="msg-txt">${m.text}</div>
       <div class="msg-time">${fmtTime(m.ts)}</div>
     </div>`;
   }).join('');
-  // Mark driver messages as read when manager views them
-  messages.forEach(m=>{ if(m.from==='driver')m.read=true; });
+  messages.forEach(m=>{ if(m.from==='driver') m.read=true; });
   saveMsgs();
 }
 
 function exportMsgsCSV(){
-  if(!messages.length){showToast('Aucun message.',true);return;}
+  if(!messages.length){showToast('Aucun message.');return;}
   const H=['Date','De','À','Message'];
   const rows=messages.map(m=>[
     new Date(m.ts).toLocaleString('fr-BE'),
@@ -563,77 +686,189 @@ function exportMsgsCSV(){
     m.toLabel||m.to,
     m.text.replace(/;/g,',')
   ].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';'));
-  const csv=[H.join(';'),...rows].join('\r\n');
-  const b=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
-  const u=URL.createObjectURL(b);
-  const a=document.createElement('a');a.href=u;a.download='LCA_messages_'+new Date().toISOString().slice(0,10)+'.csv';
-  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(u);
+  dlCSV([H.join(';'),...rows].join('\r\n'),'LCA_messages_'+new Date().toISOString().slice(0,10)+'.csv');
+}
+
+// ============================================================
+// ARCHIVE & REPORTS
+// ============================================================
+async function loadArchiveList() {
+  const container = document.getElementById('archive-list');
+  if (!container) return;
+  if (!window.supabaseClient) { container.innerHTML='<div class="empty"><p>Supabase non disponible.</p></div>'; return; }
+  try {
+    const { data, error } = await window.supabaseClient
+      .from('missions_archive')
+      .select('*')
+      .order('archivedat', { ascending: false })
+      .limit(50);
+    if (error || !data || !data.length) {
+      // Fall back to completed missions
+      const allM = await window.loadMissionsFromSupabase();
+      const completed = allM.filter(m => m.completed);
+      if (!completed.length) { container.innerHTML='<div class="empty"><p>Aucune mission archivée.</p></div>'; return; }
+      renderArchiveTable(container, completed);
+      return;
+    }
+    renderArchiveTable(container, data);
+  } catch(e) {
+    container.innerHTML='<div class="empty"><p>Erreur chargement archives.</p></div>';
+  }
+}
+
+function renderArchiveTable(container, missions) {
+  container.innerHTML = '<table class="reg-table"><thead><tr><th>Date</th><th>Chauffeur</th><th>Plaque</th><th>Stops</th><th>Durée journée</th></tr></thead><tbody>'
+    + missions.map(m => {
+      const dur = (m.dayStartTs && m.dayEndTs)
+        ? Math.round((new Date(m.dayEndTs||m.dayendts) - new Date(m.dayStartTs||m.daystartts)) / 60000) + ' min'
+        : '—';
+      const stops = (m.stops||[]).length;
+      return `<tr><td>${m.date||'—'}</td><td>${m.driver||'—'}</td><td>${m.plate||'—'}</td><td>${stops}</td><td>${dur}</td></tr>`;
+    }).join('') + '</tbody></table>';
+}
+
+async function exportArchiveCSV() {
+  let data = [];
+  if (window.supabaseClient) {
+    try {
+      const res = await window.supabaseClient.from('missions_archive').select('*');
+      if (res.data) data = res.data;
+    } catch(e) {}
+  }
+  if (!data.length && window.loadMissionsFromSupabase) {
+    const allM = await window.loadMissionsFromSupabase();
+    data = allM.filter(m => m.completed);
+  }
+  if (!data.length) { showToast('Aucune donnée à exporter.'); return; }
+
+  const H = ['Date','Chauffeur','Plaque','Lieu','Opération','Quai',
+    'H.arrivée','H.quai att.','H.à quai','H.déb.opé.','H.fin opé.','H.CMR','H.départ',
+    'Transit(min)','Att.quai(min)','Mise quai(min)','Opération(min)','Doc(min)','TOTAL(min)','Commentaire'];
+  const rows = [];
+  const tsStr = ts => ts ? new Date(ts).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'}) : '—';
+  data.forEach(m => {
+    (m.stops||[]).forEach(s => {
+      rows.push([
+        m.date||'', m.driver||'', m.plate||'',
+        s.location||'', s.operation||'', s.dock||'',
+        tsStr(s.tArrival), tsStr(s.tDockAssigned), tsStr(s.tDockReady),
+        tsStr(s.tOpsStart), tsStr(s.tOpsEnd), tsStr(s.tDoc), tsStr(s.tDepart),
+        s.minTransit??'', s.minWait??'', s.minDock??'', s.minOps??'', s.minDoc??'', s.minTotal??'',
+        (s.comment||'').replace(/;/g,',')
+      ].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';'));
+    });
+  });
+  dlCSV([H.join(';'),...rows].join('\r\n'), 'LCA_archives_'+new Date().toISOString().slice(0,10)+'.csv');
+  showToast(data.length+' missions exportées ✓');
+}
+
+function dlCSV(content, filename) {
+  const b = new Blob(['\uFEFF'+content],{type:'text/csv;charset=utf-8;'});
+  const u = URL.createObjectURL(b);
+  const a = document.createElement('a'); a.href=u; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u);
+}
+
+// ============================================================
+// DRIVER ACCOUNTS
+// ============================================================
+async function loadAccounts() {
+  const container = document.getElementById('accounts-list');
+  if (!container) return;
+  let accounts = await getDriverAccounts();
+  if (!accounts.length) { container.innerHTML='<div class="empty"><p>Aucun compte chauffeur créé.</p></div>'; return; }
+  container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Nom</th><th>Action</th></tr></thead><tbody>'
+    + accounts.map(a => `<tr>
+      <td><code>${a.username}</code></td>
+      <td>${a.fullname||a.username}</td>
+      <td><button class="del-btn" onclick="deleteAccount('${a.username}')">✕ Supprimer</button></td>
+    </tr>`).join('') + '</tbody></table>';
+}
+
+async function getDriverAccounts() {
+  if (window.supabaseClient) {
+    try {
+      const { data, error } = await window.supabaseClient.from('driver_accounts').select('*');
+      if (!error && data) return data;
+    } catch(e) {}
+  }
+  try { return JSON.parse(localStorage.getItem('lca_driver_accounts')||'[]'); } catch(e){ return []; }
+}
+
+async function createAccount() {
+  const name = document.getElementById('acc-name').value.trim();
+  const login = document.getElementById('acc-login').value.trim();
+  const pass  = document.getElementById('acc-pass').value;
+  if (!name || !login || !pass) { showToast('Tous les champs sont requis.'); return; }
+
+  const newAcc = { username: login, fullname: name, password: pass };
+
+  if (window.supabaseClient) {
+    try {
+      const { error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' });
+      if (!error) {
+        document.getElementById('acc-name').value='';
+        document.getElementById('acc-login').value='';
+        document.getElementById('acc-pass').value='';
+        showToast('Compte créé pour '+name+' ✓');
+        loadAccounts();
+        return;
+      }
+    } catch(e) {}
+  }
+  // Fallback localStorage
+  try {
+    const accs = JSON.parse(localStorage.getItem('lca_driver_accounts')||'[]');
+    accs.push(newAcc);
+    localStorage.setItem('lca_driver_accounts', JSON.stringify(accs));
+    showToast('Compte créé (local) pour '+name+' ✓');
+    loadAccounts();
+  } catch(e) { showToast('Erreur création compte.'); }
+}
+
+async function deleteAccount(username) {
+  if (!confirm('Supprimer le compte '+username+' ?')) return;
+  if (window.supabaseClient) {
+    try { await window.supabaseClient.from('driver_accounts').delete().eq('username', username); } catch(e) {}
+  }
+  try {
+    let accs = JSON.parse(localStorage.getItem('lca_driver_accounts')||'[]');
+    accs = accs.filter(a => a.username !== username);
+    localStorage.setItem('lca_driver_accounts', JSON.stringify(accs));
+  } catch(e) {}
+  showToast('Compte supprimé.');
+  loadAccounts();
+}
+
+// ============================================================
+// REALTIME
+// ============================================================
+function startRealtimeSync() {
+  if (!window.supabaseClient) { setTimeout(startRealtimeSync, 2000); return; }
+  try {
+    window.supabaseClient.channel('lca-realtime')
+      .on('postgres_changes',{event:'*',schema:'public',table:'missions'}, () => fetchDrivers())
+      .on('postgres_changes',{event:'*',schema:'public',table:'messages'}, () => loadMessages())
+      .subscribe(status => {
+        const badge = document.querySelector('.live-badge');
+        if (badge) {
+          if (status==='SUBSCRIBED') { badge.innerHTML='<div class="live-dot"></div>En direct'; badge.style.color='rgba(255,255,255,0.9)'; }
+          else if (status==='CHANNEL_ERROR'||status==='TIMED_OUT') { badge.innerHTML='⚠️ Hors-ligne'; badge.style.color='var(--amber)'; }
+        }
+      });
+  } catch(e) { console.warn('[Realtime]', e.message); }
 }
 
 function showToast(msg){
   let t=document.getElementById('_toast');
-  if(!t){t=document.createElement('div');t.id='_toast';t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(70px);background:#1A1A1A;color:#fff;padding:11px 20px;border-radius:99px;font-size:14px;font-weight:500;opacity:0;transition:all .25s;pointer-events:none;z-index:9999;white-space:nowrap;';document.body.appendChild(t);}
+  if(!t){t=document.createElement('div');t.id='_toast';t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(70px);background:#333;color:#fff;padding:11px 20px;border-radius:99px;font-size:14px;font-weight:500;opacity:0;transition:all .25s;pointer-events:none;z-index:9999;white-space:nowrap;';document.body.appendChild(t);}
   t.textContent=msg;t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)';
   setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(-50%) translateY(70px)';},2500);
 }
 
-// ── REALTIME — Supabase subscriptions ────────────────────────
-function startRealtimeSync() {
-  if (!window.supabaseClient) {
-    console.warn('[Realtime] supabaseClient not available, retrying in 2s...');
-    setTimeout(startRealtimeSync, 2000);
-    return;
-  }
-  try {
-    window.supabaseClient
-      .channel('lca-realtime')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'missions' },
-        payload => {
-          console.log('[Realtime] Mission update received:', payload.eventType);
-          fetchDrivers();
-        }
-      )
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'messages' },
-        payload => {
-          console.log('[Realtime] Message update received:', payload.eventType);
-          loadMessages();
-        }
-      )
-      .subscribe(status => {
-        console.log('[Realtime] Channel status:', status);
-        const badge = document.querySelector('.live-badge');
-        if (badge) {
-          if (status === 'SUBSCRIBED') {
-            badge.innerHTML = '<div class="live-dot"></div>En direct';
-            badge.style.color = 'var(--gmid)';
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            badge.innerHTML = '⚠️ Hors-ligne';
-            badge.style.color = 'var(--amber)';
-          }
-        }
-      });
-    console.log('[Realtime] Subscriptions actives');
-  } catch(e) {
-    console.warn('[Realtime] Echec démarrage:', e.message);
-  }
-}
-
-function showApp() {
-  const mainApp = document.getElementById('main-app');
-  if (mainApp) mainApp.style.display = '';
-  document.getElementById('user-name').textContent = currentUser?.full_name || 'Bureau';
-}
-
-function doLogout() {
-  showToast('Déconnexion…');
-  setTimeout(() => location.reload(), 500);
-}
-
-// ── INIT ──────────────────────────────────────────────────────
-let currentUser = null;
-
+// ============================================================
+// INIT after login
+// ============================================================
 async function waitForSupabase(maxWaitMs = 5000) {
   const start = Date.now();
   while (!window.loadMissionsFromSupabase && Date.now() - start < maxWaitMs) {
@@ -641,20 +876,14 @@ async function waitForSupabase(maxWaitMs = 5000) {
   }
 }
 
-(async()=>{
-  currentUser = { full_name: 'Bureau', username: 'admin' };
-  showApp();
-  // Wait for supabase_config.js to register its functions (max 5s)
+async function onAppReady() {
   await waitForSupabase();
-  // Load messages from Supabase
   loadMessages();
-  // Fetch drivers and start auto-refresh (fallback polling every 30s)
   await fetchDrivers();
   setInterval(fetchDrivers, 30000);
   setInterval(loadMessages, 15000);
-  // Start Supabase realtime subscriptions for instant updates
   startRealtimeSync();
-})();
+}
 </script>
 </body>
 </html>

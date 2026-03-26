@@ -258,6 +258,7 @@ async function initSupabase() {
   }
 
   console.log('[Supabase] Initialization complete');
+  window._supabaseReady = true;
 }
 
 // Expose globally
