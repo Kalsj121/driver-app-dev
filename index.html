@@ -935,7 +935,7 @@ function fmtULD(inp) {
   // Only format if no hyphens present (let user type freely with hyphens)
   if (!v.includes('-')) {
     // Auto-format: split alpha prefix from rest
-    const prefixMatch = v.match(/^([A-Z]{2,4})([0-9A-Z].*)$/);
+    const prefixMatch = v.match(/^([A-Z]{3})([0-9A-Z].*)$/);
     if (prefixMatch) {
       const prefix = prefixMatch[1];
       const rest = prefixMatch[2];
