@@ -34,9 +34,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .login-btn{width:100%;padding:13px;font-size:15px;font-weight:700;background:var(--header);color:#fff;border:none;border-radius:var(--rmd);cursor:pointer;font-family:inherit;margin-top:4px;}
 .login-btn:active{opacity:.9;}
 .login-err{font-size:13px;color:var(--red);text-align:center;margin-top:10px;display:none;}
+/* EYE TOGGLE */
 .pw-wrap{position:relative;}
 .pw-wrap input{padding-right:42px;}
 .pw-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--t2);font-size:16px;padding:2px;line-height:1;}
+/* CHAMPS GRISÉS */
+.fi-locked{background:var(--subcard)!important;color:var(--t2)!important;cursor:not-allowed!important;border-color:var(--b1)!important;pointer-events:none;}
+select.fi-locked{pointer-events:none;opacity:.7;}
 
 /* HEADER */
 .hdr{background:var(--header);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
@@ -247,11 +251,19 @@ input[type=file]{display:none;}
   <div id="ph0">
     <div class="card" style="margin-top:8px;">
       <div class="ctit">Informations chauffeur</div>
-      <div class="fg"><label class="fl">Nom / Matricule</label><input class="fi" type="text" id="d-name" placeholder="Ex: Marc D. · CH-04" readonly/></div>
-      <div class="fg"><label class="fl">Tracteur</label><input class="fi" type="text" id="d-plate-tracteur" placeholder="—" readonly style="background:var(--subcard);"/></div>
-      <div class="fg" style="margin-bottom:0;"><label class="fl">Remorque</label><input class="fi" type="text" id="d-plate-remorque" placeholder="—" readonly style="background:var(--subcard);"/></div>
+      <div class="fg"><label class="fl">Nom / Matricule</label><input class="fi fi-locked" type="text" id="d-name" placeholder="—" readonly tabindex="-1"/></div>
+      <div class="fg"><label class="fl">Tracteur</label>
+        <select class="fi fi-locked" id="d-plate-tracteur" disabled>
+          <option value="">— Tracteur —</option>
+        </select>
+      </div>
+      <div class="fg" style="margin-bottom:0;"><label class="fl">Remorque</label>
+        <select class="fi fi-locked" id="d-plate-remorque" disabled>
+          <option value="">— Remorque —</option>
+        </select>
+      </div>
     </div>
-    <button class="btn bp" onclick="startDay()">▶ Démarrer ma journée</button>
+    <button class="btn bp" id="btn-start-day" onclick="startDay()">▶ Démarrer ma journée</button>
   </div>
 
   <!-- ACTIVE MISSION -->
@@ -438,12 +450,33 @@ input[type=file]{display:none;}
 <script defer>
 'use strict';
 
+// ============================================================
+// UTILS
+// ============================================================
 function togglePw(inputId, btn) {
   const input = document.getElementById(inputId);
   if (!input) return;
   const show = input.type === 'password';
   input.type = show ? 'text' : 'password';
   btn.textContent = show ? '🙈' : '👁';
+}
+
+function lockVehicleSelects(locked) {
+  const t = document.getElementById('d-plate-tracteur');
+  const r = document.getElementById('d-plate-remorque');
+  [t, r].forEach(el => {
+    if (!el) return;
+    el.disabled = locked;
+    el.classList.toggle('fi-locked', locked);
+  });
+}
+
+async function removeActiveDriver(username) {
+  if (!window.supabaseClient || !username) return;
+  try {
+    await window.supabaseClient.from('active_drivers').delete().eq('username', username);
+    console.log('[Driver] Removed from active_drivers');
+  } catch(e) { console.warn('[Driver remove]', e.message); }
 }
 
 // ============================================================
@@ -473,13 +506,23 @@ async function loadVehicleDropdowns() {
     const selT = document.getElementById('l-plate-tracteur');
     const selR = document.getElementById('l-plate-remorque');
 
-    if (tracteurs.length) {
-      selT.innerHTML = '<option value="">— Sélectionner tracteur —</option>'
-        + tracteurs.map(v => `<option value="${v.plate}">${v.plate}</option>`).join('');
+    const optT = tracteurs.map(v => `<option value="${v.plate}">${v.plate}</option>`).join('');
+    const optR = remorques.map(v => `<option value="${v.plate}">${v.plate}</option>`).join('');
+
+    // Login screen selects
+    if (tracteurs.length) selT.innerHTML = '<option value="">— Sélectionner tracteur —</option>' + optT;
+    if (remorques.length) selR.innerHTML = '<option value="">— Sélectionner remorque —</option>' + optR;
+
+    // ph0 selects (Informations chauffeur — verrouillés par défaut)
+    const ph0T = document.getElementById('d-plate-tracteur');
+    const ph0R = document.getElementById('d-plate-remorque');
+    if (ph0T && tracteurs.length) {
+      ph0T.innerHTML = '<option value="">— Tracteur —</option>' + optT;
+      if (currentDriver?.plateTracteur) ph0T.value = currentDriver.plateTracteur;
     }
-    if (remorques.length) {
-      selR.innerHTML = '<option value="">— Sélectionner remorque —</option>'
-        + remorques.map(v => `<option value="${v.plate}">${v.plate}</option>`).join('');
+    if (ph0R && remorques.length) {
+      ph0R.innerHTML = '<option value="">— Remorque —</option>' + optR;
+      if (currentDriver?.plateRemorque) ph0R.value = currentDriver.plateRemorque;
     }
     console.log('[Vehicles] Dropdowns loaded:', tracteurs.length, 'tracteurs,', remorques.length, 'remorques');
   } catch(e) {
@@ -559,10 +602,13 @@ async function doLogin() {
   currentDriver = { username: login, fullName: account.fullname || account.username, plateTracteur, plateRemorque };
   localStorage.setItem('lca_current_driver', JSON.stringify(currentDriver));
 
-  // Pre-fill driver fields
+  // Pre-fill driver fields (ph0) and lock them
   document.getElementById('d-name').value = currentDriver.fullName;
   document.getElementById('d-plate-tracteur').value = plateTracteur;
   document.getElementById('d-plate-remorque').value = plateRemorque;
+  lockVehicleSelects(true);
+  const btnStart = document.getElementById('btn-start-day');
+  if (btnStart) btnStart.textContent = '▶ Démarrer ma journée';
 
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('main-app').style.display = '';
@@ -578,8 +624,11 @@ async function doLogin() {
     if (saved && saved.username) {
       currentDriver = saved;
       document.getElementById('d-name').value = currentDriver.fullName;
+      // Les options seront pré-sélectionnées par loadVehicleDropdowns() dès qu'elles sont chargées
+      // On pose quand même la valeur directement si les options existent déjà
       document.getElementById('d-plate-tracteur').value = currentDriver.plateTracteur || currentDriver.plate || '';
       document.getElementById('d-plate-remorque').value = currentDriver.plateRemorque || '';
+      lockVehicleSelects(true);
       document.getElementById('login-screen').classList.add('hidden');
       document.getElementById('main-app').style.display = '';
     }
@@ -741,9 +790,21 @@ function startDay() {
   const plateTracteur = document.getElementById('d-plate-tracteur').value.trim().toUpperCase();
   const plateRemorque = document.getElementById('d-plate-remorque').value.trim().toUpperCase();
   if(!name){toast('Veuillez indiquer votre nom.',true);return;}
+  if(!plateTracteur||!plateRemorque){toast('Veuillez sélectionner tracteur et remorque.',true);return;}
+
+  // Mettre à jour currentDriver si les plaques ont changé (nouvelle mission)
+  if (currentDriver && (currentDriver.plateTracteur !== plateTracteur || currentDriver.plateRemorque !== plateRemorque)) {
+    currentDriver.plateTracteur = plateTracteur;
+    currentDriver.plateRemorque = plateRemorque;
+    localStorage.setItem('lca_current_driver', JSON.stringify(currentDriver));
+  }
+
   dayStart=Date.now();
   active={id:Date.now(),driver:name,plateTracteur,plateRemorque,plate:plateTracteur,date:todayStr(),dayStartTs:dayStart,stops:[],completed:false,_cmr:null};
   curStop=null;
+  lockVehicleSelects(true);
+  const btnStart = document.getElementById('btn-start-day');
+  if (btnStart) btnStart.textContent = '▶ Démarrer ma journée';
   show('ph0',false); show('ph-mission',true);
   $('dayhdr').style.display='';
   startTicker();
@@ -902,16 +963,31 @@ function endDay() {
   missions.push(JSON.parse(JSON.stringify(active)));
   save();
   saveMissionToSupabase(active).catch(e => console.warn('Save failed:', e));
+
+  // Conserver une référence avant de nullifier
+  const finishedMission = active;
+  const finishedUsername = currentDriver?.username || active.driver;
+
   active=null; curStop=null; step=0; dayStart=null;
   clearInterval(ticker);
+  clearInterval(window._activeDriverInterval);
+  window._activeDriverInterval = null;
+
   show('ph-mission',false); show('ph0',true);
   $('dayhdr').style.display='none'; $('dayhdr').textContent='00:00:00';
   $('stops-tl').innerHTML=''; $('live-banner').innerHTML='';
   for(let i=1;i<=7;i++) show('f'+i,false);
+
+  // Verrouiller les selects et remettre le texte du bouton
+  lockVehicleSelects(true);
+  const btnStart = document.getElementById('btn-start-day');
+  if (btnStart) btnStart.textContent = '▶ Démarrer ma journée';
+
   toast('Journée clôturée et enregistrée ✓');
 
-  // Archive to Supabase
-  archiveMissionData(active);
+  // Archive + retrait de la liste des chauffeurs actifs
+  archiveMissionData(finishedMission);
+  removeActiveDriver(finishedUsername);
 }
 
 // Archive completed mission data
@@ -940,13 +1016,21 @@ function endMissionNewOne() {
   save();
   saveMissionToSupabase(active).catch(e => console.warn('Save failed:', e));
   archiveMissionData(active);
-  const prevDriver = active.driver, prevPlate = active.plateTracteur||active.plate, prevPlateRemorque = active.plateRemorque||'', prevDate = active.date;
-  active = {id:Date.now(),driver:prevDriver,plateTracteur:prevPlate,plateRemorque:prevPlateRemorque,plate:prevPlate,date:prevDate,dayStartTs:dayStart,stops:[],completed:false,_cmr:null};
+
+  // Arrêter la mission en cours mais garder la journée active
+  active = null;
   curStop = null;
   for(let i=1;i<=7;i++) show('f'+i,false);
   $('stops-tl').innerHTML = '';
-  setStep(1);
-  toast('Mission terminée ✓ — nouvelle mission démarrée');
+  $('live-banner').innerHTML = '';
+
+  // Retour à ph0 avec les selects déverrouillés pour changer de véhicule
+  show('ph-mission', false); show('ph0', true);
+  lockVehicleSelects(false);
+  const btnStart = document.getElementById('btn-start-day');
+  if (btnStart) btnStart.textContent = '▶ Démarrer nouvelle mission';
+
+  toast('Mission terminée ✓ — choisissez vos véhicules et démarrez la prochaine');
 }
 
 // ============================================================
