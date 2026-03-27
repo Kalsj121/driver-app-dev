@@ -151,6 +151,17 @@ textarea.fi{resize:vertical;min-height:72px;}
 .del-btn{background:none;border:none;cursor:pointer;color:var(--red);font-size:13px;padding:3px 6px;border-radius:4px;}
 .del-btn:hover{background:var(--rlt);}
 
+/* VEHICLES PANEL */
+.veh-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px;}
+.veh-table th{font-size:10px;font-weight:700;color:var(--t2);padding:7px 10px;border-bottom:1px solid var(--b1);text-align:left;text-transform:uppercase;letter-spacing:.05em;}
+.veh-table td{padding:8px 10px;border-bottom:1px solid var(--b1);vertical-align:middle;}
+.veh-table tr:last-child td{border-bottom:none;}
+.veh-pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;}
+.veh-pill.tracteur{background:var(--blt);color:var(--bdk);}
+.veh-pill.remorque{background:var(--alt);color:#633806;}
+.veh-2col{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:700px){.veh-2col{grid-template-columns:1fr;}}
+
 .empty{text-align:center;padding:40px 20px;color:var(--t2);}
 .empty p{font-size:14px;}
 
@@ -204,6 +215,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <div class="tabs">
   <button class="tab on" onclick="switchView('dashboard')" id="tab-dashboard">📍 Temps réel</button>
   <button class="tab" onclick="switchView('messages')" id="tab-messages">💬 Messages <span class="msg-badge" id="msg-badge">0</span></button>
+  <button class="tab" onclick="switchView('vehicles')" id="tab-vehicles">🚛 Véhicules</button>
   <button class="tab" onclick="switchView('reports')" id="tab-reports">📊 Rapports</button>
   <button class="tab" onclick="switchView('accounts')" id="tab-accounts">👤 Comptes</button>
 </div>
@@ -301,6 +313,38 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div>
 </div>
 
+<!-- ============================================================ VEHICLES -->
+<div class="view" id="view-vehicles">
+<div class="page-narrow">
+  <div class="veh-2col">
+    <!-- TRACTEURS -->
+    <div>
+      <div class="card">
+        <div class="ctit">Ajouter un tracteur</div>
+        <div class="fg"><label class="fl">Numéro de plaque</label><input class="fi" type="text" id="veh-plate-tracteur" placeholder="Ex: 1-ABC-234" style="text-transform:uppercase;"/></div>
+        <button class="btn bp" style="margin-top:4px;" onclick="addVehicle('tracteur')">+ Ajouter tracteur</button>
+      </div>
+      <div class="card">
+        <div class="ctit">Tracteurs enregistrés</div>
+        <div id="tracteurs-list"><div class="empty"><p>Chargement…</p></div></div>
+      </div>
+    </div>
+    <!-- REMORQUES -->
+    <div>
+      <div class="card">
+        <div class="ctit">Ajouter une remorque</div>
+        <div class="fg"><label class="fl">Numéro de plaque</label><input class="fi" type="text" id="veh-plate-remorque" placeholder="Ex: R-001" style="text-transform:uppercase;"/></div>
+        <button class="btn bp" style="margin-top:4px;" onclick="addVehicle('remorque')">+ Ajouter remorque</button>
+      </div>
+      <div class="card">
+        <div class="ctit">Remorques enregistrées</div>
+        <div id="remorques-list"><div class="empty"><p>Chargement…</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
 <!-- ============================================================ ACCOUNTS -->
 <div class="view" id="view-accounts">
 <div class="page-narrow">
@@ -390,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // VIEWS
 // ============================================================
 function switchView(v) {
-  ['dashboard','messages','reports','accounts'].forEach(id => {
+  ['dashboard','messages','vehicles','reports','accounts'].forEach(id => {
     const tab = document.getElementById('tab-'+id);
     const view = document.getElementById('view-'+id);
     if(tab) tab.classList.toggle('on', id===v);
@@ -399,6 +443,7 @@ function switchView(v) {
   if (v === 'messages') renderMessages();
   if (v === 'reports') loadArchiveList();
   if (v === 'accounts') loadAccounts();
+  if (v === 'vehicles') loadVehicles();
 }
 
 // ============================================================
@@ -506,7 +551,7 @@ async function renderActiveDriversTable() {
   }
 
   const now = Date.now();
-  container.innerHTML = '<table class="reg-table"><thead><tr><th>Chauffeur</th><th>Plaque</th><th>Dernière activité</th><th>Statut mission</th></tr></thead><tbody>'
+  container.innerHTML = '<table class="reg-table"><thead><tr><th>Chauffeur</th><th>Tracteur</th><th>Remorque</th><th>Dernière activité</th><th>Statut mission</th></tr></thead><tbody>'
     + all.map(d => {
       const driver = drivers.find(dr => dr.driver_name === d.fullname);
       const stepLabel = driver ? (STEP_LABELS[driver.step] || 'Actif') : 'Journée démarrée';
@@ -517,6 +562,7 @@ async function renderActiveDriversTable() {
       return `<tr>
         <td><span class="${isOnline?'online-dot':''}"></span><strong>${d.fullname||d.username||'—'}</strong></td>
         <td>${d.plate||'—'}</td>
+        <td>${d.plate_remorque||'—'}</td>
         <td>${lastSeen}${minsAgo!==null?' (il y a '+minsAgo+' min)':''}</td>
         <td>${driver?`<strong>${stepLabel}</strong>${loc?' — '+loc:''}`:stepLabel}</td>
       </tr>`;
@@ -590,7 +636,7 @@ function buildCard(d, threshold) {
   const updSecs = d.updated_at ? Math.floor((Date.now()-new Date(d.updated_at).getTime())/1000) : null;
   return `<div class="${cardCls}">
     <div class="dc-top">
-      <div><div class="dc-name">${d.driver_name}</div><div class="dc-plate">${d.plate||''}</div></div>
+      <div><div class="dc-name">${d.driver_name}</div><div class="dc-plate">${d.plate?'🚛 '+d.plate:''}${d.plate_remorque?' · 🔗 '+d.plate_remorque:''}</div></div>
       <span class="phase-pill ${pillCls}">${eMap[step]||'—'} ${STEP_LABELS[step]||'Inactif'}</span>
     </div>
     ${locLine}${timerHtml}
@@ -908,6 +954,71 @@ async function deleteAccount(username) {
   } catch(e) {}
   showToast('Compte supprimé.');
   loadAccounts();
+}
+
+// ============================================================
+// VEHICLES MANAGEMENT
+// ============================================================
+async function loadVehicles() {
+  await loadVehicleList('tracteur');
+  await loadVehicleList('remorque');
+}
+
+async function loadVehicleList(type) {
+  const containerId = type === 'tracteur' ? 'tracteurs-list' : 'remorques-list';
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '<div class="empty"><p>Chargement…</p></div>';
+
+  if (!window.loadVehiclesFromSupabase) {
+    container.innerHTML = '<div class="empty"><p>Connexion Supabase non disponible.</p></div>';
+    return;
+  }
+
+  const vehicles = await window.loadVehiclesFromSupabase(type);
+
+  if (!vehicles.length) {
+    container.innerHTML = `<div class="empty"><p>Aucun ${type} enregistré.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = '<table class="veh-table"><thead><tr><th>Plaque</th><th>Type</th><th>Action</th></tr></thead><tbody>'
+    + vehicles.map(v => `<tr>
+      <td><strong>${v.plate}</strong></td>
+      <td><span class="veh-pill ${v.type}">${v.type === 'tracteur' ? '🚛 Tracteur' : '🔗 Remorque'}</span></td>
+      <td><button class="del-btn" onclick="removeVehicle('${v.plate}','${v.type}')">✕ Retirer</button></td>
+    </tr>`).join('') + '</tbody></table>';
+}
+
+async function addVehicle(type) {
+  const inputId = type === 'tracteur' ? 'veh-plate-tracteur' : 'veh-plate-remorque';
+  const input = document.getElementById(inputId);
+  const plate = input.value.trim().toUpperCase();
+
+  if (!plate) { showToast('Veuillez saisir un numéro de plaque.'); return; }
+  if (!window.saveVehicleToSupabase) { showToast('Connexion Supabase non disponible.'); return; }
+
+  const ok = await window.saveVehicleToSupabase({ plate, type, active: true });
+  if (ok) {
+    input.value = '';
+    showToast(`${type === 'tracteur' ? 'Tracteur' : 'Remorque'} ${plate} ajouté(e) ✓`);
+    await loadVehicleList(type);
+  } else {
+    showToast('Erreur lors de l\'ajout. Vérifiez que la plaque n\'existe pas déjà.');
+  }
+}
+
+async function removeVehicle(plate, type) {
+  if (!confirm(`Supprimer ${plate} de la liste des ${type}s ?`)) return;
+  if (!window.deleteVehicleFromSupabase) { showToast('Connexion Supabase non disponible.'); return; }
+
+  const ok = await window.deleteVehicleFromSupabase(plate);
+  if (ok) {
+    showToast(`${plate} supprimé(e) ✓`);
+    await loadVehicleList(type);
+  } else {
+    showToast('Erreur lors de la suppression.');
+  }
 }
 
 // ============================================================

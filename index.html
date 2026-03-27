@@ -200,8 +200,16 @@ input[type=file]{display:none;}
       <input type="password" id="l-password" placeholder="••••••••" autocomplete="current-password"/>
     </div>
     <div class="login-fg">
-      <label>Plaque véhicule</label>
-      <input type="text" id="l-plate" placeholder="Ex: 1-ABC-234" style="text-transform:uppercase;"/>
+      <label>Plaque tracteur</label>
+      <select id="l-plate-tracteur" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid var(--b2);border-radius:var(--rmd);background:var(--bg);color:var(--t1);outline:none;font-family:inherit;">
+        <option value="">— Sélectionner tracteur —</option>
+      </select>
+    </div>
+    <div class="login-fg">
+      <label>Plaque remorque</label>
+      <select id="l-plate-remorque" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid var(--b2);border-radius:var(--rmd);background:var(--bg);color:var(--t1);outline:none;font-family:inherit;">
+        <option value="">— Sélectionner remorque —</option>
+      </select>
     </div>
     <button class="login-btn" onclick="doLogin()">Se connecter</button>
     <div class="login-err" id="login-err">Identifiants incorrects. Veuillez réessayer.</div>
@@ -234,7 +242,8 @@ input[type=file]{display:none;}
     <div class="card" style="margin-top:8px;">
       <div class="ctit">Informations chauffeur</div>
       <div class="fg"><label class="fl">Nom / Matricule</label><input class="fi" type="text" id="d-name" placeholder="Ex: Marc D. · CH-04" readonly/></div>
-      <div class="fg" style="margin-bottom:0;"><label class="fl">Plaque véhicule</label><input class="fi" type="text" id="d-plate" placeholder="Ex: 1-ABC-234" style="text-transform:uppercase;" readonly/></div>
+      <div class="fg"><label class="fl">Tracteur</label><input class="fi" type="text" id="d-plate-tracteur" placeholder="—" readonly style="background:var(--subcard);"/></div>
+      <div class="fg" style="margin-bottom:0;"><label class="fl">Remorque</label><input class="fi" type="text" id="d-plate-remorque" placeholder="—" readonly style="background:var(--subcard);"/></div>
     </div>
     <button class="btn bp" onclick="startDay()">▶ Démarrer ma journée</button>
   </div>
@@ -427,7 +436,45 @@ input[type=file]{display:none;}
 // AUTH — Driver accounts stored in Supabase (table: driver_accounts)
 // Fallback: localStorage for offline use
 // ============================================================
-let currentDriver = null; // {username, fullName, plate, login}
+let currentDriver = null; // {username, fullName, plateTracteur, plateRemorque}
+
+// ============================================================
+// VEHICLES — Load dropdowns from Supabase
+// ============================================================
+async function loadVehicleDropdowns() {
+  try {
+    let waitMs = 0;
+    while (waitMs < 6000) {
+      if (window.supabaseClient) break;
+      await new Promise(r => setTimeout(r, 200));
+      waitMs += 200;
+    }
+    if (!window.supabaseClient) return;
+
+    const [tracteurs, remorques] = await Promise.all([
+      window.loadVehiclesFromSupabase('tracteur'),
+      window.loadVehiclesFromSupabase('remorque')
+    ]);
+
+    const selT = document.getElementById('l-plate-tracteur');
+    const selR = document.getElementById('l-plate-remorque');
+
+    if (tracteurs.length) {
+      selT.innerHTML = '<option value="">— Sélectionner tracteur —</option>'
+        + tracteurs.map(v => `<option value="${v.plate}">${v.plate}</option>`).join('');
+    }
+    if (remorques.length) {
+      selR.innerHTML = '<option value="">— Sélectionner remorque —</option>'
+        + remorques.map(v => `<option value="${v.plate}">${v.plate}</option>`).join('');
+    }
+    console.log('[Vehicles] Dropdowns loaded:', tracteurs.length, 'tracteurs,', remorques.length, 'remorques');
+  } catch(e) {
+    console.warn('[Vehicles] Failed to load dropdowns:', e.message);
+  }
+}
+
+// Load dropdowns as soon as page is ready
+document.addEventListener('DOMContentLoaded', () => loadVehicleDropdowns());
 
 // Built-in fallback accounts (if Supabase not ready)
 // Format: {username, password, fullName}
@@ -455,13 +502,14 @@ async function getDriverAccounts() {
 async function doLogin() {
   const login = document.getElementById('l-login').value.trim();
   const password = document.getElementById('l-password').value;
-  const plate = document.getElementById('l-plate').value.trim().toUpperCase();
+  const plateTracteur = document.getElementById('l-plate-tracteur').value.trim().toUpperCase();
+  const plateRemorque = document.getElementById('l-plate-remorque').value.trim().toUpperCase();
   const errEl = document.getElementById('login-err');
   const btn = document.querySelector('.login-btn');
   errEl.style.display = 'none';
 
-  if (!login || !password || !plate) {
-    errEl.textContent = 'Veuillez remplir tous les champs.';
+  if (!login || !password || !plateTracteur || !plateRemorque) {
+    errEl.textContent = 'Veuillez remplir tous les champs, y compris les plaques.';
     errEl.style.display = '';
     return;
   }
@@ -494,12 +542,13 @@ async function doLogin() {
   }
 
   // Login success
-  currentDriver = { username: login, fullName: account.fullname || account.username, plate };
-  localStorage.setItem('lca_current_driver', JSON.stringify({...currentDriver, plate}));
+  currentDriver = { username: login, fullName: account.fullname || account.username, plateTracteur, plateRemorque };
+  localStorage.setItem('lca_current_driver', JSON.stringify(currentDriver));
 
   // Pre-fill driver fields
   document.getElementById('d-name').value = currentDriver.fullName;
-  document.getElementById('d-plate').value = plate;
+  document.getElementById('d-plate-tracteur').value = plateTracteur;
+  document.getElementById('d-plate-remorque').value = plateRemorque;
 
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('main-app').style.display = '';
@@ -515,7 +564,8 @@ async function doLogin() {
     if (saved && saved.username) {
       currentDriver = saved;
       document.getElementById('d-name').value = currentDriver.fullName;
-      document.getElementById('d-plate').value = currentDriver.plate || '';
+      document.getElementById('d-plate-tracteur').value = currentDriver.plateTracteur || currentDriver.plate || '';
+      document.getElementById('d-plate-remorque').value = currentDriver.plateRemorque || '';
       document.getElementById('login-screen').classList.add('hidden');
       document.getElementById('main-app').style.display = '';
     }
@@ -674,17 +724,18 @@ function syncActive() {
 // ============================================================
 function startDay() {
   const name = document.getElementById('d-name').value.trim();
-  const plate = document.getElementById('d-plate').value.trim().toUpperCase();
+  const plateTracteur = document.getElementById('d-plate-tracteur').value.trim().toUpperCase();
+  const plateRemorque = document.getElementById('d-plate-remorque').value.trim().toUpperCase();
   if(!name){toast('Veuillez indiquer votre nom.',true);return;}
   dayStart=Date.now();
-  active={id:Date.now(),driver:name,plate,date:todayStr(),dayStartTs:dayStart,stops:[],completed:false,_cmr:null};
+  active={id:Date.now(),driver:name,plateTracteur,plateRemorque,plate:plateTracteur,date:todayStr(),dayStartTs:dayStart,stops:[],completed:false,_cmr:null};
   curStop=null;
   show('ph0',false); show('ph-mission',true);
   $('dayhdr').style.display='';
   startTicker();
   setStep(1);
   // Enregistrement immédiat dans active_drivers (visible sur le Dashboard instantanément)
-  registerActiveDriver(name, plate).then(() => {
+  registerActiveDriver(name, plateTracteur, plateRemorque).then(() => {
     console.log('[Driver] Registered in active_drivers');
   });
   syncActive();
@@ -692,18 +743,19 @@ function startDay() {
   // Mise à jour lastseen toutes les 2 minutes pendant la journée
   if (!window._activeDriverInterval) {
     window._activeDriverInterval = setInterval(() => {
-      if (active && name) registerActiveDriver(name, plate);
+      if (active && name) registerActiveDriver(name, plateTracteur, plateRemorque);
     }, 120000);
   }
 }
 
-async function registerActiveDriver(name, plate) {
+async function registerActiveDriver(name, plateTracteur, plateRemorque) {
   if (!window.supabaseClient) return;
   try {
     await window.supabaseClient.from('active_drivers').upsert([{
       username: currentDriver?.username || name,
       fullname: name,
-      plate: plate,
+      plate: plateTracteur,
+      plate_remorque: plateRemorque || '',
       lastseen: new Date().toISOString()
     }], { onConflict: 'username' });
   } catch(e) { console.warn('[Driver register]', e.message); }
@@ -855,7 +907,8 @@ async function archiveMissionData(mission) {
     await window.supabaseClient.from('missions_archive').upsert([{
       id: mission.id,
       driver: mission.driver,
-      plate: mission.plate || '',
+      plate: mission.plateTracteur || mission.plate || '',
+      plate_remorque: mission.plateRemorque || '',
       date: mission.date,
       daystartts: new Date(mission.dayStartTs).toISOString(),
       dayendts: mission.dayEndTs ? new Date(mission.dayEndTs).toISOString() : null,
@@ -873,8 +926,8 @@ function endMissionNewOne() {
   save();
   saveMissionToSupabase(active).catch(e => console.warn('Save failed:', e));
   archiveMissionData(active);
-  const prevDriver = active.driver, prevPlate = active.plate, prevDate = active.date;
-  active = {id:Date.now(),driver:prevDriver,plate:prevPlate,date:prevDate,dayStartTs:dayStart,stops:[],completed:false,_cmr:null};
+  const prevDriver = active.driver, prevPlate = active.plateTracteur||active.plate, prevPlateRemorque = active.plateRemorque||'', prevDate = active.date;
+  active = {id:Date.now(),driver:prevDriver,plateTracteur:prevPlate,plateRemorque:prevPlateRemorque,plate:prevPlate,date:prevDate,dayStartTs:dayStart,stops:[],completed:false,_cmr:null};
   curStop = null;
   for(let i=1;i<=7;i++) show('f'+i,false);
   $('stops-tl').innerHTML = '';

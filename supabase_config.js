@@ -118,7 +118,8 @@ async function saveMissionToSupabase(mission) {
       .upsert([{
         id:         mission.id,
         driver:     mission.driver,
-        plate:      mission.plate || '',
+        plate:      mission.plateTracteur || mission.plate || '',
+        plate_remorque: mission.plateRemorque || '',
         date:       mission.date,
         daystartts: toISO(mission.dayStartTs),   // ← Unix ms → ISO
         dayendts:   toISO(mission.dayEndTs),      // ← Unix ms → ISO (ou null)
@@ -239,6 +240,59 @@ async function updateMessageReadStatus(messageId, read) {
 }
 
 // ============================================================
+// VEHICLES — Supabase Functions
+// ============================================================
+
+async function loadVehiclesFromSupabase(type) {
+  if (!supabaseClient) {
+    console.warn('[Supabase] Client not initialized for loading vehicles');
+    return [];
+  }
+  try {
+    let query = supabaseClient.from('vehicles').select('*').eq('active', true).order('plate', { ascending: true });
+    if (type) query = query.eq('type', type);
+    const { data, error } = await query;
+    if (error) {
+      console.warn('[Supabase] Error loading vehicles:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (e) {
+    console.warn('[Supabase] Vehicle load failed:', e.message);
+    return [];
+  }
+}
+
+async function saveVehicleToSupabase(vehicle) {
+  if (!supabaseClient) return false;
+  try {
+    const { error } = await supabaseClient.from('vehicles').upsert([{
+      plate:      vehicle.plate.toUpperCase(),
+      type:       vehicle.type,  // 'tracteur' or 'remorque'
+      active:     vehicle.active !== false,
+      created_at: vehicle.created_at || new Date().toISOString()
+    }], { onConflict: 'plate' });
+    if (error) { console.error('[Supabase] Error saving vehicle:', error.message); return false; }
+    return true;
+  } catch (e) {
+    console.error('[Supabase] Vehicle save exception:', e.message);
+    return false;
+  }
+}
+
+async function deleteVehicleFromSupabase(plate) {
+  if (!supabaseClient) return false;
+  try {
+    const { error } = await supabaseClient.from('vehicles').delete().eq('plate', plate);
+    if (error) { console.error('[Supabase] Error deleting vehicle:', error.message); return false; }
+    return true;
+  } catch (e) {
+    console.error('[Supabase] Vehicle delete exception:', e.message);
+    return false;
+  }
+}
+
+// ============================================================
 // Initialization
 // ============================================================
 
@@ -262,13 +316,16 @@ async function initSupabase() {
 }
 
 // Expose globally
-window.saveMissionToSupabase    = saveMissionToSupabase;
-window.saveMessageToSupabase    = saveMessageToSupabase;
-window.updateMessageReadStatus  = updateMessageReadStatus;
-window.loadMissionsFromSupabase = loadMissionsFromSupabase;
-window.loadMessagesFromSupabase = loadMessagesFromSupabase;
-window.initSupabase             = initSupabase;
-window.supabaseClient           = supabaseClient; // pour les subscriptions realtime
+window.saveMissionToSupabase      = saveMissionToSupabase;
+window.saveMessageToSupabase      = saveMessageToSupabase;
+window.updateMessageReadStatus    = updateMessageReadStatus;
+window.loadMissionsFromSupabase   = loadMissionsFromSupabase;
+window.loadMessagesFromSupabase   = loadMessagesFromSupabase;
+window.loadVehiclesFromSupabase   = loadVehiclesFromSupabase;
+window.saveVehicleToSupabase      = saveVehicleToSupabase;
+window.deleteVehicleFromSupabase  = deleteVehicleFromSupabase;
+window.initSupabase               = initSupabase;
+window.supabaseClient             = supabaseClient; // pour les subscriptions realtime
 
 console.log('[Supabase] Functions registered globally');
 
