@@ -171,11 +171,6 @@ textarea.fi{resize:vertical;min-height:72px;}
 /* TOAST */
 #_toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(70px);background:#333;color:#fff;padding:11px 20px;border-radius:99px;font-size:14px;font-weight:500;opacity:0;transition:all .25s;pointer-events:none;z-index:9999;white-space:nowrap;}
 
-/* EYE TOGGLE */
-.pw-wrap{position:relative;}
-.pw-wrap input{padding-right:42px;}
-.pw-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--t2);font-size:16px;padding:2px;line-height:1;}
-
 @media(max-width:700px){.stats{grid-template-columns:repeat(3,minmax(0,1fr));}.page{padding:14px;}}
 @media(max-width:400px){.stats{grid-template-columns:repeat(2,minmax(0,1fr));}}
 </style>
@@ -196,10 +191,7 @@ textarea.fi{resize:vertical;min-height:72px;}
     </div>
     <div class="login-fg">
       <label>Mot de passe</label>
-      <div class="pw-wrap">
-        <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/>
-        <button type="button" class="pw-eye" onclick="togglePw('l-pass',this)" tabindex="-1">👁</button>
-      </div>
+      <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/>
     </div>
     <button class="login-btn" onclick="doLogin()">Connexion</button>
     <div class="login-err" id="login-err">Identifiants incorrects.</div>
@@ -384,17 +376,6 @@ textarea.fi{resize:vertical;min-height:72px;}
 'use strict';
 
 // ============================================================
-// UTILS — Password visibility toggle
-// ============================================================
-function togglePw(inputId, btn) {
-  const input = document.getElementById(inputId);
-  if (!input) return;
-  const show = input.type === 'password';
-  input.type = show ? 'text' : 'password';
-  btn.textContent = show ? '🙈' : '👁';
-}
-
-// ============================================================
 // AUTH — Manager login
 // ============================================================
 const MANAGER_CREDENTIALS = { username: 'AdminLCA', password: 'LCAlgg_2704!' };
@@ -496,7 +477,7 @@ function missionToDriverStatus(mission) {
   const now = Date.now();
   const minJourney = mission.dayStartTs ? Math.floor((now - mission.dayStartTs) / 60000) : null;
   return {
-    user_id: mission.id, driver_name: mission.driver, plate: mission.plate || '', plate_remorque: mission.plate_remorque || '',
+    user_id: mission.id, driver_name: mission.driver, plate: mission.plate || '',
     step, location: curStop ? curStop.location : '', operation: curStop ? (curStop.operation||'') : '',
     dock: curStop ? (curStop.dock||'') : '',
     ts_arrival:       curStop?.tArrival        ? new Date(curStop.tArrival).toISOString()        : null,
@@ -555,7 +536,6 @@ async function renderActiveDriversTable() {
   const missionDrivers = drivers.map(d => ({
     fullname: d.driver_name,
     plate: d.plate,
-    plate_remorque: d.plate_remorque || '',
     lastseen: d.updated_at
   }));
 

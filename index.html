@@ -35,14 +35,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .login-btn:active{opacity:.9;}
 .login-err{font-size:13px;color:var(--red);text-align:center;margin-top:10px;display:none;}
 
-/* EYE TOGGLE */
-.pw-wrap{position:relative;}
-.pw-wrap input{padding-right:42px;}
-.pw-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--t2);font-size:16px;padding:2px;line-height:1;}
-
-/* CHAMPS INFO CHAUFFEUR GRISÉS */
-.fi-locked{background:var(--subcard)!important;color:var(--t2)!important;cursor:not-allowed!important;border-color:var(--b1)!important;}
-
 /* HEADER */
 .hdr{background:var(--header);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
 .logo{display:flex;align-items:center;gap:10px;}
@@ -205,10 +197,7 @@ input[type=file]{display:none;}
     </div>
     <div class="login-fg">
       <label>Mot de passe</label>
-      <div class="pw-wrap">
-        <input type="password" id="l-password" placeholder="••••••••" autocomplete="current-password"/>
-        <button type="button" class="pw-eye" onclick="togglePw('l-password',this)" tabindex="-1">👁</button>
-      </div>
+      <input type="password" id="l-password" placeholder="••••••••" autocomplete="current-password"/>
     </div>
     <div class="login-fg">
       <label>Plaque tracteur</label>
@@ -252,9 +241,9 @@ input[type=file]{display:none;}
   <div id="ph0">
     <div class="card" style="margin-top:8px;">
       <div class="ctit">Informations chauffeur</div>
-      <div class="fg"><label class="fl">Nom / Matricule</label><input class="fi fi-locked" type="text" id="d-name" placeholder="—" readonly tabindex="-1"/></div>
-      <div class="fg"><label class="fl">Tracteur</label><input class="fi fi-locked" type="text" id="d-plate-tracteur" placeholder="—" readonly tabindex="-1"/></div>
-      <div class="fg" style="margin-bottom:0;"><label class="fl">Remorque</label><input class="fi fi-locked" type="text" id="d-plate-remorque" placeholder="—" readonly tabindex="-1"/></div>
+      <div class="fg"><label class="fl">Nom / Matricule</label><input class="fi" type="text" id="d-name" placeholder="Ex: Marc D. · CH-04" readonly/></div>
+      <div class="fg"><label class="fl">Tracteur</label><input class="fi" type="text" id="d-plate-tracteur" placeholder="—" readonly style="background:var(--subcard);"/></div>
+      <div class="fg" style="margin-bottom:0;"><label class="fl">Remorque</label><input class="fi" type="text" id="d-plate-remorque" placeholder="—" readonly style="background:var(--subcard);"/></div>
     </div>
     <button class="btn bp" onclick="startDay()">▶ Démarrer ma journée</button>
   </div>
@@ -442,17 +431,6 @@ input[type=file]{display:none;}
 
 <script defer>
 'use strict';
-
-// ============================================================
-// UTILS — Password visibility toggle
-// ============================================================
-function togglePw(inputId, btn) {
-  const input = document.getElementById(inputId);
-  if (!input) return;
-  const show = input.type === 'password';
-  input.type = show ? 'text' : 'password';
-  btn.textContent = show ? '🙈' : '👁';
-}
 
 // ============================================================
 // AUTH — Driver accounts stored in Supabase (table: driver_accounts)
@@ -861,11 +839,17 @@ function doDoc() {
     }
   }
 
-  // ── 4. Validations ULD : AWB obligatoire ───────────────────
+  // ── 4. Validations ULD : N° ULD + AWB obligatoires ────────
   if (isULDOn) {
     const uldItems = document.querySelectorAll('#uld-items .ci');
     for (const item of uldItems) {
+      const uld = item.querySelector('[data-field="uld"]')?.value.trim() || '';
       const awb = item.querySelector('[data-field="awb"]')?.value.trim() || '';
+      if (!uld) {
+        toast('ULD : veuillez saisir le N° ULD pour chaque ULD.', true);
+        item.querySelector('[data-field="uld"]')?.focus();
+        return;
+      }
       if (!awb) {
         toast('ULD : veuillez saisir le N° AWB pour chaque ULD.', true);
         item.querySelector('[data-field="awb"]')?.focus();
@@ -873,7 +857,7 @@ function doDoc() {
       }
     }
     if (!uldItems.length) {
-      toast('ULD : veuillez ajouter au moins un ULD avec N° AWB.', true);
+      toast('ULD : veuillez ajouter au moins un ULD avec N° ULD et N° AWB.', true);
       return;
     }
   }
@@ -910,16 +894,33 @@ function endDay() {
   missions.push(JSON.parse(JSON.stringify(active)));
   save();
   saveMissionToSupabase(active).catch(e => console.warn('Save failed:', e));
+
+  // Garder une copie avant nullification pour archive + suppression active_drivers
+  const finishedMission = active;
+  const finishedUsername = currentDriver?.username || active.driver;
+
   active=null; curStop=null; step=0; dayStart=null;
   clearInterval(ticker);
+  clearInterval(window._activeDriverInterval);
+  window._activeDriverInterval = null;
+
   show('ph-mission',false); show('ph0',true);
   $('dayhdr').style.display='none'; $('dayhdr').textContent='00:00:00';
   $('stops-tl').innerHTML=''; $('live-banner').innerHTML='';
   for(let i=1;i<=7;i++) show('f'+i,false);
   toast('Journée clôturée et enregistrée ✓');
 
-  // Archive to Supabase
-  archiveMissionData(active);
+  // Archive + retrait de la liste des chauffeurs actifs
+  archiveMissionData(finishedMission);
+  removeActiveDriver(finishedUsername);
+}
+
+async function removeActiveDriver(username) {
+  if (!window.supabaseClient || !username) return;
+  try {
+    await window.supabaseClient.from('active_drivers').delete().eq('username', username);
+    console.log('[Driver] Removed from active_drivers');
+  } catch(e) { console.warn('[Driver remove]', e.message); }
 }
 
 // Archive completed mission data
