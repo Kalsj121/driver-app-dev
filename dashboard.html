@@ -540,19 +540,10 @@ async function renderActiveDriversTable() {
     } catch(e) {}
   }
 
-  // Also include drivers from today's missions
-  const missionDrivers = drivers.map(d => ({
-    fullname:       d.driver_name,
-    plate:          d.plate,
-    plate_remorque: d.plate_remorque || '',
-    lastseen:       d.updated_at
-  }));
-
-  // Merge, deduplicate by name
+  // active_drivers est la seule source de vérité pour "qui est connecté".
+  // On ne fusionne plus avec missionDrivers pour éviter que le chauffeur
+  // réapparaisse après suppression de active_drivers (bug "reste en cache").
   const all = [...activeDrivers];
-  missionDrivers.forEach(md => {
-    if (!all.find(a => a.fullname === md.fullname)) all.push(md);
-  });
 
   if (!all.length) {
     container.innerHTML = '<div class="empty"><p style="padding:8px 0;">Aucun chauffeur enregistré aujourd\'hui.</p></div>';
@@ -583,14 +574,46 @@ async function renderActiveDriversTable() {
 
 async function forceEndDay(username) {
   if (!username) return;
-  if (!confirm('Forcer la fin de journée pour ce chauffeur ?\n\nIl sera retiré de la liste des actifs.')) return;
-  if (window.supabaseClient) {
-    try {
-      await window.supabaseClient.from('active_drivers').delete().eq('username', username);
-      showToast('Fin de journée forcée pour ' + username + ' ✓');
-      renderActiveDriversTable();
-    } catch(e) { showToast('Erreur : ' + e.message); }
-  }
+  if (!confirm('Forcer la fin de journée pour ce chauffeur ?\n\nIl sera retiré de la liste des actifs et son opération sera clôturée.')) return;
+  if (!window.supabaseClient) return;
+  try {
+    // 1. Supprimer de active_drivers
+    await window.supabaseClient.from('active_drivers').delete().eq('username', username);
+
+    // 2. Trouver la mission active du chauffeur (completed=false, aujourd'hui)
+    const todayStr = new Date().toLocaleDateString('fr-BE');
+    const allMissions = await window.loadMissionsFromSupabase();
+    const driverMission = allMissions.find(m =>
+      !m.completed &&
+      (m.date === todayStr) &&
+      drivers.find(d => d.driver_name === m.driver)
+    ) || allMissions.find(m => !m.completed && m.date === todayStr && (m.driver || '').toLowerCase().includes((username || '').toLowerCase()));
+
+    if (driverMission) {
+      // 3. Marquer comme completed dans missions
+      await window.supabaseClient.from('missions')
+        .update({ completed: true, dayendts: new Date().toISOString() })
+        .eq('id', driverMission.id);
+
+      // 4. Archiver dans missions_archive
+      await window.supabaseClient.from('missions_archive').upsert([{
+        id:          driverMission.id,
+        driver:      driverMission.driver,
+        plate:       driverMission.plateTracteur || driverMission.plate || '',
+        plate_remorque: driverMission.plateRemorque || driverMission.plate_remorque || '',
+        date:        driverMission.date,
+        daystartts:  driverMission.dayStartTs ? new Date(driverMission.dayStartTs).toISOString() : null,
+        dayendts:    new Date().toISOString(),
+        completed:   true,
+        stops:       driverMission.stops || [],
+        archivedat:  new Date().toISOString()
+      }], { onConflict: 'id' });
+    }
+
+    showToast('Fin de journée forcée pour ' + username + ' ✓');
+    // 5. Rafraîchir tout
+    await fetchDrivers();
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 
 // IDs des cartes masquées (remis à zéro au prochain fetchDrivers automatique)
@@ -845,13 +868,14 @@ async function loadArchiveList() {
 }
 
 function renderArchiveTable(container, missions) {
-  container.innerHTML = '<table class="reg-table"><thead><tr><th>Date</th><th>Chauffeur</th><th>Plaque</th><th>Stops</th><th>Durée journée</th><th></th></tr></thead><tbody>'
+  container.innerHTML = '<table class="reg-table"><thead><tr><th>Date</th><th>Chauffeur</th><th>Plaque tracteur</th><th>Plaque remorque</th><th>Stops</th><th>Durée journée</th><th></th></tr></thead><tbody>'
     + missions.map(m => {
       const dur = (m.dayStartTs && m.dayEndTs)
         ? Math.round((new Date(m.dayEndTs||m.dayendts) - new Date(m.dayStartTs||m.daystartts)) / 60000) + ' min'
         : '—';
       const stops = (m.stops||[]).length;
-      return `<tr><td>${m.date||'—'}</td><td>${m.driver||'—'}</td><td>${m.plate||'—'}</td><td>${stops}</td><td>${dur}</td><td><button class="del-btn" onclick="deleteArchiveMission(${m.id})">✕</button></td></tr>`;
+      const plateRem = m.plate_remorque || '—';
+      return `<tr><td>${m.date||'—'}</td><td>${m.driver||'—'}</td><td>${m.plate||'—'}</td><td>${plateRem}</td><td>${stops}</td><td>${dur}</td><td><button class="del-btn" onclick="deleteArchiveMission(${m.id})">✕</button></td></tr>`;
     }).join('') + '</tbody></table>';
 }
 
@@ -881,7 +905,7 @@ async function exportArchiveCSV() {
   }
   if (!data.length) { showToast('Aucune donnée à exporter.'); return; }
 
-  const H = ['Date','Chauffeur','Plaque','Lieu','Opération','Quai',
+  const H = ['Date','Chauffeur','Plaque tracteur','Plaque remorque','Lieu','Opération','Quai',
     'H.arrivée','H.quai att.','H.à quai','H.déb.opé.','H.fin opé.','H.CMR','H.départ',
     'Transit(min)','Att.quai(min)','Mise quai(min)','Opération(min)','Doc(min)','TOTAL(min)','Commentaire'];
   const rows = [];
@@ -889,7 +913,7 @@ async function exportArchiveCSV() {
   data.forEach(m => {
     (m.stops||[]).forEach(s => {
       rows.push([
-        m.date||'', m.driver||'', m.plate||'',
+        m.date||'', m.driver||'', m.plate||'', m.plate_remorque||'',
         s.location||'', s.operation||'', s.dock||'',
         tsStr(s.tArrival), tsStr(s.tDockAssigned), tsStr(s.tDockReady),
         tsStr(s.tOpsStart), tsStr(s.tOpsEnd), tsStr(s.tDoc), tsStr(s.tDepart),
