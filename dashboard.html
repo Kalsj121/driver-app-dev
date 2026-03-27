@@ -32,6 +32,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .login-fg input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,169,190,0.15);}
 .login-btn{width:100%;padding:13px;font-size:15px;font-weight:700;background:var(--header);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;margin-top:4px;}
 .login-err{font-size:13px;color:var(--red);text-align:center;margin-top:10px;display:none;}
+.pw-wrap{position:relative;}
+.pw-wrap input{padding-right:42px;}
+.pw-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--t2);font-size:16px;padding:2px;line-height:1;}
 
 /* HEADER */
 .hdr{background:var(--header);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
@@ -191,7 +194,10 @@ textarea.fi{resize:vertical;min-height:72px;}
     </div>
     <div class="login-fg">
       <label>Mot de passe</label>
-      <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/>
+      <div class="pw-wrap">
+        <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/>
+        <button type="button" class="pw-eye" onclick="togglePw('l-pass',this)" tabindex="-1">👁</button>
+      </div>
     </div>
     <button class="login-btn" onclick="doLogin()">Connexion</button>
     <div class="login-err" id="login-err">Identifiants incorrects.</div>
@@ -374,6 +380,14 @@ textarea.fi{resize:vertical;min-height:72px;}
 
 <script defer>
 'use strict';
+
+function togglePw(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.textContent = show ? '🙈' : '👁';
+}
 
 // ============================================================
 // AUTH — Manager login

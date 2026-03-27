@@ -166,8 +166,12 @@ async function loadMessagesFromSupabase() {
     }
 
     // Reconvertir ts (TIMESTAMPTZ) → Unix ms
+    // + normaliser les colonnes DB snake_case → camelCase JS
+    // (Supabase renvoie "fromname" et "tolabel", le code JS attend "fromName" et "toLabel")
     const messages = (data || []).map(m => ({
       ...m,
+      fromName: m.fromName || m.fromname || '',
+      toLabel:  m.toLabel  || m.tolabel  || '',
       ts: fromISO(m.ts),
     }));
 
