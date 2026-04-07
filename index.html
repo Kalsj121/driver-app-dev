@@ -619,7 +619,7 @@ async function initMissions() {
 // UTILS
 // ============================================================
 const $ = id => document.getElementById(id);
-const show = (id, v) => $(id).style.display = v ? '' : 'none';
+const show = (id, v) => { const el = $(id); if (el) el.style.display = v ? '' : 'none'; };
 const pad = n => String(n).padStart(2,'0');
 function hms(ms) { const s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60); return pad(h)+':'+pad(m%60)+':'+pad(s%60); }
 function dur(min) { if(min==null||isNaN(min))return'—'; if(min<60)return min+' min'; return Math.floor(min/60)+'h'+pad(min%60); }
