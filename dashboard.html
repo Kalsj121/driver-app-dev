@@ -457,7 +457,7 @@ function switchView(v) {
 // CONSTANTS
 // ============================================================
 const LCA_SITES = ['LCA Nord','LCA Selys'];
-const STEP_LABELS = ['','Attente quai','Quai attribué','À quai','Opération','Fin opération','CMR reçu','En transit'];
+const STEP_LABELS = ['En attente d\'instruction','Attente quai','Quai attribué','À quai','En opération','Opération terminée','CMR reçu','En transit'];
 
 // ============================================================
 // DRIVERS — fetch from Supabase missions
@@ -465,15 +465,37 @@ const STEP_LABELS = ['','Attente quai','Quai attribué','À quai','Opération','
 let drivers = [];
 let driverTicker = null;
 
+function getStepLabel(d) {
+  const step = parseInt(d.step)||0;
+  const op = d.operation || '';
+  if (step === 4 && op) return op + ' en cours';
+  if (step === 5 && op) return op + ' terminé(e)';
+  return STEP_LABELS[step] || 'Inactif';
+}
+
 function missionToDriverStatus(mission) {
   const stops = mission.stops || [];
   let curStop = null, step = 0;
   for (let i = stops.length - 1; i >= 0; i--) {
     if (!stops[i].tDepart) { curStop = stops[i]; break; }
   }
+
+  // if no stops and dispatch not received yet → step 0
+  if (!curStop && stops.length === 0 && !mission.tDispatchReceived) {
+    return {
+      user_id: mission.id, driver_name: mission.driver,
+      plate: mission.plateTracteur||mission.plate||'', plate_remorque: mission.plateRemorque||mission.plate_remorque||'',
+      step: 0, location: 'En attente d\'instruction', operation: '',
+      dock: '', ts_arrival: null, ts_dock_assigned: null, ts_dock_ready: null,
+      ts_ops_start: null, ts_ops_end: null,
+      min_wait: null, min_dock: null, min_ops: null, min_journey: null,
+      updated_at: mission.updatedat || new Date().toISOString()
+    };
+  }
+
   if (!curStop && stops.length > 0) { curStop = stops[stops.length-1]; step = 7; }
   else if (curStop) {
-    if      (!curStop.tArrival)      step = 0;
+    if      (!curStop.tArrival)      step = 1;
     else if (!curStop.tDockAssigned) step = 1;
     else if (!curStop.tDockReady)    step = 2;
     else if (!curStop.tOpsStart)     step = 3;
@@ -505,8 +527,8 @@ async function fetchDrivers() {
       const allMissions = await window.loadMissionsFromSupabase();
       const todayStr = new Date().toLocaleDateString('fr-BE');
       const activeMissions = allMissions.filter(m => !m.completed && m.date === todayStr);
-      // step > 0 pour la grille de pilotage, mais on garde tous pour le tableau "connectés"
-      drivers = activeMissions.map(missionToDriverStatus).filter(d => d.step > 0);
+      // step >= 0 pour la grille de pilotage, mais on garde tous pour le tableau "connectés"
+      drivers = activeMissions.map(missionToDriverStatus).filter(d => d.step >= 0);
     }
   } catch(e) { console.warn('[fetchDrivers]', e.message); }
   renderDashboard();
@@ -554,7 +576,7 @@ async function renderActiveDriversTable() {
   container.innerHTML = '<table class="reg-table"><thead><tr><th>Chauffeur</th><th>Tracteur</th><th>Remorque</th><th>Dernière activité</th><th>Statut mission</th><th></th></tr></thead><tbody>'
     + all.map(d => {
       const driver    = drivers.find(dr => dr.driver_name === d.fullname);
-      const stepLabel = driver ? (STEP_LABELS[driver.step] || 'Actif') : 'Journée démarrée';
+      const stepLabel = driver ? getStepLabel(driver) : 'Journée démarrée';
       const loc       = driver ? (driver.location || '') : '';
       const lastSeen  = d.lastseen ? new Date(d.lastseen).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'}) : '—';
       const minsAgo   = d.lastseen ? Math.floor((now - new Date(d.lastseen).getTime())/60000) : null;
@@ -662,8 +684,8 @@ function buildCard(d, threshold) {
   const now = Date.now();
   const e = ts => ts ? Math.floor((now-new Date(ts).getTime())/60000) : null;
   const dur = min => min==null?'—':min<60?min+' min':Math.floor(min/60)+'h'+String(min%60).padStart(2,'0');
-  const pillMap={1:'pp-wait',2:'pp-wait',3:'pp-wait',4:'pp-ops',5:'pp-ops',6:'pp-doc',7:'pp-transit'};
-  const eMap={1:'⏳',2:'🔄',3:'🔄',4:'⚙️',5:'⚙️',6:'📄',7:'🚛'};
+  const pillMap={0:'pp-idle',1:'pp-wait',2:'pp-wait',3:'pp-wait',4:'pp-ops',5:'pp-ops',6:'pp-doc',7:'pp-transit'};
+  const eMap={0:'📋',1:'⏳',2:'🔄',3:'🔄',4:'⚙️',5:'⚙️',6:'📄',7:'🚛'};
   const pillCls = pillMap[step]||'pp-idle';
   const w = e(d.ts_arrival);
   const cardCls = step===1&&w>=threshold?'dcard c-alert':step===7?'dcard c-transit':(step===4||step===5)?'dcard c-ops':step===6?'dcard c-doc':'dcard';
@@ -684,7 +706,7 @@ function buildCard(d, threshold) {
   return `<div class="${cardCls}">
     <div class="dc-top">
       <div><div class="dc-name">${d.driver_name}</div><div class="dc-plate">${d.plate?'🚛 '+d.plate:''}${d.plate_remorque?' · 🔗 '+d.plate_remorque:''}</div></div>
-      <span class="phase-pill ${pillCls}">${eMap[step]||'—'} ${STEP_LABELS[step]||'Inactif'}</span>
+      <span class="phase-pill ${pillCls}">${eMap[step]||'—'} ${getStepLabel(d)}</span>
     </div>
     ${locLine}${timerHtml}
     ${updSecs!=null?'<div class="dc-upd">MAJ il y a '+updSecs+'s</div>':''}
@@ -941,10 +963,11 @@ async function loadAccounts() {
   if (!container) return;
   let accounts = await getDriverAccounts();
   if (!accounts.length) { container.innerHTML='<div class="empty"><p>Aucun compte chauffeur créé.</p></div>'; return; }
-  container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Nom</th><th>Action</th></tr></thead><tbody>'
+  container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Nom</th><th>PDF feuille</th><th>Action</th></tr></thead><tbody>'
     + accounts.map(a => `<tr>
       <td><code>${a.username}</code></td>
       <td>${a.fullname||a.username}</td>
+      <td><button onclick="togglePdfPermission('${a.username}', ${!a.pdf_allowed})" style="padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;background:${a.pdf_allowed?'var(--glt)':'var(--subcard)'};color:${a.pdf_allowed?'var(--green)':'var(--t2)'};border:1px solid ${a.pdf_allowed?'rgba(15,110,86,0.3)':'var(--b2)'};">${a.pdf_allowed?'✅ Autorisé':'⛔ Bloqué'}</button></td>
       <td><button class="del-btn" onclick="deleteAccount('${a.username}')">✕ Supprimer</button></td>
     </tr>`).join('') + '</tbody></table>';
 }
@@ -967,7 +990,7 @@ async function createAccount() {
   if (!name || !login || !pass) { showToast('Tous les champs sont requis.'); return; }
   if (!window.supabaseClient) { showToast('Supabase non disponible.'); return; }
 
-  const newAcc = { username: login, fullname: name, password: pass };
+  const newAcc = { username: login, fullname: name, password: pass, pdf_allowed: false };
   try {
     const { error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' });
     if (error) { showToast('Erreur : ' + error.message); return; }
@@ -977,6 +1000,15 @@ async function createAccount() {
     showToast('Compte créé pour ' + name + ' ✓');
     loadAccounts();
   } catch(e) { showToast('Erreur création compte.'); }
+}
+
+async function togglePdfPermission(username, newVal) {
+  if (!window.supabaseClient) return;
+  try {
+    await window.supabaseClient.from('driver_accounts').update({ pdf_allowed: newVal }).eq('username', username);
+    showToast((newVal ? '✅ PDF autorisé' : '⛔ PDF bloqué') + ' pour ' + username);
+    loadAccounts();
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 
 async function deleteAccount(username) {

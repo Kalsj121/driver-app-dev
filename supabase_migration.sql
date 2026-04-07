@@ -95,6 +95,9 @@ ALTER TABLE missions ADD COLUMN IF NOT EXISTS plate_remorque text NOT NULL DEFAU
 -- 5. Colonne plate_remorque dans missions_archive (si la table existe)
 -- ALTER TABLE missions_archive ADD COLUMN IF NOT EXISTS plate_remorque text NOT NULL DEFAULT '';
 
+-- 6. Colonne pdf_allowed dans driver_accounts (permission feuille de route PDF)
+ALTER TABLE driver_accounts ADD COLUMN IF NOT EXISTS pdf_allowed boolean NOT NULL DEFAULT false;
+
 -- ============================================================
 -- Données de test (décommenter pour insérer)
 -- ============================================================
