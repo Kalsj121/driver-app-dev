@@ -459,19 +459,19 @@ function switchView(v) {
 const LCA_SITES = ['LCA Nord','LCA Selys'];
 const STEP_LABELS = ['En attente d\'instruction','Attente quai','Quai attribué','À quai','En opération','Opération terminée','CMR reçu','En transit'];
 
+function getStepLabel(d) {
+  const s = parseInt(d.step)||0;
+  const op = d.operation || '';
+  if (s === 4 && op) return op + ' en cours';
+  if (s === 5 && op) return op + ' terminé(e)';
+  return STEP_LABELS[s] || 'Inactif';
+}
+
 // ============================================================
 // DRIVERS — fetch from Supabase missions
 // ============================================================
 let drivers = [];
 let driverTicker = null;
-
-function getStepLabel(d) {
-  const step = parseInt(d.step)||0;
-  const op = d.operation || '';
-  if (step === 4 && op) return op + ' en cours';
-  if (step === 5 && op) return op + ' terminé(e)';
-  return STEP_LABELS[step] || 'Inactif';
-}
 
 function missionToDriverStatus(mission) {
   const stops = mission.stops || [];
@@ -479,23 +479,23 @@ function missionToDriverStatus(mission) {
   for (let i = stops.length - 1; i >= 0; i--) {
     if (!stops[i].tDepart) { curStop = stops[i]; break; }
   }
-
-  // if no stops and dispatch not received yet → step 0
+  // Step 0: dispatch waiting (no stops yet, dispatch not received)
   if (!curStop && stops.length === 0 && !mission.tDispatchReceived) {
+    const now = Date.now();
+    const minJourney = mission.dayStartTs ? Math.floor((now - new Date(mission.dayStartTs).getTime()) / 60000) : null;
     return {
       user_id: mission.id, driver_name: mission.driver,
       plate: mission.plateTracteur||mission.plate||'', plate_remorque: mission.plateRemorque||mission.plate_remorque||'',
       step: 0, location: 'En attente d\'instruction', operation: '',
       dock: '', ts_arrival: null, ts_dock_assigned: null, ts_dock_ready: null,
       ts_ops_start: null, ts_ops_end: null,
-      min_wait: null, min_dock: null, min_ops: null, min_journey: null,
+      min_wait: null, min_dock: null, min_ops: null, min_journey: minJourney,
       updated_at: mission.updatedat || new Date().toISOString()
     };
   }
-
   if (!curStop && stops.length > 0) { curStop = stops[stops.length-1]; step = 7; }
   else if (curStop) {
-    if      (!curStop.tArrival)      step = 1;
+    if      (!curStop.tArrival)      step = 0;
     else if (!curStop.tDockAssigned) step = 1;
     else if (!curStop.tDockReady)    step = 2;
     else if (!curStop.tOpsStart)     step = 3;
@@ -527,7 +527,6 @@ async function fetchDrivers() {
       const allMissions = await window.loadMissionsFromSupabase();
       const todayStr = new Date().toLocaleDateString('fr-BE');
       const activeMissions = allMissions.filter(m => !m.completed && m.date === todayStr);
-      // step >= 0 pour la grille de pilotage, mais on garde tous pour le tableau "connectés"
       drivers = activeMissions.map(missionToDriverStatus).filter(d => d.step >= 0);
     }
   } catch(e) { console.warn('[fetchDrivers]', e.message); }
@@ -563,8 +562,6 @@ async function renderActiveDriversTable() {
   }
 
   // active_drivers est la seule source de vérité pour "qui est connecté".
-  // On ne fusionne plus avec missionDrivers pour éviter que le chauffeur
-  // réapparaisse après suppression de active_drivers (bug "reste en cache").
   const all = [...activeDrivers];
 
   if (!all.length) {

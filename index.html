@@ -268,9 +268,9 @@ select.fi-locked{pointer-events:none;opacity:.7;}
       </div>
     </div>
     <button class="btn bp" id="btn-start-day" onclick="startDay()">▶ Démarrer ma journée</button>
-    <!-- PAUSE section -->
+    <!-- PAUSE section (visible between missions) -->
     <div id="pause-section" style="display:none;margin-top:8px;">
-      <button class="btn bo" id="btn-pause-start" onclick="startPause()" style="border-color:var(--amber);color:var(--amber);">⏸ Prendre une pause</button>
+      <button class="btn bo" onclick="startPause()" style="border-color:var(--amber);color:var(--amber);">⏸ Prendre une pause</button>
     </div>
     <div id="pause-active-panel" style="display:none;margin-top:8px;">
       <div class="card" style="border-color:var(--amber);background:var(--alt);">
@@ -279,12 +279,12 @@ select.fi-locked{pointer-events:none;opacity:.7;}
         <button class="btn ba" onclick="endPause()">▶ Reprendre — fin de pause</button>
       </div>
     </div>
-    <!-- PDF Banner -->
+    <!-- PDF Banner (visible at end of day if allowed) -->
     <div id="pdf-banner" style="display:none;margin-top:8px;">
       <div class="card" style="border-color:var(--green);background:var(--glt);">
         <div class="ctit" style="color:var(--green);">Feuille de route disponible</div>
         <p style="font-size:13px;color:var(--t2);margin-bottom:12px;">Téléchargez le récapitulatif de votre journée.</p>
-        <button class="btn bg" id="btn-pdf-download" onclick="downloadDayPDF()">📄 Télécharger ma feuille de route</button>
+        <button class="btn bg" onclick="downloadDayPDF()">📄 Télécharger ma feuille de route</button>
       </div>
     </div>
   </div>
@@ -294,13 +294,13 @@ select.fi-locked{pointer-events:none;opacity:.7;}
     <div id="stops-tl"></div>
     <div id="live-banner"></div>
 
-    <!-- Step 0: dispatch / disponibilité -->
+    <!-- Step 0: disponibilité / attente instruction -->
     <div id="f0" style="display:none;">
       <div class="card" style="border-color:var(--blue);">
         <div class="ctit" style="color:var(--blue);">En attente d'instruction</div>
         <p style="font-size:13px;color:var(--t2);margin-bottom:14px;">Signalez votre disponibilité au bureau pour recevoir vos instructions.</p>
         <div id="f0-notify-area">
-          <button class="btn bp" id="btn-dispatch-notify" onclick="doDispatchNotify()">✅ J'ai notifié le bureau — je suis disponible</button>
+          <button class="btn bp" onclick="doDispatchNotify()">✅ J'ai notifié le bureau — je suis disponible</button>
         </div>
         <div id="f0-wait-area" style="display:none;">
           <div style="background:var(--blt);border-radius:var(--rmd);padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--t2);">
@@ -567,6 +567,8 @@ async function doLogin() {
 
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('main-app').style.display = '';
+  show('ph0', true);
+  show('ph-mission', false);
 
   // Charger les listes déroulantes véhicules ET pré-sélectionner
   await loadVehicleDropdowns();
@@ -584,6 +586,8 @@ async function doLogin() {
       document.getElementById('d-name').value = currentDriver.fullName || '';
       document.getElementById('login-screen').classList.add('hidden');
       document.getElementById('main-app').style.display = '';
+      show('ph0', true);
+      show('ph-mission', false);
       // Charger les listes véhicules et pré-sélectionner
       loadVehicleDropdowns();
     }
@@ -599,6 +603,9 @@ let curStop  = null;
 let step     = 0;
 let ticker   = null;
 let dayStart = null;
+let dayPauses = []; // [{tStart, tEnd, minPause}]
+let pauseActive = false;
+let _pdfData = null;
 
 async function initMissions() {
   if (window.missionsFromSupabase && window.missionsFromSupabase.length > 0) {
@@ -649,7 +656,7 @@ function setStep(s) {
   updateBanner();
   renderTimeline();
   if(s>=0&&s<=8) show('f'+s, true);
-  if(s === 0) {
+  if(s===0) {
     if(active?.tDispatchNotified) { show('f0-notify-area', false); show('f0-wait-area', true); }
     else { show('f0-notify-area', true); show('f0-wait-area', false); }
   }
@@ -685,7 +692,7 @@ function updateBanner() {
   const lbl = (step>=0&&step<=7) ? STEP_LABELS[step] : '';
   const now = Date.now();
   let boxes = [];
-  if(step===0 && active.tDispatchNotified) boxes.push({lbl:'Attente instr.',val:'<span id="t-dispatch" class="tc-blue">'+dur(ms2min(now-active.tDispatchNotified))+'</span>'});
+  if(step===0 && active?.tDispatchNotified) boxes.push({lbl:'Attente instr.',val:'<span id="t-dispatch" class="tc-blue">'+dur(ms2min(now-active.tDispatchNotified))+'</span>'});
   if(dayStart) boxes.push({lbl:'Journée',val:'<span id="t-day" class="tc-gray">'+hms(now-dayStart)+'</span>'});
   if(curStop) {
     if(step===1 && curStop.tArrival) boxes.push({lbl:'Attente quai',val:'<span id="t-wait" class="tc-blue">'+dur(ms2min(now-curStop.tArrival))+'</span>'});
@@ -721,12 +728,9 @@ function startTicker() {
     const now = Date.now();
     const dh=$('dayhdr'); if(dh) dh.textContent=hms(now-dayStart);
     const up=(id,val)=>{ const e=document.getElementById(id); if(e) e.textContent=val; };
-    if(step===0&&active?.tDispatchNotified) up('t-dispatch', dur(ms2min(now-active.tDispatchNotified)));
-    if(pauseActive && dayPauses.length) {
-      const p = dayPauses[dayPauses.length-1];
-      if(p && !p.tEnd) up('t-pause', dur(ms2min(now - p.tStart)));
-    }
     up('t-day', hms(now-dayStart));
+    if(step===0&&active?.tDispatchNotified) up('t-dispatch', dur(ms2min(now-active.tDispatchNotified)));
+    if(pauseActive && dayPauses.length) { const _p=dayPauses[dayPauses.length-1]; if(_p&&!_p.tEnd) up('t-pause', dur(ms2min(now-_p.tStart))); }
     if(step===1&&curStop?.tArrival)    up('t-wait',   dur(ms2min(now-curStop.tArrival)));
     if(step===2&&curStop?.tDockAssigned) up('t-dock', dur(ms2min(now-curStop.tDockAssigned)));
     if(step===4&&curStop?.tOpsStart)   up('t-ops',    dur(ms2min(now-curStop.tOpsStart)));
@@ -747,189 +751,6 @@ function syncActive() {
   const snapshot = JSON.parse(JSON.stringify(active));
   if (curStop) snapshot.stops = [...(active.stops || []), curStop];
   saveMissionToSupabase(snapshot).catch(e => console.warn('[Sync] failed:', e.message));
-}
-
-// ============================================================
-// DISPATCH / STEP 0
-// ============================================================
-function doDispatchNotify() {
-  active.tDispatchNotified = Date.now();
-  show('f0-notify-area', false);
-  show('f0-wait-area', true);
-  updateBanner(); syncActive();
-  toast('Bureau notifié ✓ — timer démarré');
-}
-
-function doDispatchReceived() {
-  active.tDispatchReceived = Date.now();
-  active.minDispatch = ms2min(active.tDispatchReceived - active.tDispatchNotified);
-  syncActive();
-  setStep(1);
-  toast('Instructions reçues ✓ — départ !');
-}
-
-// ============================================================
-// PAUSE INTER-MISSIONS
-// ============================================================
-let dayPauses = []; // [{tStart, tEnd, minPause}]
-let pauseActive = false;
-
-function startPause() {
-  pauseActive = true;
-  const p = {tStart: Date.now(), tEnd: null, minPause: null};
-  dayPauses.push(p);
-  show('pause-section', false);
-  show('pause-active-panel', true);
-  show('ph0', true);
-  const btnStart = document.getElementById('btn-start-day');
-  if(btnStart) btnStart.disabled = true;
-  toast('Pause démarrée ⏸');
-}
-
-function endPause() {
-  const p = dayPauses[dayPauses.length-1];
-  if(p) { p.tEnd = Date.now(); p.minPause = ms2min(p.tEnd - p.tStart); }
-  pauseActive = false;
-  show('pause-active-panel', false);
-  show('pause-section', true);
-  const btnStart = document.getElementById('btn-start-day');
-  if(btnStart) btnStart.disabled = false;
-  toast('Pause terminée ✓ — ' + (p?.minPause||0) + ' min');
-}
-
-// ============================================================
-// PDF FEUILLE DE ROUTE
-// ============================================================
-let _pdfData = null; // {missions, pauses, driver}
-
-function showPDFDownloadBanner(missions, pauses, driver) {
-  _pdfData = {missions, pauses, driver};
-  show('pdf-banner', true);
-}
-
-function downloadDayPDF() {
-  if (!_pdfData) { toast('Aucune donnée PDF disponible.', true); return; }
-  const {missions, pauses, driver} = _pdfData;
-  const html = buildFeuilleDeRouteHTML(missions, pauses, driver);
-  const w = window.open('', '_blank');
-  if (!w) { toast('Autorisez les pop-ups pour télécharger le PDF.', true); return; }
-  w.document.write(html);
-  w.document.close();
-  setTimeout(() => { w.focus(); w.print(); }, 500);
-}
-
-function buildFeuilleDeRouteHTML(missions, pauses, driver) {
-  const ts = ts => ts ? new Date(ts).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'}) : '—';
-  const dur2 = min => (min==null||isNaN(min)) ? '—' : (min<60 ? min+' min' : Math.floor(min/60)+'h'+String(min%60).padStart(2,'0'));
-  const today = new Date().toLocaleDateString('fr-BE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-
-  // Build missions HTML
-  let missionsHTML = '';
-  missions.forEach((m, mi) => {
-    const tracteur = m.plateTracteur || m.plate || '—';
-    const remorque = m.plateRemorque || m.plate_remorque || '—';
-    const dispatchWait = m.minDispatch != null ? dur2(m.minDispatch) : '—';
-
-    let stopsRows = '';
-    (m.stops||[]).forEach((s,si) => {
-      stopsRows += `<tr>
-        <td>${si+1}</td>
-        <td>${s.location||'—'}</td>
-        <td>${s.operation||'—'}</td>
-        <td>${ts(s.tArrival)}</td>
-        <td>${s.dock||'—'}</td>
-        <td>${dur2(s.minWait)}</td>
-        <td>${ts(s.tOpsStart)}</td>
-        <td>${dur2(s.minOps)}</td>
-        <td>${ts(s.tDoc)}</td>
-        <td>${dur2(s.minTotal)}</td>
-        <td>${(s.cargo||[]).map(c=>c.type==='uld'?(c.uld||'ULD'):((c.pieces||'')+'pc '+(c.awb||''))).join(', ')||'—'}</td>
-        <td>${s.comment||'—'}</td>
-      </tr>`;
-    });
-
-    const dayDur = (m.dayStartTs && m.dayEndTs) ? dur2(Math.round((m.dayEndTs - m.dayStartTs)/60000)) : '—';
-
-    missionsHTML += `
-      <div class="mission-block">
-        <h3>Mission ${mi+1} — ${m.date||today}</h3>
-        <table class="info-table">
-          <tr><td><strong>Tracteur</strong></td><td>${tracteur}</td><td><strong>Remorque</strong></td><td>${remorque}</td></tr>
-          <tr><td><strong>Démarrage</strong></td><td>${ts(m.dayStartTs)}</td><td><strong>Fin</strong></td><td>${m.dayEndTs ? ts(m.dayEndTs) : '—'}</td></tr>
-          <tr><td><strong>Attente instruction</strong></td><td>${dispatchWait}</td><td><strong>Durée mission</strong></td><td>${dayDur}</td></tr>
-        </table>
-        ${stopsRows ? `
-        <table class="stops-table">
-          <thead><tr><th>#</th><th>Lieu</th><th>Opération</th><th>Arrivée</th><th>Quai</th><th>Att.quai</th><th>Déb.opé</th><th>Dur.opé</th><th>CMR</th><th>Total</th><th>Fret</th><th>Commentaire</th></tr></thead>
-          <tbody>${stopsRows}</tbody>
-        </table>` : '<p style="color:#666;font-style:italic;font-size:12px;">Aucun stop enregistré pour cette mission.</p>'}
-      </div>`;
-  });
-
-  // Pauses HTML
-  let pausesHTML = '';
-  if (pauses && pauses.length) {
-    const pRows = pauses.map((p,i) => `<tr><td>${i+1}</td><td>${ts(p.tStart)}</td><td>${p.tEnd ? ts(p.tEnd) : 'En cours'}</td><td>${dur2(p.minPause)}</td></tr>`).join('');
-    pausesHTML = `<div class="mission-block">
-      <h3>Pauses</h3>
-      <table class="stops-table">
-        <thead><tr><th>#</th><th>Début</th><th>Fin</th><th>Durée</th></tr></thead>
-        <tbody>${pRows}</tbody>
-      </table>
-    </div>`;
-  }
-
-  const firstMission = missions[0];
-  const lastMission = missions[missions.length-1];
-  const totalDay = (firstMission?.dayStartTs && lastMission?.dayEndTs)
-    ? dur2(Math.round((lastMission.dayEndTs - firstMission.dayStartTs)/60000)) : '—';
-
-  return `<!DOCTYPE html>
-<html lang="fr"><head><meta charset="UTF-8">
-<title>Feuille de route — ${driver.fullName||driver.username} — ${today}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #222; padding: 20px; }
-  h1 { font-size: 18px; margin-bottom: 4px; color: #1a5c6e; }
-  h2 { font-size: 13px; color: #666; font-weight: normal; margin-bottom: 20px; }
-  h3 { font-size: 13px; font-weight: 700; color: #1a5c6e; margin: 16px 0 8px; border-bottom: 1px solid #cde8ef; padding-bottom: 4px; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #4da9be; padding-bottom: 12px; }
-  .header-left h1 { font-size: 20px; }
-  .header-right { text-align: right; font-size: 11px; color: #666; }
-  .info-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 11px; }
-  .info-table td { padding: 4px 8px; border: 1px solid #ddd; }
-  .info-table td:first-child, .info-table td:nth-child(3) { background: #f5f5f5; font-weight: 600; width: 120px; }
-  .stops-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 12px; }
-  .stops-table th { background: #4da9be; color: white; padding: 5px 4px; text-align: left; font-weight: 600; }
-  .stops-table td { padding: 4px; border: 1px solid #e0e0e0; }
-  .stops-table tr:nth-child(even) td { background: #f9f9f9; }
-  .mission-block { margin-bottom: 20px; page-break-inside: avoid; }
-  .summary { background: #f0f8fb; border: 1px solid #4da9be; border-radius: 6px; padding: 10px 14px; margin-top: 16px; font-size: 11px; }
-  .summary strong { display: inline-block; width: 160px; }
-  @media print { body { padding: 10px; } }
-</style>
-</head><body>
-  <div class="header">
-    <div class="header-left">
-      <h1>Feuille de route</h1>
-      <h2>${today}</h2>
-    </div>
-    <div class="header-right">
-      <div><strong>Chauffeur :</strong> ${driver.fullName||driver.username}</div>
-      <div><strong>Matricule :</strong> ${driver.username||'—'}</div>
-      <div><strong>Durée totale :</strong> ${totalDay}</div>
-      <div style="margin-top:6px;font-size:10px;color:#999;">Généré le ${new Date().toLocaleString('fr-BE')}</div>
-    </div>
-  </div>
-  ${missionsHTML}
-  ${pausesHTML}
-  <div class="summary">
-    <div><strong>Nombre de missions :</strong> ${missions.length}</div>
-    <div><strong>Nombre de stops :</strong> ${missions.reduce((acc,m)=>acc+(m.stops||[]).length,0)}</div>
-    <div><strong>Pauses :</strong> ${pauses.length > 0 ? pauses.length + ' (total: ' + dur2(pauses.reduce((a,p)=>a+(p.minPause||0),0)) + ')' : 'Aucune'}</div>
-    <div><strong>Durée totale journée :</strong> ${totalDay}</div>
-  </div>
-</body></html>`;
 }
 
 // ============================================================
@@ -959,8 +780,7 @@ function startDay() {
   if (btnStart) btnStart.textContent = '▶ Journée en cours…';
 
   show('ph0', false); show('ph-mission', true);
-  show('pdf-banner', false);
-  _pdfData = null;
+  show('pdf-banner', false); _pdfData = null;
   show('pause-section', false);
   $('dayhdr').style.display = '';
   startTicker();
@@ -1013,13 +833,12 @@ function lockVehicleSelects(locked) {
 
 async function doDriverLogout() {
   if (active) {
-    if (!confirm('Vous avez une mission en cours.\nVoulez-vous d\'abord terminer votre journée (Fin journée) avant de vous déconnecter ?')) return;
-    // Terminer proprement
+    if (!confirm('Vous avez une mission en cours.\nVoulez-vous terminer votre journée avant de vous déconnecter ?')) return;
     active.dayEndTs = Date.now(); active.completed = true;
     missions.push(JSON.parse(JSON.stringify(active)));
     save();
     saveMissionToSupabase(active).catch(e => console.warn('Logout save failed:', e));
-    const finishedMission  = active;
+    const finishedMission = active;
     const finishedUsername = currentDriver?.username || active.driver;
     active = null; curStop = null; step = 0; dayStart = null;
     clearInterval(ticker); clearInterval(window._activeDriverInterval); window._activeDriverInterval = null;
@@ -1029,34 +848,137 @@ async function doDriverLogout() {
     const username = currentDriver?.username;
     if (username) await removeActiveDriver(username);
   }
-  // Réinitialiser session
-  currentDriver = null;
+  currentDriver = null; pauseActive = false; dayPauses = []; _pdfData = null;
   try { localStorage.removeItem('lca_current_driver'); } catch(e) {}
-  // Réinitialiser l'UI
   show('ph-mission', false); show('ph0', true);
+  show('pause-section', false); show('pause-active-panel', false); show('pdf-banner', false);
   $('dayhdr').style.display = 'none'; $('dayhdr').textContent = '00:00:00';
   $('stops-tl').innerHTML = ''; $('live-banner').innerHTML = '';
   for (let i = 0; i <= 8; i++) show('f' + i, false);
-  pauseActive = false;
-  dayPauses = [];
-  show('pause-section', false);
-  show('pause-active-panel', false);
-  show('pdf-banner', false);
-  _pdfData = null;
   lockVehicleSelects(true);
   document.getElementById('d-name').value = '';
   document.getElementById('d-plate-tracteur').value = '';
   document.getElementById('d-plate-remorque').value = '';
   const btnStart = document.getElementById('btn-start-day');
-  if (btnStart) btnStart.textContent = '▶ Démarrer ma journée';
-  // Retour à l'écran de connexion
+  if (btnStart) { btnStart.textContent = '▶ Démarrer ma journée'; btnStart.disabled = false; }
   document.getElementById('main-app').style.display = 'none';
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('l-login').value = '';
   document.getElementById('l-password').value = '';
-  document.getElementById('l-plate-tracteur').value = '';
-  document.getElementById('l-plate-remorque').value = '';
   toast('Déconnexion effectuée.');
+}
+
+function doDispatchNotify() {
+  active.tDispatchNotified = Date.now();
+  show('f0-notify-area', false);
+  show('f0-wait-area', true);
+  updateBanner(); syncActive();
+  toast('Bureau notifié ✓ — timer démarré');
+}
+
+function doDispatchReceived() {
+  active.tDispatchReceived = Date.now();
+  active.minDispatch = ms2min(active.tDispatchReceived - active.tDispatchNotified);
+  syncActive();
+  setStep(1);
+  toast('Instructions reçues ✓ — départ !');
+}
+
+function startPause() {
+  pauseActive = true;
+  dayPauses.push({tStart: Date.now(), tEnd: null, minPause: null});
+  show('pause-section', false);
+  show('pause-active-panel', true);
+  const btnStart = document.getElementById('btn-start-day');
+  if(btnStart) btnStart.disabled = true;
+  toast('Pause démarrée ⏸');
+}
+
+function endPause() {
+  const p = dayPauses[dayPauses.length-1];
+  if(p) { p.tEnd = Date.now(); p.minPause = ms2min(p.tEnd - p.tStart); }
+  pauseActive = false;
+  show('pause-active-panel', false);
+  show('pause-section', true);
+  const btnStart = document.getElementById('btn-start-day');
+  if(btnStart) btnStart.disabled = false;
+  toast('Pause terminée ✓ — ' + (p?.minPause||0) + ' min');
+}
+
+function showPDFDownloadBanner(missions, pauses, driver) {
+  _pdfData = {missions, pauses, driver};
+  show('pdf-banner', true);
+}
+
+function downloadDayPDF() {
+  if (!_pdfData) { toast('Aucune donnée PDF disponible.', true); return; }
+  const {missions, pauses, driver} = _pdfData;
+  const html = buildFeuilleDeRouteHTML(missions, pauses, driver);
+  const w = window.open('', '_blank');
+  if (!w) { toast('Autorisez les pop-ups pour télécharger le PDF.', true); return; }
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => { w.focus(); w.print(); }, 500);
+}
+
+function buildFeuilleDeRouteHTML(allMissions, pauses, driver) {
+  const tsF = ts => ts ? new Date(ts).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'}) : '—';
+  const durF = min => (min==null||isNaN(min)) ? '—' : (min<60 ? min+' min' : Math.floor(min/60)+'h'+String(min%60).padStart(2,'0'));
+  const today = new Date().toLocaleDateString('fr-BE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  let missionsHTML = '';
+  allMissions.forEach((m, mi) => {
+    const tracteur = m.plateTracteur || m.plate || '—';
+    const remorque = m.plateRemorque || m.plate_remorque || '—';
+    const dispatchWait = m.minDispatch != null ? durF(m.minDispatch) : '—';
+    let stopsRows = (m.stops||[]).map((s,si) => `<tr>
+      <td>${si+1}</td><td>${s.location||'—'}</td><td>${s.operation||'—'}</td>
+      <td>${tsF(s.tArrival)}</td><td>${s.dock||'—'}</td><td>${durF(s.minWait)}</td>
+      <td>${tsF(s.tOpsStart)}</td><td>${durF(s.minOps)}</td>
+      <td>${tsF(s.tDoc)}</td><td>${durF(s.minTotal)}</td>
+      <td>${(s.cargo||[]).map(c=>c.type==='uld'?(c.uld||'ULD'):((c.pieces||'')+'pc '+(c.awb||''))).join(', ')||'—'}</td>
+      <td>${s.comment||'—'}</td></tr>`).join('');
+    const dayDur = (m.dayStartTs && m.dayEndTs) ? durF(Math.round((m.dayEndTs-m.dayStartTs)/60000)) : '—';
+    missionsHTML += `<div class="mb"><h3>Mission ${mi+1}</h3>
+      <table class="it"><tr><td><b>Tracteur</b></td><td>${tracteur}</td><td><b>Remorque</b></td><td>${remorque}</td></tr>
+      <tr><td><b>Démarrage</b></td><td>${tsF(m.dayStartTs)}</td><td><b>Fin</b></td><td>${m.dayEndTs?tsF(m.dayEndTs):'—'}</td></tr>
+      <tr><td><b>Attente instruction</b></td><td>${dispatchWait}</td><td><b>Durée mission</b></td><td>${dayDur}</td></tr></table>
+      ${stopsRows?`<table class="st"><thead><tr><th>#</th><th>Lieu</th><th>Opération</th><th>Arrivée</th><th>Quai</th><th>Att.quai</th><th>Déb.opé</th><th>Dur.opé</th><th>CMR</th><th>Total</th><th>Fret</th><th>Commentaire</th></tr></thead><tbody>${stopsRows}</tbody></table>`:'<p style="color:#888;font-style:italic;font-size:11px;">Aucun stop.</p>'}</div>`;
+  });
+  let pausesHTML = '';
+  if (pauses&&pauses.length) {
+    const pr = pauses.map((p,i)=>`<tr><td>${i+1}</td><td>${tsF(p.tStart)}</td><td>${p.tEnd?tsF(p.tEnd):'En cours'}</td><td>${durF(p.minPause)}</td></tr>`).join('');
+    pausesHTML = `<div class="mb"><h3>Pauses</h3><table class="st"><thead><tr><th>#</th><th>Début</th><th>Fin</th><th>Durée</th></tr></thead><tbody>${pr}</tbody></table></div>`;
+  }
+  const firstM = allMissions[0], lastM = allMissions[allMissions.length-1];
+  const totalDay = (firstM?.dayStartTs&&lastM?.dayEndTs) ? durF(Math.round((lastM.dayEndTs-firstM.dayStartTs)/60000)) : '—';
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Feuille de route — ${driver.fullName||driver.username}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;font-size:11px;color:#222;padding:20px;}
+h1{font-size:18px;color:#1a5c6e;}h2{font-size:12px;color:#666;font-weight:normal;margin-bottom:18px;}
+h3{font-size:13px;font-weight:700;color:#1a5c6e;margin:16px 0 8px;border-bottom:1px solid #cde8ef;padding-bottom:4px;}
+.hdr{display:flex;justify-content:space-between;border-bottom:2px solid #4da9be;padding-bottom:12px;margin-bottom:20px;}
+.hdr-r{text-align:right;font-size:11px;color:#666;}.hdr-r div{margin-bottom:2px;}
+.it{width:100%;border-collapse:collapse;margin-bottom:10px;}.it td{padding:4px 8px;border:1px solid #ddd;}
+.it td:first-child,.it td:nth-child(3){background:#f5f5f5;font-weight:600;width:130px;}
+.st{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:10px;}
+.st th{background:#4da9be;color:#fff;padding:5px 4px;text-align:left;}
+.st td{padding:4px;border:1px solid #e0e0e0;}.st tr:nth-child(even) td{background:#f9f9f9;}
+.mb{margin-bottom:20px;page-break-inside:avoid;}
+.sum{background:#f0f8fb;border:1px solid #4da9be;border-radius:6px;padding:10px 14px;margin-top:16px;}
+.sum div{margin-bottom:3px;}.sum b{display:inline-block;width:160px;}
+@media print{body{padding:10px;}}</style></head><body>
+<div class="hdr"><div><h1>Feuille de route</h1><h2>${today}</h2></div>
+<div class="hdr-r"><div><b>Chauffeur :</b> ${driver.fullName||driver.username}</div>
+<div><b>Matricule :</b> ${driver.username||'—'}</div>
+<div><b>Durée totale :</b> ${totalDay}</div>
+<div style="margin-top:6px;font-size:10px;color:#999;">Généré le ${new Date().toLocaleString('fr-BE')}</div></div></div>
+${missionsHTML}${pausesHTML}
+<div class="sum">
+<div><b>Missions :</b> ${allMissions.length}</div>
+<div><b>Stops total :</b> ${allMissions.reduce((a,m)=>a+(m.stops||[]).length,0)}</div>
+<div><b>Pauses :</b> ${pauses.length>0?pauses.length+' ('+durF(pauses.reduce((a,p)=>a+(p.minPause||0),0))+')':'Aucune'}</div>
+<div><b>Durée journée :</b> ${totalDay}</div></div>
+</body></html>`;
 }
 
 function togglePw(inputId, btn) {
@@ -1226,8 +1148,7 @@ function endDay() {
   // Conserver une référence avant nullification
   const finishedMission  = active;
   const finishedUsername = currentDriver?.username || active.driver;
-
-  // PDF data: save before nullifying
+  // Save data for PDF before nullifying
   const _pdfMissions = [...missions.filter(m => m.date === todayStr() && m.completed), JSON.parse(JSON.stringify(finishedMission))];
   const _pdfPauses = [...dayPauses];
   const _pdfDriver = currentDriver ? {...currentDriver} : null;
@@ -1245,12 +1166,10 @@ function endDay() {
   const btnStart = document.getElementById('btn-start-day');
   if (btnStart) btnStart.textContent = '▶ Démarrer ma journée';
   toast('Journée clôturée et enregistrée ✓');
-
-  // PDF: reset pauses, show banner if allowed
-  pauseActive = false;
-  dayPauses = [];
-  show('pause-section', false);
-  show('pause-active-panel', false);
+  // Reset pause state
+  pauseActive = false; dayPauses = [];
+  show('pause-section', false); show('pause-active-panel', false);
+  // Show PDF if allowed
   if (_pdfDriver?.pdfAllowed) {
     showPDFDownloadBanner(_pdfMissions, _pdfPauses, _pdfDriver);
   }
@@ -1264,11 +1183,11 @@ async function archiveMissionData(mission) {
   if (!window.supabaseClient || !mission) return;
   try {
     await window.supabaseClient.from('missions_archive').upsert([{
-      id:            mission.id,
-      driver:        mission.driver,
-      plate:         mission.plateTracteur || mission.plate || '',
+      id:             mission.id,
+      driver:         mission.driver,
+      plate:          mission.plateTracteur || mission.plate || '',
       plate_remorque: mission.plateRemorque || mission.plate_remorque || '',
-      date:          mission.date,
+      date:           mission.date,
       daystartts:    new Date(mission.dayStartTs).toISOString(),
       dayendts:      mission.dayEndTs ? new Date(mission.dayEndTs).toISOString() : null,
       completed:     true,
