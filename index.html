@@ -289,27 +289,27 @@ select.fi-locked{pointer-events:none;opacity:.7;}
     </div>
   </div>
 
-  <!-- Step 0: dispatch / disponibilité -->
-  <div id="f0" style="display:none;">
-    <div class="card" style="border-color:var(--blue);">
-      <div class="ctit" style="color:var(--blue);">En attente d'instruction</div>
-      <p style="font-size:13px;color:var(--t2);margin-bottom:14px;">Signalez votre disponibilité au bureau pour recevoir vos instructions.</p>
-      <div id="f0-notify-area">
-        <button class="btn bp" id="btn-dispatch-notify" onclick="doDispatchNotify()">✅ J'ai notifié le bureau — je suis disponible</button>
-      </div>
-      <div id="f0-wait-area" style="display:none;">
-        <div style="background:var(--blt);border-radius:var(--rmd);padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--t2);">
-          ⏳ En attente d'instruction du bureau… <span id="t-dispatch" style="font-weight:700;color:var(--blue);">0 min</span>
-        </div>
-        <button class="btn bg" onclick="doDispatchReceived()">✅ J'ai reçu mes instructions — je pars</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ACTIVE MISSION -->
   <div id="ph-mission" style="display:none;">
     <div id="stops-tl"></div>
     <div id="live-banner"></div>
+
+    <!-- Step 0: dispatch / disponibilité -->
+    <div id="f0" style="display:none;">
+      <div class="card" style="border-color:var(--blue);">
+        <div class="ctit" style="color:var(--blue);">En attente d'instruction</div>
+        <p style="font-size:13px;color:var(--t2);margin-bottom:14px;">Signalez votre disponibilité au bureau pour recevoir vos instructions.</p>
+        <div id="f0-notify-area">
+          <button class="btn bp" id="btn-dispatch-notify" onclick="doDispatchNotify()">✅ J'ai notifié le bureau — je suis disponible</button>
+        </div>
+        <div id="f0-wait-area" style="display:none;">
+          <div style="background:var(--blt);border-radius:var(--rmd);padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--t2);">
+            ⏳ En attente d'instruction du bureau… <span id="t-dispatch" style="font-weight:700;color:var(--blue);">0 min</span>
+          </div>
+          <button class="btn bg" onclick="doDispatchReceived()">✅ J'ai reçu mes instructions — je pars</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Step 1: arrival -->
     <div id="f1" style="display:none;">
