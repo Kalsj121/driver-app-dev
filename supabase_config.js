@@ -111,10 +111,9 @@ async function saveMissionToSupabase(mission) {
     if ('isPaused'          in mission) payload.ispaused          = mission.isPaused === true;
     if ('tPauseStart'       in mission) payload.tpausestart       = toISO(mission.tPauseStart);
 
-    // Colonnes optionnelles (ajoutées par migrations v1.02/v1.03)
+    // Colonnes optionnelles (migrations v1.02 / v1.03)
     const OPTIONAL_COLS = ['pauses','tdispatchnotified','tdispatchreceived','ispaused','tpausestart'];
     let { error } = await supabaseClient.from('missions').upsert([payload], { onConflict: 'id' });
-    // Retry en retirant progressivement les colonnes manquantes
     let safety = 6;
     while (error && safety-- > 0) {
       const msg = error.message || '';

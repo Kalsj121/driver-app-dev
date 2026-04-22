@@ -82,5 +82,5 @@ ALTER TABLE missions_archive ADD COLUMN IF NOT EXISTS tdispatchnotified timestam
 ALTER TABLE missions_archive ADD COLUMN IF NOT EXISTS tdispatchreceived timestamptz;
 
 -- ============================================================
--- Fin de la migration v1.03
+-- Fin des migrations v1.02 + v1.03
 -- ============================================================

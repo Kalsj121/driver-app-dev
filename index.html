@@ -300,7 +300,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
         </div>
         <div id="f0-wait-area" style="display:none;">
           <div style="background:var(--blt);border-radius:var(--rmd);padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--t2);">
-            ⏳ En attente d'instruction du bureau… <span id="t-dispatch" style="font-weight:700;color:var(--blue);">0 min</span>
+            ⏳ En attente d'instructions du bureau… <span id="t-dispatch" style="font-weight:700;color:var(--blue);">0 min</span>
           </div>
           <button class="btn bg" onclick="doDispatchReceived()">✅ J'ai reçu mes instructions — je pars</button>
         </div>
@@ -472,7 +472,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.03 (release: 22 avril 2026) — © Kalsj121</div>
+<div class="version-footer">Version 1.04 (release: 22 avril 2026) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -891,7 +891,13 @@ function startPause() {
   pauseActive = true;
   const tStart = Date.now();
   dayPauses.push({tStart, tEnd: null, minPause: null});
-  if (active) { active.isPaused = true; active.tPauseStart = tStart; syncActive(); }
+  if (active) {
+    active.isPaused = true;
+    active.tPauseStart = tStart;
+    // v1.04 : persister les pauses de la journée (pour feuille de route mid-day)
+    active.pauses = [...dayPauses];
+    syncActive();
+  }
   show('pause-section', false);
   show('pause-active-panel', true);
   show('end-day-section', false);
@@ -906,7 +912,13 @@ function endPause() {
   const p = dayPauses[dayPauses.length-1];
   if(p) { p.tEnd = Date.now(); p.minPause = ms2min(p.tEnd - p.tStart); }
   pauseActive = false;
-  if (active) { active.isPaused = false; active.tPauseStart = null; syncActive(); }
+  if (active) {
+    active.isPaused = false;
+    active.tPauseStart = null;
+    // v1.04 : maintenir le tableau pauses à jour sur la mission
+    active.pauses = [...dayPauses];
+    syncActive();
+  }
   show('pause-active-panel', false);
   // Si le chauffeur est entre missions, il retrouve l'écran ph0 normal
   if (!active) {
@@ -920,14 +932,16 @@ function endPause() {
 }
 
 // Met à jour active_drivers (pause/état entre missions) — tolérant aux colonnes manquantes
+// v1.03 : normalise les champs timestamp (epoch → ISO) avant envoi Postgres
 async function updateActiveDriverState(fields) {
   if (!window.supabaseClient || !currentDriver?.username) return;
   try {
-    // Convertir les timestamps numériques en ISO pour les colonnes timestamptz
-    const norm = {};
-    Object.entries(fields || {}).forEach(([k, v]) => {
-      if (/_(start|end|at)$/i.test(k) && typeof v === 'number') norm[k] = new Date(v).toISOString();
-      else norm[k] = v;
+    const norm = { ...fields };
+    const TS_FIELDS = ['pause_start','lastseen','tdispatchnotified','tdispatchreceived'];
+    TS_FIELDS.forEach(k => {
+      if (k in norm && norm[k] != null && typeof norm[k] !== 'string') {
+        try { norm[k] = new Date(norm[k]).toISOString(); } catch(e) { norm[k] = null; }
+      }
     });
     const payload = { lastseen: new Date().toISOString(), ...norm };
     await window.supabaseClient.from('active_drivers')
@@ -1128,40 +1142,42 @@ function endDay() {
   if (finishedUsername) removeActiveDriver(finishedUsername);
 }
 
-// Archive completed mission data
+// Archive completed mission data (v1.03 : dispatch + pause persistés)
 async function archiveMissionData(mission) {
   if (!window.supabaseClient || !mission) return;
   try {
-    const iso = v => !v ? null : (typeof v === 'string' ? v : new Date(v).toISOString());
+    const toISO = v => v ? (typeof v === 'string' ? v : new Date(v).toISOString()) : null;
     const payload = {
       id:             mission.id,
       driver:         mission.driver,
       plate:          mission.plateTracteur || mission.plate || '',
       plate_remorque: mission.plateRemorque || mission.plate_remorque || '',
       date:           mission.date,
-      daystartts:     iso(mission.dayStartTs),
-      dayendts:       iso(mission.dayEndTs),
+      daystartts:     toISO(mission.dayStartTs),
+      dayendts:       toISO(mission.dayEndTs),
       completed:      true,
       stops:          mission.stops || [],
       archivedat:     new Date().toISOString()
     };
-    if (Array.isArray(mission.pauses))      payload.pauses            = mission.pauses;
-    if ('tDispatchNotified' in mission)     payload.tdispatchnotified = iso(mission.tDispatchNotified);
-    if ('tDispatchReceived' in mission)     payload.tdispatchreceived = iso(mission.tDispatchReceived);
+    if (Array.isArray(mission.pauses))      payload.pauses             = mission.pauses;
+    if ('tDispatchNotified' in mission)     payload.tdispatchnotified  = toISO(mission.tDispatchNotified);
+    if ('tDispatchReceived' in mission)     payload.tdispatchreceived  = toISO(mission.tDispatchReceived);
 
-    const OPTIONAL_COLS = ['pauses','tdispatchnotified','tdispatchreceived'];
+    // Retry-without-column pattern pour les migrations v1.02 / v1.03 pas encore appliquées
+    const OPTIONAL_COLS = ['pauses', 'tdispatchnotified', 'tdispatchreceived'];
     let { error } = await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
-    let safety = 4;
+    let safety = 6;
     while (error && safety-- > 0) {
       const msg = error.message || '';
       const dropped = OPTIONAL_COLS.find(c => c in payload && (msg.includes(c) || new RegExp('column.+' + c + '|' + c + '.+column', 'i').test(msg)));
       if (!dropped) break;
+      console.warn('[Archive] Colonne manquante, retry sans :', dropped);
       delete payload[dropped];
       const retry = await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
       error = retry.error;
     }
-    if (error) console.warn('[Archive] Persisted with reduced fields:', error.message);
-    else console.log('[Archive] Mission archived successfully');
+    if (error) { console.warn('[Archive] Failed:', error.message); return; }
+    console.log('[Archive] Mission archived successfully');
   } catch(e) { console.warn('[Archive] Failed:', e.message); }
 }
 
