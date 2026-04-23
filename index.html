@@ -903,6 +903,9 @@ function startPause() {
     active.tPauseStart = tStart;
     active.pauses = [...dayPauses];
     syncActive();
+  } else {
+    // v1.09f : pause entre missions → accrocher à la dernière mission de la journée
+    persistDayPausesToLastMission();
   }
   show('pause-section', false);
   show('pause-active-panel', true);
@@ -924,6 +927,9 @@ function endPause() {
     active.tPauseStart = null;
     active.pauses = [...dayPauses];
     syncActive();
+  } else {
+    // v1.09f : pause terminée entre missions → accrocher à la dernière mission
+    persistDayPausesToLastMission();
   }
   show('pause-active-panel', false);
   // Si le chauffeur est entre missions, il retrouve l'écran ph0 normal
@@ -935,6 +941,47 @@ function endPause() {
   if(btnStart) btnStart.disabled = false;
   updateActiveDriverState({ is_paused: false, pause_start: null });
   toast('Pause terminée ✓ — ' + (p?.minPause||0) + ' min');
+}
+
+// v1.09f : attache les pauses de la journée à la DERNIÈRE mission enregistrée
+// (utilisé quand l'utilisateur prend une pause ENTRE deux missions ou avant de
+// cloturer sa journée sans en démarrer une nouvelle). Met à jour à la fois la
+// table `missions` et `missions_archive` pour cohérence.
+async function persistDayPausesToLastMission() {
+  if (!window.supabaseClient) { console.warn('[PauseAttach] supabaseClient manquant'); return; }
+  if (!Array.isArray(dayPauses) || dayPauses.length === 0) return;
+  // Chercher la dernière mission du jour côté local, sinon côté Supabase
+  const driverName = currentDriver?.fullName || currentDriver?.fullname || currentDriver?.username;
+  if (!driverName) { console.warn('[PauseAttach] currentDriver manquant'); return; }
+  const today = todayStr();
+  let target = null;
+  try {
+    // Priorité à missions (ligne la plus récente, qu'elle soit complétée ou non)
+    const { data } = await window.supabaseClient.from('missions')
+      .select('*').eq('driver', driverName).eq('date', today)
+      .order('daystartts', { ascending: false }).limit(1);
+    if (data && data[0]) target = data[0];
+  } catch(e) { console.warn('[PauseAttach] lookup missions failed:', e.message); }
+  if (!target) { console.warn('[PauseAttach] aucune mission du jour trouvée — pause non attachée pour l\'instant'); return; }
+
+  const payload = { id: target.id, pauses: [...dayPauses], updatedat: new Date().toISOString() };
+  try {
+    const { error } = await window.supabaseClient.from('missions').upsert([payload], { onConflict: 'id' });
+    if (error) { console.error('[PauseAttach] erreur update missions:', error.message); return; }
+    console.log('[PauseAttach] ✅ pauses attachées à mission', target.id, dayPauses.length, 'pause(s)');
+  } catch(e) { console.error('[PauseAttach] exception:', e.message); return; }
+
+  // Mettre à jour aussi missions_archive si la mission y est (pour feuille de route)
+  try {
+    const { data: arch } = await window.supabaseClient.from('missions_archive')
+      .select('id').eq('id', String(target.id)).limit(1);
+    if (arch && arch[0]) {
+      await window.supabaseClient.from('missions_archive')
+        .update({ pauses: [...dayPauses], updatedat: new Date().toISOString() })
+        .eq('id', String(target.id));
+      console.log('[PauseAttach] ✅ pauses aussi dans missions_archive');
+    }
+  } catch(e) { console.warn('[PauseAttach] update archive failed:', e.message); }
 }
 
 // Met à jour active_drivers (pause/état entre missions) — tolérant aux colonnes manquantes
@@ -1150,6 +1197,9 @@ function endDay() {
     saveMissionToSupabase(active).catch(e => console.warn('Save failed:', e));
     finishedMission = active;
     archiveMissionData(finishedMission);
+  } else if (dayPauses && dayPauses.length) {
+    // v1.09f : pas de mission active mais des pauses en mémoire → attacher à la dernière mission du jour
+    persistDayPausesToLastMission();
   }
   const finishedUsername = currentDriver?.username || finishedMission?.driver;
 
