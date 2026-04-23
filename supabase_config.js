@@ -75,15 +75,10 @@ async function loadMissionsFromSupabase() {
     if (error) { console.warn('[Supabase] Error loading missions:', error.message); return []; }
     return (data || []).map(m => ({
       ...m,
-      dayStartTs:        fromISO(m.daystartts),
-      dayEndTs:          fromISO(m.dayendts),
-      stops:             (m.stops  || []).map(stopFromStorage),
-      pauses:            Array.isArray(m.pauses) ? m.pauses : [],
-      // v1.03 : dispatch + pause persistés
-      tDispatchNotified: fromISO(m.tdispatchnotified),
-      tDispatchReceived: fromISO(m.tdispatchreceived),
-      isPaused:          m.ispaused === true,
-      tPauseStart:       fromISO(m.tpausestart),
+      dayStartTs: fromISO(m.daystartts),
+      dayEndTs:   fromISO(m.dayendts),
+      stops:  (m.stops  || []).map(stopFromStorage),
+      pauses: Array.isArray(m.pauses) ? m.pauses : [],
     }));
   } catch (e) { console.warn('[Supabase] Mission load failed:', e.message); return []; }
 }
@@ -103,25 +98,19 @@ async function saveMissionToSupabase(mission) {
       stops:          (mission.stops || []).map(stopToStorage),
       updatedat:      new Date().toISOString()
     };
+    // Inclure les pauses si disponibles (colonne ajoutée par la migration v1.02)
     if (Array.isArray(mission.pauses)) payload.pauses = mission.pauses;
-    if ('tDispatchNotified' in mission) payload.tdispatchnotified = toISO(mission.tDispatchNotified);
-    if ('tDispatchReceived' in mission) payload.tdispatchreceived = toISO(mission.tDispatchReceived);
-    if ('isPaused'          in mission) payload.ispaused          = mission.isPaused === true;
-    if ('tPauseStart'       in mission) payload.tpausestart       = toISO(mission.tPauseStart);
-
-    const OPTIONAL_COLS = ['pauses','tdispatchnotified','tdispatchreceived','ispaused','tpausestart'];
-    let { error } = await supabaseClient.from('missions').upsert([payload], { onConflict: 'id' });
-    let safety = 6;
-    while (error && safety-- > 0) {
-      const msg = error.message || '';
-      const dropped = OPTIONAL_COLS.find(c => c in payload && (msg.includes(c) || new RegExp('column.+' + c + '|' + c + '.+column', 'i').test(msg)));
-      if (!dropped) break;
-      console.warn('[Supabase] Colonne manquante, retry sans :', dropped);
-      delete payload[dropped];
+    let { error } = await supabaseClient
+      .from('missions')
+      .upsert([payload], { onConflict: 'id' });
+    // Retry sans le champ pauses si la colonne n'existe pas encore
+    if (error && 'pauses' in payload && /column.+pauses|pauses.+column/i.test(error.message || '')) {
+      delete payload.pauses;
       const retry = await supabaseClient.from('missions').upsert([payload], { onConflict: 'id' });
       error = retry.error;
     }
     if (error) { console.error('[Supabase] Error saving mission:', error.message); return false; }
+    console.log('[Supabase] ✅ Mission saved');
     return true;
   } catch (e) { console.error('[Supabase] Mission save exception:', e.message); return false; }
 }
@@ -138,6 +127,7 @@ async function loadMessagesFromSupabase() {
       .select('*')
       .order('ts', { ascending: true });
     if (error) { console.warn('[Supabase] Error loading messages:', error.message); return []; }
+    // Normalise snake_case DB columns (fromname, tolabel) → camelCase JS (fromName, toLabel)
     return (data || []).map(m => ({
       ...m,
       fromName: m.fromName || m.fromname || '',
@@ -253,6 +243,7 @@ async function initSupabase() {
   window._supabaseReady = true;
 }
 
+// Expose globally
 window.saveMissionToSupabase          = saveMissionToSupabase;
 window.saveMessageToSupabase          = saveMessageToSupabase;
 window.updateMessageReadStatus        = updateMessageReadStatus;
