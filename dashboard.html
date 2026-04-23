@@ -57,6 +57,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .view.on{display:block;}
 .page{padding:20px 24px;max-width:1400px;margin:0 auto;}
 .page-narrow{padding:20px 24px;max-width:900px;margin:0 auto;}
+/* v1.08 : conteneur pleine largeur pour la section Missions actives */
+.page-full{padding:0 24px 20px;max-width:none;margin:0;}
+.missions-title{font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.07em;margin:0 0 10px;}
 
 /* CARDS */
 .card{background:var(--card);border:1px solid var(--b1);border-radius:12px;padding:14px 18px;margin-bottom:12px;}
@@ -95,9 +98,8 @@ textarea.fi{resize:vertical;min-height:72px;}
 .settings-bar input[type=number]{width:60px;padding:5px 8px;font-size:13px;border:1px solid var(--b2);border-radius:6px;background:var(--card);color:var(--t1);}
 .btn-sm-act{padding:6px 14px;font-size:12px;font-weight:600;border:none;border-radius:6px;background:var(--blue);color:#fff;cursor:pointer;}
 
-/* DRIVER GRID — cartes empilées pleine largeur */
-.driver-grid{display:flex;flex-direction:column;gap:12px;width:100%;}
-.driver-grid > .dcard{width:100%;}
+/* DRIVER GRID */
+.driver-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;}
 .dcard{background:var(--card);border:1px solid var(--b1);border-radius:14px;padding:15px 17px;}
 .dcard.c-alert{border-color:rgba(163,45,45,0.5);background:var(--rlt);}
 .dcard.c-transit{border-color:rgba(186,117,23,0.4);}
@@ -254,7 +256,11 @@ textarea.fi{resize:vertical;min-height:72px;}
   </div>
 
   <div id="alerts-zone" class="alerts"></div>
+</div>
 
+<!-- v1.08 : section Missions actives pleine largeur -->
+<div class="page-full">
+  <div class="missions-title">🗂 Missions actives</div>
   <div id="driver-grid" class="driver-grid">
     <div class="empty"><p>Aucun chauffeur actif.<br><span style="font-size:12px;">Le dashboard se met à jour automatiquement.</span></p></div>
   </div>
@@ -368,7 +374,31 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.02 (release: 22 avril 2026) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.07 (release: 23 avril 2026) — © Kalsj121</div>
+
+<!-- ============================================================ ATTACHMENTS MODAL -->
+<div id="att-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9998;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#fff;border-radius:14px;max-width:960px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:15px;font-weight:700;" id="att-title">Pièces jointes</div>
+        <div style="font-size:12px;color:var(--t2);margin-top:2px;" id="att-sub">—</div>
+      </div>
+      <button onclick="closeAttachmentsModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--t2);line-height:1;">✕</button>
+    </div>
+    <div id="att-body" style="flex:1;overflow-y:auto;padding:16px 20px;"></div>
+    <div style="padding:10px 20px;border-top:1px solid var(--b1);display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn bo bsm" onclick="downloadAllAttachments()" id="att-dl-all">📥 Tout télécharger</button>
+      <button class="btn bo bsm" onclick="closeAttachmentsModal()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ IMAGE VIEWER -->
+<div id="img-viewer" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center;padding:20px;flex-direction:column;gap:12px;" onclick="if(event.target.id==='img-viewer')closeImageViewer()">
+  <img id="img-viewer-src" src="" style="max-width:95%;max-height:85vh;object-fit:contain;border-radius:8px;"/>
+  <button onclick="closeImageViewer()" style="padding:8px 18px;font-size:14px;font-weight:600;border:none;border-radius:99px;background:#fff;color:#333;cursor:pointer;">Fermer</button>
+</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -633,8 +663,12 @@ async function renderActiveDriversTable() {
   container.innerHTML = '<table class="reg-table"><thead><tr><th>Chauffeur</th><th>Tracteur</th><th>Remorque</th><th>Dernière activité</th><th>Statut mission</th><th></th></tr></thead><tbody>'
     + all.map(d => {
       const driver      = drivers.find(dr => dr.driver_name === d.fullname);
-      // Pause = vrai si la mission l'indique OU si active_drivers.is_paused est true (pause entre missions)
-      const rowPaused   = d.is_paused === true;
+      // v1.08 : détection renforcée — on capte aussi une pause ouverte dans day_pauses
+      const ongoingDayPause = Array.isArray(d.day_pauses) && d.day_pauses.length
+        && d.day_pauses[d.day_pauses.length-1]
+        && !d.day_pauses[d.day_pauses.length-1].tEnd
+        && !d.day_pauses[d.day_pauses.length-1].tend;
+      const rowPaused   = d.is_paused === true || ongoingDayPause;
       const isPaused    = (driver?.isPaused === true) || rowPaused;
       // Si le chauffeur est entre deux missions (plus de mission active mais toujours connecté)
       const betweenMiss = !driver && !rowPaused;
@@ -650,27 +684,37 @@ async function renderActiveDriversTable() {
       const plateRem    = d.plate_remorque || driver?.plate_remorque || '—';
       const uname       = d.username || d.fullname || '';
       const dateStr     = new Date().toLocaleDateString('fr-BE');
-      // Pause visible : fond jaune franc sur toute la ligne
-      const rowStyle    = isPaused ? 'background:#FFF4B8;' : '';
-      // Durée de pause (live)
+      // v1.08 : pause ultra-visible → fond jaune vif + bordure gauche orange
+      const rowStyle    = isPaused
+        ? 'background:#FFE98A;box-shadow:inset 4px 0 0 #E8A500;'
+        : '';
+      // Infos pause (durée live) — multi-source : active_drivers.pause_start, mission.ts_pause_start ou dernière entrée ouverte de day_pauses
       let pauseMins = null;
-      if (rowPaused && d.pause_start) {
-        pauseMins = Math.floor((now - new Date(d.pause_start).getTime())/60000);
+      let pauseStartTs = null;
+      if (d.pause_start) {
+        pauseStartTs = new Date(d.pause_start).getTime();
       } else if (driver?.isPaused && driver?.ts_pause_start) {
-        pauseMins = Math.floor((now - new Date(driver.ts_pause_start).getTime())/60000);
+        pauseStartTs = new Date(driver.ts_pause_start).getTime();
+      } else if (ongoingDayPause) {
+        const lastP = d.day_pauses[d.day_pauses.length-1];
+        const ts = lastP.tStart || lastP.tstart;
+        if (ts) pauseStartTs = (typeof ts === 'number') ? ts : new Date(ts).getTime();
       }
-      // Statut mission : pilule jaune très visible quand en pause
+      if (pauseStartTs) pauseMins = Math.floor((now - pauseStartTs)/60000);
+      // v1.08 : statut mission — badge "En pause" très visible + durée en clair
       let statusCell;
       if (isPaused) {
-        const durStr = pauseMins!=null
-          ? (pauseMins<60 ? pauseMins+' min' : Math.floor(pauseMins/60)+'h'+String(pauseMins%60).padStart(2,'0'))
-          : '—';
-        statusCell = '<span style="background:#FFD24D;color:#6A4400;font-weight:700;padding:3px 10px;border-radius:99px;font-size:12px;display:inline-block;">⏸ En pause — ' + durStr + '</span>';
+        const durStr = pauseMins!=null ? (pauseMins<60 ? pauseMins+' min' : Math.floor(pauseMins/60)+'h'+String(pauseMins%60).padStart(2,'0')) : '—';
+        statusCell = '<span style="display:inline-block;background:#FFD24D;color:#4A2E00;font-weight:800;padding:4px 12px;border-radius:99px;font-size:12px;border:1.5px solid #E8A500;text-transform:uppercase;letter-spacing:.03em;">⏸ En pause</span><span style="margin-left:8px;font-weight:700;color:#7a4a00;font-variant-numeric:tabular-nums;">' + durStr + '</span>';
       } else {
         statusCell = rawLabel + (loc?' — '+loc:'');
       }
+      // v1.08 : pastille jaune à côté du nom pour identification immédiate
+      const namePauseTag = isPaused
+        ? ' <span style="display:inline-block;background:#FFD24D;color:#4A2E00;font-weight:800;padding:1px 7px;border-radius:99px;font-size:10px;border:1px solid #E8A500;margin-left:4px;vertical-align:middle;">⏸ PAUSE</span>'
+        : '';
       return `<tr style="${rowStyle}">
-        <td><span class="${isOnline?'online-dot':''}"></span><strong>${d.fullname||d.username||'—'}</strong></td>
+        <td><span class="${isOnline?'online-dot':''}"></span><strong>${d.fullname||d.username||'—'}</strong>${namePauseTag}</td>
         <td>${d.plate||'—'}</td>
         <td>${plateRem}</td>
         <td>${lastSeen}${minsAgo!==null?' (il y a '+minsAgo+' min)':''}</td>
@@ -993,31 +1037,217 @@ async function loadArchiveList() {
   }
 }
 
+// v1.07 : renderArchiveTable regroupe par (chauffeur, date) et expose les pièces jointes
+window._archiveGroups = window._archiveGroups || {};
 function renderArchiveTable(container, missions) {
-  container.innerHTML = '<table class="reg-table"><thead><tr><th>Date</th><th>Chauffeur</th><th>🚛 Tracteur</th><th>🔗 Remorque</th><th>Stops</th><th>Durée journée</th><th>Actions</th></tr></thead><tbody>'
-    + missions.map(m => {
-      const startMs = m.dayStartTs || (m.daystartts ? new Date(m.daystartts).getTime() : null);
-      const endMs   = m.dayEndTs   || (m.dayendts   ? new Date(m.dayendts).getTime()   : null);
+  // Grouper les missions par (driver, date)
+  const groups = {};
+  missions.forEach(m => {
+    const key = (m.driver || '—') + '||' + (m.date || '—');
+    if (!groups[key]) groups[key] = { driver: m.driver||'—', date: m.date||'—', missions: [] };
+    groups[key].missions.push(m);
+  });
+  // Trier : date décroissante puis chauffeur
+  const arr = Object.keys(groups).map(k => groups[k]).sort((a,b) => {
+    // "DD/MM/YYYY" → trier en inversant
+    const toIso = s => { const p = (s||'').split('/'); return p.length===3 ? p[2]+p[1]+p[0] : s; };
+    return (toIso(b.date)+b.driver).localeCompare(toIso(a.date)+a.driver);
+  });
+
+  // Cache pour openAttachments (évite de re-passer tous les missions dans onclick)
+  window._archiveGroups = {};
+  arr.forEach(g => {
+    const gid = g.driver.replace(/[^a-zA-Z0-9]/g,'_') + '_' + g.date.replace(/[^a-zA-Z0-9]/g,'_');
+    g._gid = gid;
+    window._archiveGroups[gid] = g;
+  });
+
+  container.innerHTML = '<table class="reg-table"><thead><tr><th>Date</th><th>Chauffeur</th><th>Missions</th><th>Tracteur(s)</th><th>Remorque(s)</th><th>Stops</th><th>Durée journée</th><th>📎</th><th>Actions</th></tr></thead><tbody>'
+    + arr.map(g => {
+      // Calcul journée : min(daystartts) → max(dayendts)
+      const toMs = v => !v ? null : (typeof v === 'number' ? v : new Date(v).getTime());
+      const startMs = g.missions.reduce((a,m) => { const v = toMs(m.daystartts || m.dayStartTs); return (v && (!a || v < a)) ? v : a; }, null);
+      const endMs   = g.missions.reduce((a,m) => { const v = toMs(m.dayendts   || m.dayEndTs);   return (v && (!a || v > a)) ? v : a; }, null);
       const dur = (startMs && endMs) ? Math.round((endMs - startMs) / 60000) + ' min' : '—';
-      const stops = (m.stops||[]).length;
-      // Colonne remorque : plusieurs fallbacks pour compat avec anciens enregistrements
-      const plateRem = m.plate_remorque || m.plateRemorque || '—';
-      const plateTra = m.plate || m.plateTracteur || '—';
-      const drv = (m.driver || '').replace(/'/g,"\\'");
-      const dt  = (m.date || '').replace(/'/g,"\\'");
+      const totalStops = g.missions.reduce((a,m) => a + (m.stops||[]).length, 0);
+      // Dedup pièces jointes par stop.id (ou par cmrData hash court)
+      const seen = new Set();
+      let attCount = 0;
+      g.missions.forEach(m => (m.stops||[]).forEach(s => {
+        if (!s.cmrData) return;
+        const key = s.id || (s.cmrData.substring(0, 80) + '|' + (s.location||'') + '|' + (s.tDoc||''));
+        if (seen.has(key)) return;
+        seen.add(key);
+        attCount++;
+      }));
+      const tracteurs = [...new Set(g.missions.map(m => m.plate || m.plateTracteur || '').filter(Boolean))].join(', ') || '—';
+      // v1.08 : colonne Remorque(s) — toutes les plaques remorque distinctes de la journée
+      const remorques = [...new Set(g.missions.map(m => m.plate_remorque || m.plateRemorque || '').filter(Boolean))].join(', ') || '—';
+      const drv = g.driver.replace(/'/g,"\\'");
+      const dt  = g.date.replace(/'/g,"\\'");
+      const attBtn = attCount > 0
+        ? `<button onclick="openAttachmentsViewer('${g._gid}')" style="padding:4px 10px;font-size:11px;font-weight:700;border:1px solid var(--b2);border-radius:6px;background:var(--blt);color:var(--bdk);cursor:pointer;" title="Consulter les pièces jointes">📎 ${attCount}</button>`
+        : `<span style="color:var(--t3);font-size:11px;">—</span>`;
       return `<tr>
-        <td>${m.date||'—'}</td>
-        <td><strong>${m.driver||'—'}</strong></td>
-        <td><code style="font-size:12px;">${plateTra}</code></td>
-        <td><code style="font-size:12px;">${plateRem}</code></td>
-        <td>${stops}</td>
+        <td>${g.date}</td>
+        <td><strong>${g.driver}</strong></td>
+        <td>${g.missions.length}</td>
+        <td style="font-size:12px;">${tracteurs}</td>
+        <td style="font-size:12px;">${remorques}</td>
+        <td>${totalStops}</td>
         <td>${dur}</td>
+        <td>${attBtn}</td>
         <td style="white-space:nowrap;">
           <button onclick="openFeuilleDeRoute('${drv}','${dt}')" style="padding:4px 8px;font-size:11px;font-weight:600;border:1px solid var(--b2);border-radius:6px;background:none;color:var(--blue);cursor:pointer;margin-right:4px;" title="Générer la feuille de route PDF">📄 Feuille de route</button>
-          <button class="del-btn" onclick="deleteArchiveMission(${m.id})" title="Supprimer">✕</button>
+          <button class="del-btn" onclick="deleteArchiveGroup('${g._gid}')" title="Supprimer toutes les missions de ce chauffeur à cette date">✕</button>
         </td>
       </tr>`;
     }).join('') + '</tbody></table>';
+}
+
+// v1.07 : suppression d'un groupe (toutes les missions du chauffeur pour la date)
+async function deleteArchiveGroup(gid) {
+  const g = window._archiveGroups?.[gid];
+  if (!g) return;
+  if (!confirm('Supprimer les ' + g.missions.length + ' mission(s) de ' + g.driver + ' du ' + g.date + ' ?\nCette action est irréversible.')) return;
+  if (!window.supabaseClient) return;
+  try {
+    for (const m of g.missions) {
+      await window.supabaseClient.from('missions_archive').delete().eq('id', m.id);
+      await window.supabaseClient.from('missions').delete().eq('id', m.id);
+    }
+    showToast('Missions supprimées ✓');
+    loadArchiveList();
+  } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+// v1.07 : Viewer des pièces jointes par groupe (chauffeur, date)
+function openAttachmentsViewer(gid) {
+  const g = window._archiveGroups?.[gid];
+  if (!g) return;
+  // Collecter et dédupliquer les stops avec pièces jointes
+  const seen = new Set();
+  const attachments = [];
+  g.missions.forEach((m, mi) => {
+    (m.stops||[]).forEach((s, si) => {
+      if (!s.cmrData) return;
+      const key = s.id || (s.cmrData.substring(0, 80) + '|' + (s.location||'') + '|' + (s.tDoc||''));
+      if (seen.has(key)) return;
+      seen.add(key);
+      attachments.push({ mi, si, stop: s, missionId: m.id });
+    });
+  });
+  window._currentAttachments = { gid, attachments };
+
+  document.getElementById('att-title').textContent = '📎 Pièces jointes — ' + g.driver;
+  document.getElementById('att-sub').textContent = g.date + ' · ' + attachments.length + ' document(s)';
+
+  const body = document.getElementById('att-body');
+  if (!attachments.length) {
+    body.innerHTML = '<div class="empty"><p>Aucune pièce jointe pour ce chauffeur à cette date.</p></div>';
+  } else {
+    body.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">' +
+      attachments.map((a, idx) => {
+        const s = a.stop;
+        const tsStr = s.tDoc
+          ? new Date(typeof s.tDoc==='number'?s.tDoc:s.tDoc).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'})
+          : '—';
+        const loc = s.location || '—';
+        const op  = s.operation || '';
+        return `<div style="border:1px solid var(--b1);border-radius:10px;overflow:hidden;background:var(--bg);">
+          <img src="${s.cmrData}" onclick="openImageViewer('${idx}')" style="width:100%;height:180px;object-fit:cover;cursor:pointer;display:block;background:#fff;"/>
+          <div style="padding:8px 10px;">
+            <div style="font-size:12px;font-weight:700;">${loc}</div>
+            <div style="font-size:11px;color:var(--t2);">${op}${op?' · ':''}CMR ${tsStr}</div>
+            <div style="display:flex;gap:4px;margin-top:6px;">
+              <button onclick="downloadAttachment(${idx})" style="flex:1;padding:4px 6px;font-size:11px;font-weight:600;border:1px solid var(--b2);border-radius:6px;background:none;color:var(--blue);cursor:pointer;">📥 Télécharger</button>
+              <button onclick="deleteAttachment(${idx})" style="padding:4px 8px;font-size:11px;font-weight:600;border:1px solid rgba(163,45,45,0.4);border-radius:6px;background:none;color:var(--red);cursor:pointer;">🗑</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('') + '</div>';
+  }
+  document.getElementById('att-modal').style.display = 'flex';
+}
+
+function closeAttachmentsModal() {
+  document.getElementById('att-modal').style.display = 'none';
+  window._currentAttachments = null;
+}
+
+function openImageViewer(idx) {
+  const cur = window._currentAttachments;
+  if (!cur) return;
+  const a = cur.attachments[parseInt(idx)];
+  if (!a) return;
+  document.getElementById('img-viewer-src').src = a.stop.cmrData;
+  document.getElementById('img-viewer').style.display = 'flex';
+}
+
+function closeImageViewer() {
+  document.getElementById('img-viewer').style.display = 'none';
+  document.getElementById('img-viewer-src').src = '';
+}
+
+function downloadAttachment(idx) {
+  const cur = window._currentAttachments;
+  if (!cur) return;
+  const a = cur.attachments[parseInt(idx)];
+  if (!a) return;
+  const s = a.stop;
+  const g = window._archiveGroups?.[cur.gid];
+  const safeName = (g?.driver || 'chauffeur').replace(/[^a-zA-Z0-9]/g,'_');
+  const safeDate = (g?.date || '').replace(/\//g,'-');
+  const safeLoc  = (s.location || 'stop').replace(/[^a-zA-Z0-9]/g,'_');
+  // data URL : extraire type et base64
+  const m = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(s.cmrData || '');
+  if (!m) { showToast('Format d\'image invalide.'); return; }
+  const ext = (m[1].split('/')[1] || 'png').split('+')[0];
+  const filename = 'CMR_' + safeName + '_' + safeDate + '_' + safeLoc + '.' + ext;
+  const a_el = document.createElement('a');
+  a_el.href = s.cmrData;
+  a_el.download = filename;
+  document.body.appendChild(a_el);
+  a_el.click();
+  document.body.removeChild(a_el);
+}
+
+function downloadAllAttachments() {
+  const cur = window._currentAttachments;
+  if (!cur || !cur.attachments.length) { showToast('Aucune pièce jointe.'); return; }
+  cur.attachments.forEach((a, i) => setTimeout(() => downloadAttachment(i), i * 200));
+  showToast(cur.attachments.length + ' téléchargement(s) lancé(s)');
+}
+
+async function deleteAttachment(idx) {
+  const cur = window._currentAttachments;
+  if (!cur) return;
+  const a = cur.attachments[parseInt(idx)];
+  if (!a) return;
+  if (!confirm('Supprimer cette pièce jointe ?')) return;
+  const gid = cur.gid;
+  const g = window._archiveGroups?.[gid];
+  if (!g || !window.supabaseClient) return;
+  // Trouver la mission et le stop correspondant, nettoyer cmrData
+  const mission = g.missions.find(m => m.id === a.missionId);
+  if (!mission) return;
+  const newStops = (mission.stops || []).map(s => {
+    const key = s.id || ((s.cmrData||'').substring(0, 80) + '|' + (s.location||'') + '|' + (s.tDoc||''));
+    const targetKey = a.stop.id || ((a.stop.cmrData||'').substring(0, 80) + '|' + (a.stop.location||'') + '|' + (a.stop.tDoc||''));
+    if (key === targetKey) { const copy = {...s}; delete copy.cmrData; return copy; }
+    return s;
+  });
+  mission.stops = newStops;
+  try {
+    // Update archive table
+    await window.supabaseClient.from('missions_archive').update({ stops: newStops }).eq('id', mission.id);
+    // Aussi update missions active (au cas où)
+    await window.supabaseClient.from('missions').update({ stops: newStops }).eq('id', mission.id);
+    showToast('Pièce jointe supprimée ✓');
+    // Refresh viewer + tableau
+    openAttachmentsViewer(gid);
+    loadArchiveList();
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 
 // ============================================================
