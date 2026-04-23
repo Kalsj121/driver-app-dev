@@ -1403,16 +1403,30 @@ async function createAccount() {
   if (!name || !login || !pass) { showToast('Tous les champs sont requis.'); return; }
   if (!window.supabaseClient) { showToast('Supabase non disponible.'); return; }
 
+  // v1.09e : retry-drop si la colonne pdf_allowed n'existe pas (schéma ancien)
   const newAcc = { username: login, fullname: name, password: pass, pdf_allowed: false };
   try {
-    const { error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' });
-    if (error) { showToast('Erreur : ' + error.message); return; }
+    let { error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' });
+    if (error && /pdf_allowed/i.test(error.message || '')) {
+      console.warn('[createAccount] colonne pdf_allowed manquante, retry sans');
+      delete newAcc.pdf_allowed;
+      const r = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' });
+      error = r.error;
+    }
+    if (error) {
+      console.error('[createAccount] erreur:', error);
+      showToast('Erreur création compte : ' + error.message);
+      return;
+    }
     document.getElementById('acc-name').value = '';
     document.getElementById('acc-login').value = '';
     document.getElementById('acc-pass').value = '';
     showToast('Compte créé pour ' + name + ' ✓');
     loadAccounts();
-  } catch(e) { showToast('Erreur création compte.'); }
+  } catch(e) {
+    console.error('[createAccount] exception:', e);
+    showToast('Erreur création compte : ' + e.message);
+  }
 }
 
 async function togglePdfPermission(username, newVal) {
