@@ -472,7 +472,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.04 (release: 22 avril 2026) — © Kalsj121</div>
+<div class="version-footer">Version 1.05 (release: 23 avril 2026) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -601,6 +601,7 @@ let ticker   = null;
 let dayStart = null;
 let dayPauses = []; // [{tStart, tEnd, minPause}]
 let pauseActive = false;
+let lastMissionIdOfDay = null; // v1.05 : pour rattacher les pauses entre-missions si endDay sans nouvelle mission
 
 async function initMissions() {
   if (window.missionsFromSupabase && window.missionsFromSupabase.length > 0) {
@@ -773,7 +774,10 @@ function startDay() {
     plate_remorque: plateRemorque,
     date: todayStr(), dayStartTs: dayStart,
     tDispatchNotified: null, tDispatchReceived: null, minDispatch: null,
-    stops: [], completed: false, _cmr: null
+    stops: [], completed: false, _cmr: null,
+    // v1.05 : reporter les pauses déjà prises dans la journée (ex. pause entre missions)
+    // pour qu'elles soient conservées et apparaissent dans la feuille de route.
+    pauses: Array.isArray(dayPauses) ? [...dayPauses] : []
   };
   curStop = null;
 
@@ -851,7 +855,7 @@ async function doDriverLogout() {
     const username = currentDriver?.username;
     if (username) await removeActiveDriver(username);
   }
-  currentDriver = null; pauseActive = false; dayPauses = [];
+  currentDriver = null; pauseActive = false; dayPauses = []; lastMissionIdOfDay = null;
   try { localStorage.removeItem('lca_current_driver'); } catch(e) {}
   show('ph-mission', false); show('ph0', true);
   show('pause-section', false); show('pause-active-panel', false); show('end-day-section', false);
@@ -894,7 +898,7 @@ function startPause() {
   if (active) {
     active.isPaused = true;
     active.tPauseStart = tStart;
-    // v1.04 : persister les pauses de la journée (pour feuille de route mid-day)
+    // v1.04 : persister les pauses de la journée sur la mission (pour feuille de route mid-day)
     active.pauses = [...dayPauses];
     syncActive();
   }
@@ -903,8 +907,8 @@ function startPause() {
   show('end-day-section', false);
   const btnStart = document.getElementById('btn-start-day');
   if(btnStart) btnStart.disabled = true;
-  // Notifier le bureau en temps réel
-  updateActiveDriverState({ is_paused: true, pause_start: tStart });
+  // v1.05 : persister dayPauses sur active_drivers pour couvrir les pauses entre missions
+  updateActiveDriverState({ is_paused: true, pause_start: tStart, day_pauses: [...dayPauses] });
   toast('Pause démarrée ⏸');
 }
 
@@ -915,7 +919,7 @@ function endPause() {
   if (active) {
     active.isPaused = false;
     active.tPauseStart = null;
-    // v1.04 : maintenir le tableau pauses à jour sur la mission
+    // v1.04 : maintenir le tableau pauses à jour sur la mission (tEnd + minPause remplis)
     active.pauses = [...dayPauses];
     syncActive();
   }
@@ -927,12 +931,14 @@ function endPause() {
   }
   const btnStart = document.getElementById('btn-start-day');
   if(btnStart) btnStart.disabled = false;
-  updateActiveDriverState({ is_paused: false, pause_start: null });
+  // v1.05 : tableau dayPauses à jour sur active_drivers (pauses hors mission)
+  updateActiveDriverState({ is_paused: false, pause_start: null, day_pauses: [...dayPauses] });
   toast('Pause terminée ✓ — ' + (p?.minPause||0) + ' min');
 }
 
 // Met à jour active_drivers (pause/état entre missions) — tolérant aux colonnes manquantes
 // v1.03 : normalise les champs timestamp (epoch → ISO) avant envoi Postgres
+// v1.05 : support de day_pauses (jsonb) + retry-without-column si colonne absente
 async function updateActiveDriverState(fields) {
   if (!window.supabaseClient || !currentDriver?.username) return;
   try {
@@ -944,8 +950,21 @@ async function updateActiveDriverState(fields) {
       }
     });
     const payload = { lastseen: new Date().toISOString(), ...norm };
-    await window.supabaseClient.from('active_drivers')
+    // Retry-without-column si la migration v1.05 (day_pauses) n'est pas encore appliquée
+    const OPTIONAL_COLS = ['day_pauses','is_paused','pause_start','between_missions'];
+    let { error } = await window.supabaseClient.from('active_drivers')
       .update(payload).eq('username', currentDriver.username);
+    let safety = 6;
+    while (error && safety-- > 0) {
+      const msg = error.message || '';
+      const dropped = OPTIONAL_COLS.find(c => c in payload && (msg.includes(c) || new RegExp('column.+'+c+'|'+c+'.+column','i').test(msg)));
+      if (!dropped) break;
+      console.warn('[ActiveDriver] Colonne manquante, retry sans :', dropped);
+      delete payload[dropped];
+      const retry = await window.supabaseClient.from('active_drivers')
+        .update(payload).eq('username', currentDriver.username);
+      error = retry.error;
+    }
   } catch(e) { /* colonne manquante : silencieux */ }
 }
 
@@ -1113,11 +1132,23 @@ function endDay() {
   if (active) {
     active.dayEndTs = Date.now(); active.completed = true;
     active.pauses = [...dayPauses];
+    lastMissionIdOfDay = active.id;
     missions.push(JSON.parse(JSON.stringify(active)));
     save();
     saveMissionToSupabase(active).catch(e => console.warn('Save failed:', e));
     finishedMission = active;
     archiveMissionData(finishedMission);
+  } else if (lastMissionIdOfDay && dayPauses.length > 0 && window.supabaseClient) {
+    // v1.05 : chauffeur a fini son dernier stop, pris une pause entre-missions,
+    // puis a cloturé sa journée sans redémarrer. On rattache les pauses au dernier
+    // archive du jour pour qu'elles apparaissent dans la feuille de route.
+    const finalPauses = [...dayPauses];
+    (async () => {
+      try {
+        await window.supabaseClient.from('missions_archive').update({ pauses: finalPauses }).eq('id', String(lastMissionIdOfDay));
+        await window.supabaseClient.from('missions').update({ pauses: finalPauses }).eq('id', String(lastMissionIdOfDay));
+      } catch(e) { console.warn('[EndDay] Rattachement des pauses échoué :', e.message); }
+    })();
   }
   const finishedUsername = currentDriver?.username || finishedMission?.driver;
 
@@ -1135,7 +1166,7 @@ function endDay() {
   if (btnStart) { btnStart.textContent = '▶ Démarrer ma journée'; btnStart.disabled = false; }
   toast('Journée clôturée et enregistrée ✓');
   // Reset pause state
-  pauseActive = false; dayPauses = [];
+  pauseActive = false; dayPauses = []; lastMissionIdOfDay = null;
   show('pause-section', false); show('pause-active-panel', false);
   show('end-day-section', false);
 
@@ -1176,7 +1207,6 @@ async function archiveMissionData(mission) {
       const retry = await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
       error = retry.error;
     }
-    if (error) { console.warn('[Archive] Failed:', error.message); return; }
     console.log('[Archive] Mission archived successfully');
   } catch(e) { console.warn('[Archive] Failed:', e.message); }
 }
@@ -1184,6 +1214,7 @@ async function archiveMissionData(mission) {
 function endMissionNewOne() {
   active.dayEndTs = Date.now(); active.completed = true;
   active.pauses = [...dayPauses];
+  lastMissionIdOfDay = active.id; // v1.05 : mémoriser pour rattachement post-fin des pauses entre missions
   missions.push(JSON.parse(JSON.stringify(active)));
   save();
   saveMissionToSupabase(active).catch(e => console.warn('Save failed:', e));
@@ -1281,7 +1312,10 @@ function handleCMR(e, source) {
     document.getElementById('cmr-opt-'+source).classList.add('ok');
     document.getElementById('cmr-gallery-note').style.display='none';
     const prev = document.getElementById('cmr-prev');
-    prev.innerHTML='<img src="'+ev.target.result+'"/>'; prev.style.display='';
+    // v1.05 : bouton "Supprimer la photo" accessible au chauffeur en cas d'erreur
+    prev.innerHTML='<img src="'+ev.target.result+'"/>'+
+      '<button type="button" onclick="clearCMRPhoto()" style="margin-top:8px;padding:6px 12px;font-size:12px;font-weight:600;border:1px solid rgba(163,45,45,0.4);border-radius:6px;background:none;color:var(--red);cursor:pointer;">🗑 Supprimer la photo</button>';
+    prev.style.display='';
     // Mettre en évidence la section cargo
     const cargoSection = document.querySelector('#btn-loose')?.closest('.fg');
     if (cargoSection) {
@@ -1302,8 +1336,18 @@ function resetCMR() {
   if(active){ active._cmr=null; active._cmrSource=null; }
   document.getElementById('cmr-opt-camera').classList.remove('ok');
   document.getElementById('cmr-opt-gallery').classList.remove('ok');
-  document.getElementById('cmr-prev').style.display='none';
+  const prev = document.getElementById('cmr-prev'); if (prev) { prev.innerHTML=''; prev.style.display='none'; }
   document.getElementById('cmr-gallery-note').style.display='none';
+  // Remettre à zéro les inputs file pour que le chauffeur puisse re-sélectionner la même image
+  const fc = document.getElementById('cmr-file-camera');  if (fc) fc.value = '';
+  const fg = document.getElementById('cmr-file-gallery'); if (fg) fg.value = '';
+}
+
+// v1.05 : suppression manuelle de la photo CMR avant confirmation du stop
+function clearCMRPhoto() {
+  if (!confirm('Supprimer la photo du CMR ? Vous pourrez en prendre une nouvelle.')) return;
+  resetCMR();
+  toast('Photo supprimée — vous pouvez en joindre une nouvelle.');
 }
 
 // ============================================================
