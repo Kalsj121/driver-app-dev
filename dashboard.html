@@ -95,8 +95,9 @@ textarea.fi{resize:vertical;min-height:72px;}
 .settings-bar input[type=number]{width:60px;padding:5px 8px;font-size:13px;border:1px solid var(--b2);border-radius:6px;background:var(--card);color:var(--t1);}
 .btn-sm-act{padding:6px 14px;font-size:12px;font-weight:600;border:none;border-radius:6px;background:var(--blue);color:#fff;cursor:pointer;}
 
-/* DRIVER GRID */
-.driver-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;}
+/* DRIVER GRID — v1.06 : cadres pleine largeur, empilés verticalement */
+.driver-grid{display:flex;flex-direction:column;gap:12px;width:100%;}
+.driver-grid .dcard{width:100%;box-sizing:border-box;}
 .dcard{background:var(--card);border:1px solid var(--b1);border-radius:14px;padding:15px 17px;}
 .dcard.c-alert{border-color:rgba(163,45,45,0.5);background:var(--rlt);}
 .dcard.c-transit{border-color:rgba(186,117,23,0.4);}
@@ -367,7 +368,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.05 (release: 23 avril 2026) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.06 (release: 23 avril 2026) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -459,11 +460,10 @@ function switchView(v) {
 // CONSTANTS
 // ============================================================
 const LCA_SITES = ['LCA Nord','LCA Selys'];
+// v1.05 : "En pause" retiré des STEP_LABELS — l'info pause reste dans la table "Chauffeurs connectés"
 const STEP_LABELS = ['En attente d\'instructions','Attente quai','Quai attribué','À quai','En opération','Opération terminée','CMR reçu','En transit'];
 
 function getStepLabel(d) {
-  // v1.05 : "En pause" n'est plus affiché sur les cartes de missions actives
-  //         (seulement sur la table "Chauffeurs connectés")
   if (d.awaitingNotify) return 'En attente de notification de disponibilité';
   if (d.instructionsReceived && !d.ts_arrival) return 'En route vers sa destination';
   if (d.betweenMissions) return 'Disponible — entre missions';
@@ -487,16 +487,16 @@ function missionToDriverStatus(mission) {
     if (!stops[i].tDepart) { curStop = stops[i]; break; }
   }
 
-  // v1.05 : on n'affiche plus "En pause" sur les cartes de missions actives.
-  //         Le flag isPaused est cependant propagé sur le payload pour que la
-  //         table "Chauffeurs connectés" puisse s'appuyer dessus en fallback.
-  const paused      = mission.isPaused === true;
-  const pauseStart  = mission.tPauseStart ? new Date(mission.tPauseStart).toISOString() : null;
+  // v1.05 : isPaused n'est plus un early-exit — on le garde comme flag mais on laisse le step normal
+  const dayStartMs = mission.dayStartTs ? (typeof mission.dayStartTs === 'number' ? mission.dayStartTs : new Date(mission.dayStartTs).getTime()) : null;
+  const tsDayStart = dayStartMs ? new Date(dayStartMs).toISOString() : null;
+  const tsPauseStart = mission.tPauseStart ? new Date(mission.tPauseStart).toISOString() : null;
+  const pausedFlag = mission.isPaused === true;
 
   // Step 0: "En attente d'instructions" — seulement APRÈS que le chauffeur a notifié le bureau
   if (!curStop && stops.length === 0 && mission.tDispatchNotified && !mission.tDispatchReceived) {
     const now = Date.now();
-    const minJourney = mission.dayStartTs ? Math.floor((now - new Date(mission.dayStartTs).getTime()) / 60000) : null;
+    const minJourney = dayStartMs ? Math.floor((now - dayStartMs) / 60000) : null;
     return {
       user_id: mission.id, driver_name: mission.driver,
       plate: mission.plateTracteur||mission.plate||'', plate_remorque: mission.plateRemorque||mission.plate_remorque||'',
@@ -504,17 +504,17 @@ function missionToDriverStatus(mission) {
       dock: '', ts_arrival: null, ts_dock_assigned: null, ts_dock_ready: null,
       ts_ops_start: null, ts_ops_end: null,
       ts_dispatch_notified: new Date(mission.tDispatchNotified).toISOString(),
+      ts_day_start: tsDayStart,
+      isPaused: pausedFlag, ts_pause_start: tsPauseStart,
       min_wait: null, min_dock: null, min_ops: null, min_journey: minJourney,
-      isPaused: paused, ts_pause_start: pauseStart,
-      ts_day_start: mission.dayStartTs ? new Date(mission.dayStartTs).toISOString() : null,
       updated_at: mission.updatedat || new Date().toISOString()
     };
   }
 
-  // NOUVEAU : Instructions reçues mais pas encore arrivé au lieu (pas de curStop)
+  // Instructions reçues mais pas encore arrivé au lieu (pas de curStop)
   if (!curStop && stops.length === 0 && mission.tDispatchReceived) {
     const now = Date.now();
-    const minJourney = mission.dayStartTs ? Math.floor((now - new Date(mission.dayStartTs).getTime()) / 60000) : null;
+    const minJourney = dayStartMs ? Math.floor((now - dayStartMs) / 60000) : null;
     return {
       user_id: mission.id, driver_name: mission.driver,
       plate: mission.plateTracteur||mission.plate||'', plate_remorque: mission.plateRemorque||mission.plate_remorque||'',
@@ -523,17 +523,17 @@ function missionToDriverStatus(mission) {
       ts_arrival: null, ts_dock_assigned: null, ts_dock_ready: null,
       ts_ops_start: null, ts_ops_end: null,
       ts_dispatch_received: mission.tDispatchReceived ? new Date(mission.tDispatchReceived).toISOString() : null,
+      ts_day_start: tsDayStart,
+      isPaused: pausedFlag, ts_pause_start: tsPauseStart,
       min_wait: null, min_dock: null, min_ops: null, min_journey: minJourney,
-      isPaused: paused, ts_pause_start: pauseStart,
-      ts_day_start: mission.dayStartTs ? new Date(mission.dayStartTs).toISOString() : null,
       updated_at: mission.updatedat || new Date().toISOString()
     };
   }
 
-  // Journée démarrée mais pas encore notifié → NOUVEAU : afficher explicitement comme "En attente de notification de disponibilité"
+  // Journée démarrée mais pas encore notifié → "En attente de notification de disponibilité"
   if (!curStop && stops.length === 0 && !mission.tDispatchNotified && !mission.tDispatchReceived) {
     const now = Date.now();
-    const minJourney = mission.dayStartTs ? Math.floor((now - new Date(mission.dayStartTs).getTime()) / 60000) : null;
+    const minJourney = dayStartMs ? Math.floor((now - dayStartMs) / 60000) : null;
     return {
       user_id: mission.id, driver_name: mission.driver,
       plate: mission.plateTracteur||mission.plate||'', plate_remorque: mission.plateRemorque||mission.plate_remorque||'',
@@ -541,9 +541,9 @@ function missionToDriverStatus(mission) {
       location: '', operation: '', dock: '',
       ts_arrival: null, ts_dock_assigned: null, ts_dock_ready: null,
       ts_ops_start: null, ts_ops_end: null,
+      ts_day_start: tsDayStart,
+      isPaused: pausedFlag, ts_pause_start: tsPauseStart,
       min_wait: null, min_dock: null, min_ops: null, min_journey: minJourney,
-      isPaused: paused, ts_pause_start: pauseStart,
-      ts_day_start: mission.dayStartTs ? new Date(mission.dayStartTs).toISOString() : null,
       updated_at: mission.updatedat || new Date().toISOString()
     };
   }
@@ -558,10 +558,10 @@ function missionToDriverStatus(mission) {
     else                             step = 6;
   }
   const now = Date.now();
-  const minJourney = mission.dayStartTs ? Math.floor((now - mission.dayStartTs) / 60000) : null;
+  const minJourney = dayStartMs ? Math.floor((now - dayStartMs) / 60000) : null;
   return {
     user_id: mission.id, driver_name: mission.driver,
-    plate: mission.plate || '', plate_remorque: mission.plate_remorque || '',
+    plate: mission.plate || mission.plateTracteur || '', plate_remorque: mission.plate_remorque || mission.plateRemorque || '',
     step, location: curStop ? curStop.location : '', operation: curStop ? (curStop.operation||'') : '',
     dock: curStop ? (curStop.dock||'') : '',
     ts_arrival:       curStop?.tArrival        ? new Date(curStop.tArrival).toISOString()        : null,
@@ -569,14 +569,13 @@ function missionToDriverStatus(mission) {
     ts_dock_ready:    curStop?.tDockReady      ? new Date(curStop.tDockReady).toISOString()      : null,
     ts_ops_start:     curStop?.tOpsStart       ? new Date(curStop.tOpsStart).toISOString()       : null,
     ts_ops_end:       curStop?.tOpsEnd         ? new Date(curStop.tOpsEnd).toISOString()         : null,
-    min_wait: curStop?.minWait??null, min_dock: curStop?.minDock??null, min_ops: curStop?.minOps??null,
-    min_journey: minJourney,
-    isPaused: paused, ts_pause_start: pauseStart,
-    ts_day_start: mission.dayStartTs ? new Date(mission.dayStartTs).toISOString() : null,
+    ts_day_start: tsDayStart,
     ts_dispatch_notified: mission.tDispatchNotified ? new Date(mission.tDispatchNotified).toISOString() : null,
     ts_dispatch_received: mission.tDispatchReceived ? new Date(mission.tDispatchReceived).toISOString() : null,
-    instructionsReceived: !!mission.tDispatchReceived,
-    updated_at: mission.updatedat || new Date(mission.dayStartTs||now).toISOString()
+    isPaused: pausedFlag, ts_pause_start: tsPauseStart,
+    min_wait: curStop?.minWait??null, min_dock: curStop?.minDock??null, min_ops: curStop?.minOps??null,
+    min_journey: minJourney,
+    updated_at: mission.updatedat || new Date(dayStartMs||now).toISOString()
   };
 }
 
@@ -586,7 +585,7 @@ async function fetchDrivers() {
       const allMissions = await window.loadMissionsFromSupabase();
       const todayStr = new Date().toLocaleDateString('fr-BE');
       const activeMissions = allMissions.filter(m => !m.completed && m.date === todayStr);
-      // v1.04 : cache des missions pour reconstruire la vue des pièces jointes à la demande
+      // v1.05 : cache missions actives pour les pièces jointes
       window._missionsCache = activeMissions;
       drivers = activeMissions.map(missionToDriverStatus).filter(d => d !== null);
     }
@@ -624,6 +623,9 @@ async function renderActiveDriversTable() {
 
   // active_drivers est la seule source de vérité pour "qui est connecté".
   const all = [...activeDrivers];
+  // v1.06 : cache pour buildDriverDropdown (messages aux pausés / en attente)
+  window._activeDriverRows = all;
+  buildDriverDropdown();
 
   if (!all.length) {
     container.innerHTML = '<div class="empty"><p style="padding:8px 0;">Aucun chauffeur enregistré aujourd\'hui.</p></div>';
@@ -729,91 +731,6 @@ function dismissCard(userId) {
   showToast("Opération masquée de la vue.");
 }
 
-// ============================================================
-// v1.04 + v1.05 : VISIONNEUSE DE PIÈCES JOINTES (CMR)
-//   - modale avec liste des stops contenant une photo CMR
-//   - bouton 🗑 pour supprimer une pièce jointe (bureau)
-// ============================================================
-function openAttachmentsViewer(missionId) {
-  const mission = (window._missionsCache||[]).find(m => String(m.id) === String(missionId));
-  if (!mission) { showToast('Mission introuvable.'); return; }
-  const stopsWithCmr = (mission.stops || []).map((s, idx) => ({ s, idx })).filter(o => o.s.cmrData);
-  const driverName = mission.driver || 'Chauffeur';
-
-  // Supprimer une ancienne modale si présente
-  const old = document.getElementById('att-viewer-modal');
-  if (old) old.remove();
-
-  const modal = document.createElement('div');
-  modal.id = 'att-viewer-modal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
-  const body = stopsWithCmr.length ? stopsWithCmr.map(o => {
-    const s = o.s;
-    const tArr = s.tArrival ? new Date(s.tArrival).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'}) : '—';
-    const isImage = (s.cmrData || '').startsWith('data:image');
-    return `<div style="border:1px solid var(--b2);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--bg);">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;">
-        <div style="flex:1;">
-          <div style="font-weight:700;font-size:14px;color:var(--t1);">${o.idx+1}. ${s.location||'—'} — ${s.operation||'—'}</div>
-          <div style="font-size:11px;color:var(--t3);">Arrivée ${tArr}${s.dock?' · Quai '+s.dock:''}</div>
-        </div>
-        <div style="display:flex;gap:6px;">
-          <a href="${s.cmrData}" download="CMR_${driverName}_${(s.location||'stop').replace(/\W+/g,'_')}_${o.idx+1}.${isImage?'jpg':'pdf'}" style="padding:5px 10px;font-size:11px;font-weight:600;border:1px solid var(--b2);border-radius:6px;background:none;color:var(--blue);text-decoration:none;">⬇ Télécharger</a>
-          <button onclick="deleteAttachment('${mission.id}', ${o.idx})" style="padding:5px 10px;font-size:11px;font-weight:600;border:1px solid rgba(163,45,45,0.4);border-radius:6px;background:none;color:var(--red);cursor:pointer;" title="Supprimer cette pièce jointe">🗑 Supprimer</button>
-        </div>
-      </div>
-      ${isImage
-        ? `<img src="${s.cmrData}" style="max-width:100%;max-height:420px;border-radius:6px;display:block;margin:0 auto;">`
-        : `<iframe src="${s.cmrData}" style="width:100%;height:420px;border:1px solid var(--b2);border-radius:6px;"></iframe>`}
-    </div>`;
-  }).join('') : '<p style="padding:20px;color:var(--t3);text-align:center;">Aucune pièce jointe pour le moment.</p>';
-
-  modal.innerHTML = `<div style="background:var(--alt);border-radius:12px;max-width:720px;width:100%;max-height:88vh;overflow:auto;padding:20px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-      <h3 style="margin:0;font-size:17px;color:var(--blue);">📎 Pièces jointes — ${driverName}</h3>
-      <button onclick="document.getElementById('att-viewer-modal').remove()" style="padding:4px 12px;font-size:13px;font-weight:600;border:1px solid var(--b2);border-radius:6px;background:none;color:var(--t2);cursor:pointer;">✕ Fermer</button>
-    </div>
-    ${body}
-  </div>`;
-  document.body.appendChild(modal);
-  modal.addEventListener('click', (ev) => { if (ev.target === modal) modal.remove(); });
-}
-
-async function deleteAttachment(missionId, stopIndex) {
-  if (!confirm('Supprimer définitivement cette pièce jointe (CMR) ?\n\nLe chauffeur pourra en scanner une nouvelle si nécessaire.')) return;
-  try {
-    // 1. Charger la mission à jour (active OU archivée)
-    let mission = null, table = 'missions';
-    if (window.supabaseClient) {
-      let { data } = await window.supabaseClient.from('missions').select('*').eq('id', String(missionId));
-      if (data && data[0]) { mission = data[0]; table = 'missions'; }
-      else {
-        const arch = await window.supabaseClient.from('missions_archive').select('*').eq('id', String(missionId));
-        if (arch.data && arch.data[0]) { mission = arch.data[0]; table = 'missions_archive'; }
-      }
-    }
-    if (!mission) { showToast('Mission introuvable.'); return; }
-    const stops = mission.stops || [];
-    if (!stops[stopIndex]) { showToast('Stop introuvable.'); return; }
-    // Effacer la donnée CMR (on garde la structure du stop intacte)
-    delete stops[stopIndex].cmrData;
-    if ('cmrMime' in stops[stopIndex]) delete stops[stopIndex].cmrMime;
-    if ('cmrName' in stops[stopIndex]) delete stops[stopIndex].cmrName;
-    // 2. Sauver
-    const { error } = await window.supabaseClient.from(table).update({ stops }).eq('id', String(missionId));
-    if (error) throw error;
-    showToast('Pièce jointe supprimée ✓');
-    // 3. Rafraîchir les caches / vue
-    await fetchDrivers();
-    const old = document.getElementById('att-viewer-modal'); if (old) old.remove();
-    // Ré-ouvrir avec les données fraîches
-    openAttachmentsViewer(missionId);
-  } catch(e) {
-    console.error('[deleteAttachment]', e);
-    showToast('Erreur : '+(e.message||'échec'));
-  }
-}
-
 function renderDashboard() {
   const thrOther = parseInt(document.getElementById('thr-other').value)||60;
   const thrLCA   = parseInt(document.getElementById('thr-lca').value)||30;
@@ -851,11 +768,12 @@ function buildCard(d, threshold) {
   const now = Date.now();
   const e = ts => ts ? Math.floor((now-new Date(ts).getTime())/60000) : null;
   const dur = min => min==null?'—':min<60?min+' min':Math.floor(min/60)+'h'+String(min%60).padStart(2,'0');
+  // v1.05 : pas de classe pp-pause sur la carte
   const pillMap={[-1]:'pp-idle',0:'pp-idle',1:'pp-wait',2:'pp-wait',3:'pp-wait',4:'pp-ops',5:'pp-ops',6:'pp-doc',7:'pp-transit'};
   const eMap={[-1]:'📡',0:'📋',1:'⏳',2:'🔄',3:'🔄',4:'⚙️',5:'⚙️',6:'📄',7:'🚛'};
   const pillCls = pillMap[step]||'pp-idle';
   const w = e(d.ts_arrival);
-  // v1.05 : plus de classe "c-pause" sur la carte — le statut pause reste visible uniquement dans la table "Chauffeurs connectés"
+  // v1.05 : pas de classe c-pause — la carte garde le style du step en cours
   const cardCls = d.awaitingNotify?'dcard':step===1&&w>=threshold?'dcard c-alert':step===7?'dcard c-transit':(step===4||step===5)?'dcard c-ops':step===6?'dcard c-doc':'dcard';
   const locLine = d.location
     ? `<div class="dc-loc">${step===7?'🚛 ':'📍 '}${d.location}${d.dock?' · Quai '+d.dock:''}</div><div class="dc-sub">${d.operation||''}</div>`
@@ -868,18 +786,21 @@ function buildCard(d, threshold) {
   if(step===7){const srv=d.updated_at?e(d.updated_at):null;boxes.push({l:'Transit',v:dur(srv),cls:'tv-a',id:'ttr-'+d.user_id});}
   if(step===0&&d.ts_dispatch_notified&&!d.instructionsReceived){boxes.push({l:'Attente instr.',v:dur(e(d.ts_dispatch_notified)),cls:'tv-b',id:'tdp-'+d.user_id});}
   if(d.instructionsReceived&&d.ts_dispatch_received){boxes.push({l:'En route',v:dur(e(d.ts_dispatch_received)),cls:'tv-a',id:'trr-'+d.user_id});}
-  // v1.04 : durée totale de la mission (depuis dayStartTs), en temps réel
+  // v1.06 : durée totale de la mission en cours (live)
   if(d.ts_day_start){boxes.push({l:'Durée mission',v:dur(e(d.ts_day_start)),cls:'tv-gr',id:'tdm-'+d.user_id});}
   if(d.min_journey)boxes.push({l:'Journée',v:dur(d.min_journey),cls:'tv-gr'});
   const timerHtml = boxes.length
-    ? '<div class="tgrid">'+boxes.slice(0,3).map(b=>'<div class="tbox"><div class="tb-l">'+b.l+'</div><div class="tb-v '+b.cls+'"'+(b.id?' id="'+b.id+'"':'')+'>'+b.v+'</div></div>').join('')+'</div>'
+    ? '<div class="tgrid">'+boxes.slice(0,4).map(b=>'<div class="tbox"><div class="tb-l">'+b.l+'</div><div class="tb-v '+b.cls+'"'+(b.id?' id="'+b.id+'"':'')+'>'+b.v+'</div></div>').join('')+'</div>'
     : '';
   const updSecs = d.updated_at ? Math.floor((Date.now()-new Date(d.updated_at).getTime())/1000) : null;
-  // v1.04 + v1.05 : bouton 📎 pièces jointes (compact, modèle du bouton ✕)
-  const hasAttachments = (window._missionsCache||[]).some(m => m.id === d.user_id && (m.stops||[]).some(s => s.cmrData));
+
+  // v1.05 : bouton compact 📎 pour ouvrir les pièces jointes (CMR)
+  const mCache = (window._missionsCache || []).find(mm => mm.id === d.user_id);
+  const hasAttachments = !!(mCache && (mCache.stops || []).some(s => s && s.cmrData));
   const attachTitle = hasAttachments ? 'Voir pièces jointes (CMR)' : 'Aucune pièce jointe pour le moment';
   const attachStyleExtra = hasAttachments ? 'color:var(--blue);border-color:rgba(77,169,190,0.4);' : 'color:var(--t3);opacity:0.6;';
   const attachBtn = '<button class="dc-msg-btn" style="flex:0 0 36px;min-width:36px;max-width:36px;margin-top:0;padding:0;font-size:15px;'+attachStyleExtra+'" onclick="openAttachmentsViewer(\''+d.user_id+'\')" title="'+attachTitle+'">📎</button>';
+
   return `<div class="${cardCls}">
     <div class="dc-top">
       <div><div class="dc-name">${d.driver_name}</div><div class="dc-plate">${d.plate?'🚛 '+d.plate:''}${d.plate_remorque?' · 🔗 '+d.plate_remorque:''}</div></div>
@@ -897,6 +818,72 @@ function buildCard(d, threshold) {
 
 function elapsed(ts) { if(!ts) return 0; return Math.floor((Date.now()-new Date(ts).getTime())/60000); }
 
+// ============================================================
+// v1.05 — Pièces jointes (CMR) : visionneuse + suppression
+// ============================================================
+function openAttachmentsViewer(missionId) {
+  const mission = (window._missionsCache || []).find(m => String(m.id) === String(missionId));
+  if (!mission) { showToast('Mission introuvable.'); return; }
+  const stopsWithCMR = (mission.stops || [])
+    .map((s, i) => ({ stop: s, index: i }))
+    .filter(x => x.stop && x.stop.cmrData);
+
+  if (!stopsWithCMR.length) { showToast('Aucune pièce jointe pour le moment.'); return; }
+
+  // Modal overlay
+  let modal = document.getElementById('attachments-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'attachments-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px;';
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    document.body.appendChild(modal);
+  }
+  const driverName = mission.driver || '—';
+  const dateStr    = mission.date   || '—';
+  modal.innerHTML = '<div style="background:var(--card);border-radius:12px;max-width:900px;width:100%;max-height:90vh;overflow:auto;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,0.4);">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;border-bottom:1px solid var(--b1);padding-bottom:12px;">'
+      + '<div><h2 style="font-size:17px;margin-bottom:4px;">📎 Pièces jointes — ' + driverName + '</h2>'
+      + '<div style="font-size:12px;color:var(--t2);">' + dateStr + ' · ' + stopsWithCMR.length + ' photo(s) CMR</div></div>'
+      + '<button onclick="document.getElementById(\'attachments-modal\').remove()" style="padding:6px 12px;background:none;border:1px solid var(--b2);border-radius:6px;cursor:pointer;font-size:13px;">✕ Fermer</button>'
+    + '</div>'
+    + stopsWithCMR.map(x => {
+      const s = x.stop;
+      const loc = s.location || '—';
+      const op  = s.operation || '';
+      return '<div style="margin-bottom:20px;padding:14px;border:1px solid var(--b1);border-radius:10px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+          + '<div><strong>Stop ' + (x.index + 1) + ' — ' + loc + '</strong>'
+          + (op ? '<span style="color:var(--t2);margin-left:8px;font-size:12px;">' + op + '</span>' : '') + '</div>'
+          + '<button onclick="deleteAttachment(\'' + mission.id + '\',' + x.index + ')" style="padding:5px 10px;background:var(--rlt);color:var(--red);border:1px solid rgba(163,45,45,0.35);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">🗑 Supprimer</button>'
+        + '</div>'
+        + '<img src="' + s.cmrData + '" style="width:100%;max-height:500px;object-fit:contain;border-radius:6px;background:#000;"/>'
+      + '</div>';
+    }).join('')
+  + '</div>';
+}
+
+async function deleteAttachment(missionId, stopIndex) {
+  if (!confirm('Supprimer cette pièce jointe (CMR) ?\n\nCette action est irréversible.')) return;
+  const mission = (window._missionsCache || []).find(m => String(m.id) === String(missionId));
+  if (!mission) { showToast('Mission introuvable.'); return; }
+  if (!mission.stops || !mission.stops[stopIndex]) { showToast('Stop introuvable.'); return; }
+  mission.stops[stopIndex].cmrData = null;
+  try {
+    if (window.saveMissionToSupabase) await window.saveMissionToSupabase(mission);
+    showToast('Pièce jointe supprimée ✓');
+    // Refresh viewer + cards
+    fetchDrivers();
+    const modal = document.getElementById('attachments-modal');
+    if (modal) modal.remove();
+    // Ré-ouvrir si d'autres photos restent
+    const remaining = (mission.stops || []).some(s => s && s.cmrData);
+    if (remaining) setTimeout(() => openAttachmentsViewer(missionId), 300);
+  } catch(e) {
+    showToast('Erreur : ' + e.message);
+  }
+}
+
 function liveTick() {
   const now = Date.now();
   const dur = min => min==null?'—':min<60?min+' min':Math.floor(min/60)+'h'+String(min%60).padStart(2,'0');
@@ -912,7 +899,7 @@ function liveTick() {
     if(step===7&&d.updated_at)up('ttr-'+d.user_id,dur(e(d.updated_at)));
     if(step===0&&d.ts_dispatch_notified&&!d.instructionsReceived)up('tdp-'+d.user_id,dur(e(d.ts_dispatch_notified)));
     if(d.instructionsReceived&&d.ts_dispatch_received)up('trr-'+d.user_id,dur(e(d.ts_dispatch_received)));
-    // v1.04 : durée mission (live)
+    // v1.06 : durée totale mission (live)
     if(d.ts_day_start)up('tdm-'+d.user_id,dur(e(d.ts_day_start)));
   });
 }
@@ -958,8 +945,12 @@ async function deleteMessage(msgId) {
 }
 
 function buildDriverDropdown() {
+  // v1.06 : inclure aussi les chauffeurs actifs (active_drivers) pour pouvoir
+  // leur envoyer des messages même quand ils sont en pause ou en attente d'instructions
+  const activeRows = window._activeDriverRows || [];
   const driverNames = [...new Set([
     ...drivers.map(d=>d.driver_name),
+    ...activeRows.map(r=>r.fullname || r.username).filter(Boolean),
     ...messages.filter(m=>m.from==='driver').map(m=>m.fromName)
   ].filter(Boolean))].sort();
   ['msg-to','msg-filter'].forEach(id=>{
@@ -1081,28 +1072,76 @@ async function loadArchiveList() {
 }
 
 function renderArchiveTable(container, missions) {
-  container.innerHTML = '<table class="reg-table"><thead><tr><th>Date</th><th>Chauffeur</th><th>Plaque tracteur</th><th>Plaque remorque</th><th>Stops</th><th>Durée journée</th><th>Actions</th></tr></thead><tbody>'
-    + missions.map(m => {
-      const startMs = m.dayStartTs || (m.daystartts ? new Date(m.daystartts).getTime() : null);
-      const endMs   = m.dayEndTs   || (m.dayendts   ? new Date(m.dayendts).getTime()   : null);
-      const dur = (startMs && endMs) ? Math.round((endMs - startMs) / 60000) + ' min' : '—';
-      const stops = (m.stops||[]).length;
-      const plateRem = m.plate_remorque || '—';
-      const drv = (m.driver || '').replace(/'/g,"\\'");
-      const dt  = (m.date || '').replace(/'/g,"\\'");
+  // v1.06 : regrouper par (chauffeur, date) au lieu d'afficher une ligne par mission
+  // pour éviter les duplications à l'écran et au téléchargement
+  const groups = new Map();
+  (missions || []).forEach(m => {
+    const drv = m.driver || '—';
+    const dt  = m.date   || '—';
+    const key = drv + '||' + dt;
+    let g = groups.get(key);
+    if (!g) { g = { driver: drv, date: dt, missions: [] }; groups.set(key, g); }
+    g.missions.push(m);
+  });
+
+  // Tri : date décroissante (récent → ancien), puis chauffeur
+  const ordered = Array.from(groups.values()).sort((a, b) => {
+    const parse = s => {
+      const p = (s || '').split('/');
+      if (p.length === 3) return new Date(p[2], p[1] - 1, p[0]).getTime();
+      return 0;
+    };
+    const d = parse(b.date) - parse(a.date);
+    if (d !== 0) return d;
+    return (a.driver || '').localeCompare(b.driver || '');
+  });
+
+  if (!ordered.length) {
+    container.innerHTML = '<div class="empty"><p>Aucune archive.</p></div>';
+    return;
+  }
+
+  container.innerHTML = '<table class="reg-table"><thead><tr><th>Date</th><th>Chauffeur</th><th>Tracteur(s)</th><th>Remorque(s)</th><th>Missions</th><th>Stops</th><th>Durée journée</th><th>Actions</th></tr></thead><tbody>'
+    + ordered.map(g => {
+      const stops = g.missions.reduce((a, m) => a + ((m.stops || []).length), 0);
+      // Tracteurs/remorques distincts
+      const tracteurs = [...new Set(g.missions.map(m => m.plate || m.plateTracteur || '').filter(Boolean))].join(', ') || '—';
+      const remorques = [...new Set(g.missions.map(m => m.plate_remorque || m.plateRemorque || '').filter(Boolean))].join(', ') || '—';
+      // Durée journée : du dayStartTs le plus tôt au dayEndTs le plus tard
+      const starts = g.missions.map(m => m.dayStartTs || (m.daystartts ? new Date(m.daystartts).getTime() : null)).filter(Boolean);
+      const ends   = g.missions.map(m => m.dayEndTs   || (m.dayendts   ? new Date(m.dayendts).getTime()   : null)).filter(Boolean);
+      const firstStart = starts.length ? Math.min(...starts) : null;
+      const lastEnd    = ends.length   ? Math.max(...ends)   : null;
+      const dur = (firstStart && lastEnd) ? Math.round((lastEnd - firstStart) / 60000) + ' min' : '—';
+      const drv = (g.driver || '').replace(/'/g, "\\'");
+      const dt  = (g.date   || '').replace(/'/g, "\\'");
       return `<tr>
-        <td>${m.date||'—'}</td>
-        <td>${m.driver||'—'}</td>
-        <td>${m.plate||'—'}</td>
-        <td>${plateRem}</td>
-        <td>${stops}</td>
+        <td>${g.date || '—'}</td>
+        <td><strong>${g.driver || '—'}</strong></td>
+        <td>${tracteurs}</td>
+        <td>${remorques}</td>
+        <td style="text-align:center;">${g.missions.length}</td>
+        <td style="text-align:center;">${stops}</td>
         <td>${dur}</td>
         <td style="white-space:nowrap;">
-          <button onclick="openFeuilleDeRoute('${drv}','${dt}')" style="padding:4px 8px;font-size:11px;font-weight:600;border:1px solid var(--b2);border-radius:6px;background:none;color:var(--blue);cursor:pointer;margin-right:4px;" title="Générer la feuille de route PDF">📄 Feuille de route</button>
-          <button class="del-btn" onclick="deleteArchiveMission(${m.id})" title="Supprimer">✕</button>
+          <button onclick="openFeuilleDeRoute('${drv}','${dt}')" style="padding:4px 8px;font-size:11px;font-weight:600;border:1px solid var(--b2);border-radius:6px;background:none;color:var(--blue);cursor:pointer;margin-right:4px;" title="Générer la feuille de route PDF du jour">📄 Feuille de route</button>
+          <button class="del-btn" onclick="deleteArchiveGroup('${drv}','${dt}')" title="Supprimer toutes les missions de ce chauffeur pour cette date">✕</button>
         </td>
       </tr>`;
     }).join('') + '</tbody></table>';
+}
+
+// v1.06 : suppression d'une journée entière (chauffeur + date) pour cohérence avec l'affichage groupé
+async function deleteArchiveGroup(driverName, dateStr) {
+  if (!driverName || !dateStr) return;
+  if (!confirm('Supprimer TOUTES les missions de ' + driverName + ' pour le ' + dateStr + ' ?\n\nCette action est irréversible.')) return;
+  if (!window.supabaseClient) { showToast('Supabase non disponible.'); return; }
+  try {
+    await window.supabaseClient.from('missions_archive').delete().eq('driver', driverName).eq('date', dateStr);
+    await window.supabaseClient.from('missions').delete().eq('driver', driverName).eq('date', dateStr);
+    showToast('Journée supprimée ✓');
+  } catch(e) { showToast('Erreur : ' + e.message); }
+  loadArchiveList();
 }
 
 // ============================================================
@@ -1145,28 +1184,31 @@ async function openFeuilleDeRoute(driverName, dateStr) {
       if (accs && accs[0]) { accountInfo = { fullName: accs[0].fullname, username: accs[0].username }; }
     } catch(e) {}
 
-    // 3. v1.05 : Agréger les pauses depuis toutes les sources (dédup par tStart)
-    //    - chaque mission porte son propre snapshot de pauses (missions.pauses / missions_archive.pauses)
-    //    - active_drivers.day_pauses agrège en plus les pauses prises entre missions
+    // 3. Agréger les pauses de toutes les missions de la journée + active_drivers.day_pauses
+    //    Clé de dédup = timestamp ms du tStart ; on privilégie les entrées qui ont tEnd (terminées).
     const pauseMap = new Map();
-    const pushPause = (p) => {
+    const absorbPause = (p) => {
       if (!p) return;
       const rawKey = p.tStart || p.tstart;
-      const key = rawKey ? new Date(rawKey).getTime() : JSON.stringify(p);
-      // Conserver la version la plus complète (avec tEnd) si on reçoit deux entrées pour le même tStart
-      const prev = pauseMap.get(key);
-      const prevHasEnd = prev && (prev.tEnd || prev.tend);
-      const curHasEnd  = p.tEnd || p.tend;
-      if (!prev || (curHasEnd && !prevHasEnd)) pauseMap.set(key, p);
+      if (!rawKey) return;
+      const key = new Date(rawKey).getTime();
+      if (!key) return;
+      const hasEnd = !!(p.tEnd || p.tend);
+      const existing = pauseMap.get(key);
+      // Préférer l'entrée avec tEnd (pause terminée) à une entrée en cours
+      if (!existing || (hasEnd && !(existing.tEnd || existing.tend))) {
+        pauseMap.set(key, p);
+      }
     };
-    allMissions.forEach(m => (m.pauses || []).forEach(pushPause));
-    // v1.05 : pauses hors mission persistées sur active_drivers.day_pauses
+    allMissions.forEach(m => (m.pauses || []).forEach(absorbPause));
+
+    // Source complémentaire : active_drivers.day_pauses (pour couvrir les pauses "entre missions")
     try {
       const { data: adRows } = await window.supabaseClient
-        .from('active_drivers').select('day_pauses,fullname,username')
-        .or('fullname.eq.'+driverName+',username.eq.'+driverName);
-      (adRows || []).forEach(row => (row.day_pauses || []).forEach(pushPause));
-    } catch(e) { /* colonne absente : ignoré */ }
+        .from('active_drivers').select('day_pauses').eq('fullname', driverName);
+      (adRows || []).forEach(r => (r.day_pauses || []).forEach(absorbPause));
+    } catch(e) { /* colonne absente : ignore */ }
+
     const allPauses = Array.from(pauseMap.values()).sort((a,b) => {
       const ta = a.tStart || a.tstart || 0;
       const tb = b.tStart || b.tstart || 0;
@@ -1370,13 +1412,12 @@ async function loadAccounts() {
   if (!container) return;
   let accounts = await getDriverAccounts();
   if (!accounts.length) { container.innerHTML='<div class="empty"><p>Aucun compte chauffeur créé.</p></div>'; return; }
-  container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Nom</th><th>PDF feuille</th><th>Action</th></tr></thead><tbody>'
+  // v1.06 : colonne "PDF feuille" retirée — les feuilles de route sont gérées par le bureau via l'onglet Rapports
+  container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Nom</th><th>Action</th></tr></thead><tbody>'
     + accounts.map(a => {
-      const pdfOn = !!a.pdf_allowed;
       return `<tr>
         <td><code>${a.username}</code></td>
         <td>${a.fullname||a.username}</td>
-        <td><button onclick="togglePdfPermission('${a.username}', ${!pdfOn})" style="padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;background:${pdfOn?'var(--glt)':'var(--subcard)'};color:${pdfOn?'var(--green)':'var(--t2)'};border:1px solid ${pdfOn?'rgba(15,110,86,0.3)':'var(--b2)'};">${pdfOn?'✅ Autorisé':'⛔ Bloqué'}</button></td>
         <td><button class="del-btn" onclick="deleteAccount('${a.username}')">✕ Supprimer</button></td>
       </tr>`;
     }).join('') + '</tbody></table>';

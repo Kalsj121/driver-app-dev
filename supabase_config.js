@@ -77,7 +77,7 @@ async function loadMissionsFromSupabase() {
       ...m,
       dayStartTs:        fromISO(m.daystartts),
       dayEndTs:          fromISO(m.dayendts),
-      stops:             (m.stops || []).map(stopFromStorage),
+      stops:             (m.stops  || []).map(stopFromStorage),
       pauses:            Array.isArray(m.pauses) ? m.pauses : [],
       // v1.03 : dispatch + pause persistés
       tDispatchNotified: fromISO(m.tdispatchnotified),

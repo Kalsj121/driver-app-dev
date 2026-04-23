@@ -90,5 +90,5 @@ ALTER TABLE missions_archive ADD COLUMN IF NOT EXISTS tdispatchreceived timestam
 ALTER TABLE active_drivers ADD COLUMN IF NOT EXISTS day_pauses jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 -- ============================================================
--- Fin des migrations v1.02 → v1.05
+-- Fin des migrations v1.02 → v1.06
 -- ============================================================
