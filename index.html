@@ -931,7 +931,14 @@ function endPause() {
 async function updateActiveDriverState(fields) {
   if (!window.supabaseClient) { console.error('[ActiveDriver] supabaseClient manquant'); return; }
   if (!currentDriver?.username) { console.error('[ActiveDriver] currentDriver.username manquant'); return; }
-  const payload = { lastseen: new Date().toISOString(), ...fields };
+  // v1.09b : convertir automatiquement les timestamps numériques en ISO (Supabase exige timestamptz en ISO)
+  const normalized = {};
+  for (const [k, v] of Object.entries(fields || {})) {
+    if (typeof v === 'number' && v > 1e12) normalized[k] = new Date(v).toISOString();
+    else if (v instanceof Date) normalized[k] = v.toISOString();
+    else normalized[k] = v;
+  }
+  const payload = { lastseen: new Date().toISOString(), ...normalized };
   const OPT = ['is_paused','pause_start','between_missions'];
   let attempt = 0;
   let error;
