@@ -897,7 +897,13 @@ function startPause() {
   pauseActive = true;
   const tStart = Date.now();
   dayPauses.push({tStart, tEnd: null, minPause: null});
-  if (active) { active.isPaused = true; active.tPauseStart = tStart; syncActive(); }
+  // v1.09c : persister les pauses dans la mission active → feuille de route correcte
+  if (active) {
+    active.isPaused = true;
+    active.tPauseStart = tStart;
+    active.pauses = [...dayPauses];
+    syncActive();
+  }
   show('pause-section', false);
   show('pause-active-panel', true);
   show('end-day-section', false);
@@ -912,7 +918,13 @@ function endPause() {
   const p = dayPauses[dayPauses.length-1];
   if(p) { p.tEnd = Date.now(); p.minPause = ms2min(p.tEnd - p.tStart); }
   pauseActive = false;
-  if (active) { active.isPaused = false; active.tPauseStart = null; syncActive(); }
+  // v1.09c : mettre à jour la pause clôturée dans la mission active
+  if (active) {
+    active.isPaused = false;
+    active.tPauseStart = null;
+    active.pauses = [...dayPauses];
+    syncActive();
+  }
   show('pause-active-panel', false);
   // Si le chauffeur est entre missions, il retrouve l'écran ph0 normal
   if (!active) {
