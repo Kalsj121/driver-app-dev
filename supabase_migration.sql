@@ -1,6 +1,7 @@
 -- ============================================================
 -- LCA Transfert — Migration Supabase v1.02 (FIX)
 -- Corrige l'erreur "relation missions_archive does not exist"
+-- + FIX missions_archive vide : renommage archived_at -> archivedat
 -- À exécuter dans l'éditeur SQL de votre projet Supabase
 -- ============================================================
 
@@ -18,8 +19,26 @@ CREATE TABLE IF NOT EXISTS missions_archive (
   stops           jsonb       NOT NULL DEFAULT '[]'::jsonb,
   pauses          jsonb       NOT NULL DEFAULT '[]'::jsonb,
   updatedat       timestamptz NOT NULL DEFAULT now(),
-  archived_at     timestamptz NOT NULL DEFAULT now()
+  archivedat      timestamptz NOT NULL DEFAULT now()
 );
+
+
+-- 0bis. FIX : renommer archived_at -> archivedat si la table existait deja
+-- (desalignement avec le code qui attend "archivedat")
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='missions_archive' AND column_name='archived_at'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name='missions_archive' AND column_name='archivedat'
+  ) THEN
+    ALTER TABLE missions_archive RENAME COLUMN archived_at TO archivedat;
+  END IF;
+END $$;
+
+-- S'assurer que la colonne archivedat existe
+ALTER TABLE missions_archive ADD COLUMN IF NOT EXISTS archivedat timestamptz NOT NULL DEFAULT now();
 
 ALTER TABLE missions_archive ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
@@ -67,5 +86,5 @@ DO $$ BEGIN
 END $$;
 
 -- ============================================================
--- Fin de la migration v1.02
+-- Fin de la migration v1.02 (avec FIX archivedat)
 -- ============================================================

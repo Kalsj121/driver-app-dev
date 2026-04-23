@@ -1122,31 +1122,59 @@ function endDay() {
   if (finishedUsername) removeActiveDriver(finishedUsername);
 }
 
-// Archive completed mission data
+// Archive completed mission data — retry robuste + double nom archivedat/archived_at
 async function archiveMissionData(mission) {
-  if (!window.supabaseClient || !mission) return;
+  if (!window.supabaseClient || !mission) {
+    console.warn('[Archive] Abandon : supabaseClient ou mission manquant');
+    return false;
+  }
   try {
+    const nowIso = new Date().toISOString();
     const payload = {
-      id:             mission.id,
-      driver:         mission.driver,
+      id:             String(mission.id),
+      driver:         mission.driver || '',
       plate:          mission.plateTracteur || mission.plate || '',
       plate_remorque: mission.plateRemorque || mission.plate_remorque || '',
-      date:           mission.date,
-      daystartts:     new Date(mission.dayStartTs).toISOString(),
-      dayendts:       mission.dayEndTs ? new Date(mission.dayEndTs).toISOString() : null,
+      date:           mission.date || '',
+      daystartts:     mission.dayStartTs ? new Date(mission.dayStartTs).toISOString() : nowIso,
+      dayendts:       mission.dayEndTs   ? new Date(mission.dayEndTs).toISOString()   : null,
       completed:      true,
       stops:          mission.stops || [],
-      archivedat:     new Date().toISOString()
+      archivedat:     nowIso,
+      updatedat:      nowIso
     };
     if (Array.isArray(mission.pauses)) payload.pauses = mission.pauses;
+
+    const OPT = ['pauses','plate_remorque','archivedat','updatedat'];
     let { error } = await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
-    // Retry sans pauses si la colonne n'existe pas encore (migration v1.02 non appliquée)
-    if (error && 'pauses' in payload && /column.+pauses|pauses.+column/i.test(error.message || '')) {
-      delete payload.pauses;
-      await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
+    let safety = 6;
+    while (error && safety-- > 0) {
+      const msg = error.message || '';
+      console.warn('[Archive] upsert error:', msg);
+      if (/column.*archivedat|archivedat.*column/i.test(msg) && 'archivedat' in payload) {
+        payload.archived_at = payload.archivedat;
+        delete payload.archivedat;
+        const r = await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
+        error = r.error;
+        continue;
+      }
+      const dropped = OPT.find(c => c in payload && (msg.includes(c) || new RegExp('column.+' + c + '|' + c + '.+column', 'i').test(msg)));
+      if (!dropped) break;
+      console.warn('[Archive] Retry sans colonne', dropped);
+      delete payload[dropped];
+      const r = await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
+      error = r.error;
     }
-    console.log('[Archive] Mission archived successfully');
-  } catch(e) { console.warn('[Archive] Failed:', e.message); }
+    if (error) {
+      console.error('[Archive] ÉCHEC définitif :', error.message);
+      return false;
+    }
+    console.log('[Archive] Mission ' + mission.id + ' archivée ✓');
+    return true;
+  } catch(e) {
+    console.error('[Archive] Exception :', e.message);
+    return false;
+  }
 }
 
 function endMissionNewOne() {
