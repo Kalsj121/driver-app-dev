@@ -275,7 +275,7 @@ textarea.fi{resize:vertical;min-height:72px;}
     </div>
     <div class="fg" style="margin-bottom:12px;">
       <label class="fl">Message</label>
-      <textarea class="fi" id="msg-text" placeholder="Ex : Attention retard WFS 32 — partir avant 14h…" style="min-height:80px;"></textarea>
+      <textarea class="fi" id="msg-text" placeholder="Ex : Attention retard WFS 32 — ne pas partir avant 14h…" style="min-height:80px;"></textarea>
     </div>
     <button class="btn bp" style="max-width:200px;" onclick="sendMsg()">Envoyer</button>
   </div>
@@ -317,7 +317,7 @@ textarea.fi{resize:vertical;min-height:72px;}
     <div id="archive-search" style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
       <div style="position:relative;flex:1;min-width:260px;">
         <input id="archive-search-input" type="search" autocomplete="off"
-          placeholder="🔎 Rechercher AWB ou ULD (ex: 123-4567 8901, PMC-8712-FX)"
+          placeholder="🔎 Rechercher AWB, ULD ou PMC (ex: 123-4567 8901, PMC-8712-XF)"
           style="width:100%;padding:9px 36px 9px 12px;font-size:13px;border:1px solid var(--b2);border-radius:var(--rmd);background:var(--subcard);color:var(--t1);"
           oninput="onArchiveSearchInput()" onkeydown="if(event.key==='Escape'){this.value='';onArchiveSearchInput();}"/>
         <button id="archive-search-clear" onclick="clearArchiveSearch()"
@@ -394,7 +394,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.02 (release: 22 avril 2026) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.14 (release: 24 avril 2026) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -524,6 +524,7 @@ function missionToDriverStatus(mission) {
       location: '', operation: '', dock: '',
       ts_arrival: null, ts_dock_assigned: null, ts_dock_ready: null,
       ts_ops_start: null, ts_ops_end: null,
+      ts_dispatch_received: mission.tDispatchReceived ? new Date(mission.tDispatchReceived).toISOString() : null,
       ts_pause_start: mission.tPauseStart ? new Date(mission.tPauseStart).toISOString() : null,
       min_wait: null, min_dock: null, min_ops: null, min_journey: minJourney,
       updated_at: mission.updatedat || new Date().toISOString()
@@ -595,6 +596,8 @@ function missionToDriverStatus(mission) {
     plate: mission.plate || '', plate_remorque: mission.plate_remorque || '',
     step, location: curStop ? curStop.location : '', operation: curStop ? (curStop.operation||'') : '',
     dock: curStop ? (curStop.dock||'') : '',
+    instructionsReceived: !!mission.tDispatchReceived,
+    ts_dispatch_received: mission.tDispatchReceived ? new Date(mission.tDispatchReceived).toISOString() : null,
     ts_arrival:       curStop?.tArrival        ? new Date(curStop.tArrival).toISOString()        : null,
     ts_dock_assigned: curStop?.tDockAssigned   ? new Date(curStop.tDockAssigned).toISOString()   : null,
     ts_dock_ready:    curStop?.tDockReady      ? new Date(curStop.tDockReady).toISOString()      : null,
@@ -810,6 +813,15 @@ function buildCard(d, threshold) {
     ? `<div class="dc-loc">${step===7?'🚛 ':'📍 '}${d.location}${d.dock?' · Quai '+d.dock:''}</div><div class="dc-sub">${d.operation||''}</div>`
     : '<div class="dc-sub">—</div>';
   const boxes=[];
+  // v1.14 : Temps à quai — entre "à quai" (tDockReady) et début chargement/déchargement (tOpsStart)
+  // Affiché dès que tDockReady est set ; fige à tOpsStart si opération démarrée, sinon live.
+  if(d.ts_dock_ready){
+    const dockMs = new Date(d.ts_dock_ready).getTime();
+    const endMs  = d.ts_ops_start ? new Date(d.ts_ops_start).getTime() : now;
+    const dq     = Math.floor((endMs - dockMs)/60000);
+    const dqCls  = d.ts_ops_start ? 'tv-gr' : (dq>30?'tv-r':dq>15?'tv-a':'tv-b');
+    boxes.push({l:'Temps à quai',v:dur(dq),cls:dqCls,id:'tdq-'+d.user_id});
+  }
   if(step===1&&d.ts_arrival){boxes.push({l:'Att.quai',v:dur(w),cls:w>=threshold?'tv-r':w>=threshold*.7?'tv-a':'tv-b',id:'tw-'+d.user_id});}
   if(step===2&&d.ts_dock_assigned){boxes.push({l:'Att.quai',v:dur(d.min_wait),cls:'tv-gr'});boxes.push({l:'Mise quai',v:dur(e(d.ts_dock_assigned)),cls:'tv-b',id:'tdk-'+d.user_id});}
   if(step===4&&d.ts_ops_start){const op=e(d.ts_ops_start);boxes.push({l:'Opération',v:dur(op),cls:op>60?'tv-r':op>30?'tv-a':'tv-b',id:'top-'+d.user_id});}
@@ -817,10 +829,19 @@ function buildCard(d, threshold) {
   if(step===7){const srv=d.updated_at?e(d.updated_at):null;boxes.push({l:'Transit',v:dur(srv),cls:'tv-a',id:'ttr-'+d.user_id});}
   if(d.isPaused&&d.ts_pause_start){boxes.push({l:'Pause',v:dur(e(d.ts_pause_start)),cls:'tv-a',id:'tps-'+d.user_id});}
   if(step===0&&d.ts_dispatch_notified&&!d.instructionsReceived){boxes.push({l:'Attente instr.',v:dur(e(d.ts_dispatch_notified)),cls:'tv-b',id:'tdp-'+d.user_id});}
-  if(d.instructionsReceived&&d.ts_dispatch_received){boxes.push({l:'En route',v:dur(e(d.ts_dispatch_received)),cls:'tv-a',id:'trr-'+d.user_id});}
+  if(step===0&&d.instructionsReceived&&d.ts_dispatch_received){boxes.push({l:'En route',v:dur(e(d.ts_dispatch_received)),cls:'tv-a',id:'trr-'+d.user_id});}
+  // v1.14 : Durée opération — en continu depuis tDispatchReceived jusqu'à tOpsEnd (ou live).
+  // Affiché dès que tDispatchReceived est set ; fige quand tOpsEnd est renseigné sur le curStop.
+  if(d.ts_dispatch_received){
+    const dispMs = new Date(d.ts_dispatch_received).getTime();
+    const endMs  = d.ts_ops_end ? new Date(d.ts_ops_end).getTime() : now;
+    const op     = Math.floor((endMs - dispMs)/60000);
+    const opCls  = d.ts_ops_end ? 'tv-gr' : (op>120?'tv-r':op>60?'tv-a':'tv-b');
+    boxes.push({l:'Durée opération',v:dur(op),cls:opCls,id:'tdo-'+d.user_id});
+  }
   if(d.min_journey)boxes.push({l:'Journée',v:dur(d.min_journey),cls:'tv-gr'});
   const timerHtml = boxes.length
-    ? '<div class="tgrid">'+boxes.slice(0,3).map(b=>'<div class="tbox"><div class="tb-l">'+b.l+'</div><div class="tb-v '+b.cls+'"'+(b.id?' id="'+b.id+'"':'')+'>'+b.v+'</div></div>').join('')+'</div>'
+    ? '<div class="tgrid">'+boxes.slice(0,6).map(b=>'<div class="tbox"><div class="tb-l">'+b.l+'</div><div class="tb-v '+b.cls+'"'+(b.id?' id="'+b.id+'"':'')+'>'+b.v+'</div></div>').join('')+'</div>'
     : '';
   const updSecs = d.updated_at ? Math.floor((Date.now()-new Date(d.updated_at).getTime())/1000) : null;
   return `<div class="${cardCls}">
@@ -854,7 +875,21 @@ function liveTick() {
     if(step===7&&d.updated_at)up('ttr-'+d.user_id,dur(e(d.updated_at)));
     if(d.isPaused&&d.ts_pause_start)up('tps-'+d.user_id,dur(e(d.ts_pause_start)));
     if(step===0&&d.ts_dispatch_notified&&!d.instructionsReceived)up('tdp-'+d.user_id,dur(e(d.ts_dispatch_notified)));
-    if(d.instructionsReceived&&d.ts_dispatch_received)up('trr-'+d.user_id,dur(e(d.ts_dispatch_received)));
+    if(step===0&&d.instructionsReceived&&d.ts_dispatch_received)up('trr-'+d.user_id,dur(e(d.ts_dispatch_received)));
+    // v1.14 : Temps à quai — live si pas encore tOpsStart, sinon gelé à tOpsStart
+    if(d.ts_dock_ready){
+      const dockMs = new Date(d.ts_dock_ready).getTime();
+      const endMs  = d.ts_ops_start ? new Date(d.ts_ops_start).getTime() : now;
+      const dq     = Math.floor((endMs - dockMs)/60000);
+      up('tdq-'+d.user_id, dur(dq), d.ts_ops_start ? 'tv-gr' : (dq>30?'tv-r':dq>15?'tv-a':'tv-b'));
+    }
+    // v1.14 : Durée opération — live depuis tDispatchReceived, gelée à tOpsEnd
+    if(d.ts_dispatch_received){
+      const dispMs = new Date(d.ts_dispatch_received).getTime();
+      const endMs  = d.ts_ops_end ? new Date(d.ts_ops_end).getTime() : now;
+      const op     = Math.floor((endMs - dispMs)/60000);
+      up('tdo-'+d.user_id, dur(op), d.ts_ops_end ? 'tv-gr' : (op>120?'tv-r':op>60?'tv-a':'tv-b'));
+    }
   });
 }
 
