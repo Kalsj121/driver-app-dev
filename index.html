@@ -661,12 +661,16 @@ async function restoreDriverSession() {
       .order('daystartts', { ascending: false })
       .limit(1);
     if (error) { console.warn('[Restore] query error:', error.message); return false; }
+    const fromIso = window.fromISO || (v => (!v ? null : (typeof v === 'number' ? v : new Date(v).getTime())));
     if (!data || !data.length) {
-      console.log('[Restore] Aucune mission en cours à restaurer pour', driverName);
-      return false;
+      // v1.13b : pas de mission en cours — mais peut-être un état "entre missions"
+      // (le chauffeur a terminé une mission et n'en a pas encore démarré une
+      // nouvelle, ou il est en pause entre missions).
+      const restored = await restoreBetweenMissionsState(driverName, today, fromIso);
+      if (!restored) console.log('[Restore] Aucune mission du jour à restaurer pour', driverName);
+      return restored;
     }
     const raw = data[0];
-    const fromIso = window.fromISO || (v => (!v ? null : (typeof v === 'number' ? v : new Date(v).getTime())));
     const stopFrom = window.stopFromStorage || (s => {
       if (!s) return s;
       return {
@@ -773,19 +777,18 @@ async function restoreDriverSession() {
 
     // Démarrer ticker + afficher le bon step
     startTicker();
-    setStep(restoredStep);
 
-    // Restaurer l'état de pause côté UI
     if (pauseActive) {
-      show('pause-active-panel', true);
-      if (btnStart) btnStart.disabled = true;
-    } else if (restoredStep === 0 && mission.stops.length > 0) {
-      // Entre-missions (stop terminé, pas de nouvelle instruction) — proposer pause + fin de journée
-      show('pause-section', true);
-      show('end-day-section', true);
-    } else if (restoredStep === 1 && !restoredCurStop) {
-      // Après un départ, prêt pour l'arrivée suivante
+      // v1.13b : basculer sur ph0 pour que pause-active-panel soit visible
+      // (pause-active-panel est DANS #ph0 ; sans ça, il serait masqué).
+      show('ph-mission', false);
+      show('ph0', true);
       show('pause-section', false);
+      show('pause-active-panel', true);
+      show('end-day-section', false);
+      if (btnStart) btnStart.disabled = true;
+    } else {
+      setStep(restoredStep);
     }
 
     // Réinscrire comme chauffeur actif pour le dashboard
@@ -823,6 +826,143 @@ async function restoreDriverSession() {
     return true;
   } catch(e) {
     console.warn('[Restore] exception:', e.message);
+    return false;
+  }
+}
+
+// v1.13b : restaure l'UI "entre-missions" quand aucune mission en cours
+// n'existe mais qu'il reste au moins une mission complétée aujourd'hui et
+// que la journée n'a pas encore été clôturée (le chauffeur peut soit prendre
+// une pause, soit démarrer une nouvelle mission, soit terminer la journée).
+// Gère également le cas "en pause entre missions" détecté via active_drivers
+// ou via une pause non clôturée dans la dernière mission.
+async function restoreBetweenMissionsState(driverName, today, fromIso) {
+  try {
+    // 1. Chercher la dernière mission complétée du jour
+    const { data: completedData } = await window.supabaseClient
+      .from('missions')
+      .select('*')
+      .eq('driver', driverName)
+      .eq('date', today)
+      .eq('completed', true)
+      .order('daystartts', { ascending: false })
+      .limit(1);
+    if (!completedData || !completedData.length) return false;
+    const lastCompleted = completedData[0];
+
+    // 2. Extraire les pauses et détecter pause en cours
+    const rawPauses = Array.isArray(lastCompleted.pauses) ? lastCompleted.pauses : [];
+    dayPauses = rawPauses.map(p => ({
+      tStart:   p.tStart ? (typeof p.tStart === 'string' ? new Date(p.tStart).getTime() : p.tStart) : null,
+      tEnd:     p.tEnd   ? (typeof p.tEnd   === 'string' ? new Date(p.tEnd).getTime()   : p.tEnd)   : null,
+      minPause: p.minPause != null ? p.minPause : (p.min_pause != null ? p.min_pause : null)
+    }));
+    const lastPause = dayPauses.length ? dayPauses[dayPauses.length-1] : null;
+    let pauseInProgress = !!(lastPause && !lastPause.tEnd);
+
+    // 3. Vérifier active_drivers pour confirmer (source de vérité côté bureau)
+    let adPauseStart = null;
+    try {
+      const { data: adData } = await window.supabaseClient
+        .from('active_drivers')
+        .select('*')
+        .eq('username', currentDriver.username)
+        .limit(1);
+      if (adData && adData[0]) {
+        if (adData[0].is_paused === true) {
+          pauseInProgress = true;
+          adPauseStart = adData[0].pause_start ? new Date(adData[0].pause_start).getTime() : null;
+          // Si active_drivers a une pause mais pas la mission, ajouter l'entrée
+          if (adPauseStart && (!lastPause || lastPause.tEnd || lastPause.tStart !== adPauseStart)) {
+            dayPauses.push({ tStart: adPauseStart, tEnd: null, minPause: null });
+          }
+        }
+      }
+    } catch(e) { console.warn('[Restore] active_drivers query:', e.message); }
+
+    pauseActive = pauseInProgress;
+
+    // 4. État : reconstruire dayStart à partir de la PREMIÈRE mission du jour
+    //    (pour que le timer "journée" affiche la durée totale depuis le début).
+    const { data: firstData } = await window.supabaseClient
+      .from('missions')
+      .select('daystartts')
+      .eq('driver', driverName)
+      .eq('date', today)
+      .order('daystartts', { ascending: true })
+      .limit(1);
+    if (firstData && firstData[0] && firstData[0].daystartts) {
+      dayStart = new Date(firstData[0].daystartts).getTime();
+    } else {
+      dayStart = lastCompleted.daystartts ? new Date(lastCompleted.daystartts).getTime() : Date.now();
+    }
+
+    active = null;
+    curStop = null;
+    step = 0;
+
+    // 5. UI : basculer sur ph0 (entre-missions)
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('main-app').style.display = '';
+    show('ph-mission', false);
+    show('ph0', true);
+    for (let i = 0; i <= 8; i++) show('f' + i, false);
+    $('stops-tl').innerHTML = '';
+    $('live-banner').innerHTML = '';
+    $('dayhdr').style.display = '';
+    lockVehicleSelects(false); // le chauffeur peut changer de véhicule pour la prochaine mission
+
+    // Pré-remplir infos chauffeur
+    if ($('d-name')) $('d-name').value = driverName;
+    if ($('d-plate-tracteur')) $('d-plate-tracteur').value = lastCompleted.plate || currentDriver.plateTracteur || '';
+    if ($('d-plate-remorque')) $('d-plate-remorque').value = lastCompleted.plate_remorque || currentDriver.plateRemorque || '';
+
+    const btnStart = document.getElementById('btn-start-day');
+    if (btnStart) btnStart.textContent = '▶ Démarrer nouvelle mission';
+
+    // 6. Afficher les bons panneaux selon pause / pas pause
+    if (pauseActive) {
+      show('pause-section', false);
+      show('pause-active-panel', true);
+      show('end-day-section', false);
+      if (btnStart) btnStart.disabled = true;
+    } else {
+      show('pause-section', true);
+      show('pause-active-panel', false);
+      show('end-day-section', true);
+      if (btnStart) btnStart.disabled = false;
+    }
+
+    // 7. Démarrer le ticker (pour le timer de pause et le timer "journée")
+    startTicker();
+
+    // 8. Réinscrire dans active_drivers
+    try {
+      const tracteur = lastCompleted.plate || currentDriver.plateTracteur || '';
+      const remorque = lastCompleted.plate_remorque || currentDriver.plateRemorque || '';
+      await registerActiveDriver(driverName, tracteur, remorque);
+      await updateActiveDriverState({
+        is_paused: pauseActive,
+        pause_start: pauseActive && dayPauses.length && dayPauses[dayPauses.length-1].tStart ? dayPauses[dayPauses.length-1].tStart : null,
+        between_missions: !pauseActive
+      });
+    } catch(e) { console.warn('[Restore] active_drivers sync:', e.message); }
+
+    // 9. Heartbeat (sans `active`, on utilise lastCompleted comme référence véhicules)
+    if (!window._activeDriverInterval) {
+      const tracteur = lastCompleted.plate || currentDriver.plateTracteur || '';
+      const remorque = lastCompleted.plate_remorque || currentDriver.plateRemorque || '';
+      window._activeDriverInterval = setInterval(() => {
+        registerActiveDriver(driverName, tracteur, remorque);
+      }, 120000);
+    }
+
+    toast(pauseActive
+      ? 'Session restaurée ✓ — pause en cours'
+      : 'Session restaurée ✓ — entre missions');
+    return true;
+  } catch(e) {
+    console.warn('[RestoreBetweenMissions] exception:', e.message);
     return false;
   }
 }
@@ -1158,6 +1298,12 @@ function endPause() {
   if (!active) {
     show('pause-section', true);
     show('end-day-section', true);
+  } else {
+    // v1.13b : fin de pause pendant une mission active — revenir à ph-mission
+    // et afficher le bon step (utile après restauration d'une session en pause)
+    show('ph0', false);
+    show('ph-mission', true);
+    setStep(step);
   }
   const btnStart = document.getElementById('btn-start-day');
   if(btnStart) btnStart.disabled = false;
