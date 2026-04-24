@@ -1151,7 +1151,8 @@ function renderArchiveTable(container, missions, matchMap) {
         stopsCount: 0, totalMin: 0, missionIds: [],
         earliestStart: null, latestEnd: null,
         hasAttachments: false,
-        matches: [] // v1.11
+        matches: [], // v1.11
+        noCmrItems: [] // v1.12 : stops sans PJ avec raison
       });
     }
     const g = groups.get(key);
@@ -1162,6 +1163,12 @@ function renderArchiveTable(container, missions, matchMap) {
     g.stopsCount += stops.length;
     // A-t-il des pièces jointes (CMR dans au moins un stop) ?
     if (stops.some(s => s && s.cmrData)) g.hasAttachments = true;
+    // v1.12 : collecter les stops sans PJ (avec raison saisie)
+    stops.forEach((s, idx) => {
+      if (s && !s.cmrData && s.noCmrReason) {
+        g.noCmrItems.push({ stopIdx: idx + 1, location: s.location || '—', operation: s.operation || '', reason: s.noCmrReason });
+      }
+    });
     const startMs = m.dayStartTs || (m.daystartts ? new Date(m.daystartts).getTime() : null);
     const endMs   = m.dayEndTs   || (m.dayendts   ? new Date(m.dayendts).getTime()   : null);
     if (startMs && (!g.earliestStart || startMs < g.earliestStart)) g.earliestStart = startMs;
@@ -1187,6 +1194,13 @@ function renderArchiveTable(container, missions, matchMap) {
       const atchBtn = g.hasAttachments
         ? `<button onclick="openDayAttachmentsViewer('${drv}','${dt}')" style="padding:4px 8px;font-size:11px;font-weight:600;border:1px solid rgba(15,110,86,0.3);border-radius:6px;background:var(--glt);color:var(--green);cursor:pointer;margin-right:4px;" title="Consulter les pièces jointes de la journée">📎 Pièces jointes</button>`
         : `<button disabled style="padding:4px 8px;font-size:11px;font-weight:600;border:1px solid var(--b2);border-radius:6px;background:var(--subcard);color:var(--t3);cursor:not-allowed;margin-right:4px;" title="Aucune pièce jointe">📎 —</button>`;
+      // v1.12 : bouton ambre si au moins un stop sans PJ avec raison
+      let noCmrBtn = '';
+      if (g.noCmrItems && g.noCmrItems.length) {
+        const nb = g.noCmrItems.length;
+        const payload = encodeURIComponent(JSON.stringify({ driver: g.driver, date: g.date, items: g.noCmrItems }));
+        noCmrBtn = `<button onclick="openNoCmrReasonsModal('${payload}')" style="padding:4px 8px;font-size:11px;font-weight:600;border:1px solid rgba(180,83,9,0.4);border-radius:6px;background:rgba(253,230,138,0.35);color:#92400e;cursor:pointer;margin-right:4px;" title="Consulter les raisons d'absence de pièce jointe">⚠️ ${nb} sans PJ</button>`;
+      }
       const delBtns = g.missionIds.map(id => `<button class="del-btn" onclick="deleteArchiveMission(${id})" title="Supprimer mission #${id}" style="margin-left:2px;">✕</button>`).join('');
 
       // v1.11 : sous-ligne "Correspondance" quand la recherche est active
@@ -1218,7 +1232,7 @@ function renderArchiveTable(container, missions, matchMap) {
         <td>${dur}</td>
         <td style="white-space:nowrap;">
           <button onclick="openFeuilleDeRoute('${drv}','${dt}')" style="padding:4px 8px;font-size:11px;font-weight:600;border:1px solid var(--b2);border-radius:6px;background:none;color:var(--blue);cursor:pointer;margin-right:4px;" title="Télécharger feuille de route du jour">📄 Feuille</button>
-          ${atchBtn}${delBtns}
+          ${atchBtn}${noCmrBtn}${delBtns}
         </td>
       </tr>${matchRow}`;
     }).join('') + '</tbody></table>';
@@ -1484,6 +1498,55 @@ function buildAttachmentsViewerHTML(driverName, dateStr, items) {
 }
 
 // ============================================================
+// v1.12 : MODAL des raisons d'absence de pièce jointe
+// ============================================================
+function openNoCmrReasonsModal(encodedPayload) {
+  let payload;
+  try { payload = JSON.parse(decodeURIComponent(encodedPayload)); }
+  catch(e) { showToast('Données invalides.'); return; }
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  if (!items.length) { showToast('Aucune raison à afficher.'); return; }
+
+  // Créer l'overlay s'il n'existe pas
+  let overlay = document.getElementById('no-cmr-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'no-cmr-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
+    overlay.onclick = (e) => { if (e.target === overlay) closeNoCmrReasonsModal(); };
+    document.body.appendChild(overlay);
+  }
+  const escH = s => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const rows = items.map(it => `
+    <div style="border:1px solid var(--b2);border-radius:var(--rmd);padding:10px 12px;margin-bottom:8px;background:var(--subcard);">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+        <strong style="color:var(--t1);font-size:13px;">Stop ${it.stopIdx} — ${escH(it.location)}</strong>
+        <span style="color:var(--t3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">${escH(it.operation)}</span>
+      </div>
+      <div style="color:#92400e;font-style:italic;font-size:12px;line-height:1.4;">${escH(it.reason)}</div>
+    </div>`).join('');
+  overlay.innerHTML = `
+    <div style="background:var(--card);border-radius:var(--rlg);max-width:560px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--b2);display:flex;justify-content:space-between;align-items:center;background:rgba(253,230,138,0.35);">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#92400e;">⚠️ Stops sans pièce jointe</div>
+          <div style="font-size:12px;color:var(--t2);margin-top:2px;">${escH(payload.driver||'—')} — ${escH(payload.date||'—')}</div>
+        </div>
+        <button onclick="closeNoCmrReasonsModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--t2);line-height:1;">✕</button>
+      </div>
+      <div style="padding:16px 20px;overflow-y:auto;">${rows}</div>
+      <div style="padding:12px 20px;border-top:1px solid var(--b2);text-align:right;">
+        <button onclick="closeNoCmrReasonsModal()" style="padding:8px 16px;font-size:13px;font-weight:600;border:1px solid var(--b2);border-radius:6px;background:var(--card);color:var(--t1);cursor:pointer;">Fermer</button>
+      </div>
+    </div>`;
+  overlay.style.display = 'flex';
+}
+function closeNoCmrReasonsModal() {
+  const ov = document.getElementById('no-cmr-overlay');
+  if (ov) ov.style.display = 'none';
+}
+
+// ============================================================
 // FEUILLE DE ROUTE — génération PDF côté bureau
 // ============================================================
 async function openFeuilleDeRoute(driverName, dateStr) {
@@ -1592,12 +1655,21 @@ function buildFeuilleDeRouteHTML(allMissions, pauses, driver, dateStr) {
       const opsS = getMs(s.tOpsStart);
       const total = (arr && docT) ? Math.round((docT - arr)/60000) : null;
       const cargoStr = (s.cargo||[]).map(c=>c.type==='uld'?(c.uld||'ULD'):((c.pieces||'')+'pc '+(c.awb||''))).join(', ')||'—';
+      // v1.12 : statut CMR — ✓ présent, ⚠️ sans PJ + raison, ou —
+      let cmrStatusCell = '—';
+      if (s.cmrData) {
+        cmrStatusCell = '<span style="color:#0f6e56;font-weight:600;">✓ PJ</span>';
+      } else if (s.noCmrReason) {
+        const reasonEsc = String(s.noCmrReason).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        cmrStatusCell = `<span style="color:#b45309;font-weight:600;">⚠️ Sans PJ</span><div style="color:#92400e;font-style:italic;font-size:10px;margin-top:2px;">${reasonEsc}</div>`;
+      }
       return `<tr>
         <td>${si+1}</td><td>${s.location||'—'}</td><td>${s.operation||'—'}</td>
         <td>${tsF(s.tArrival)}</td><td>${s.dock||'—'}</td><td>${durF(s.minWait)}</td>
         <td>${tsF(s.tOpsStart)}</td><td>${durF(s.minOps)}</td>
         <td>${tsF(s.tDoc)}</td><td>${durF(total??s.minTotal)}</td>
         <td>${cargoStr}</td>
+        <td>${cmrStatusCell}</td>
         <td>${s.comment||'—'}</td></tr>`;
     }).join('');
     const dayDur = (startMs && endMs) ? durF(Math.round((endMs - startMs)/60000)) : '—';
@@ -1607,7 +1679,7 @@ function buildFeuilleDeRouteHTML(allMissions, pauses, driver, dateStr) {
         <tr><td><b>Démarrage</b></td><td>${tsF(startMs)}</td><td><b>Fin</b></td><td>${endMs?tsF(endMs):'—'}</td></tr>
         <tr><td><b>Attente instruction</b></td><td>${dispatchWait}</td><td><b>Durée mission</b></td><td>${dayDur}</td></tr>
       </table>
-      ${stopsRows ? `<table class="st"><thead><tr><th>#</th><th>Lieu</th><th>Opération</th><th>Arrivée</th><th>Quai</th><th>Att.quai</th><th>Déb.opé</th><th>Dur.opé</th><th>CMR</th><th>Total</th><th>Fret</th><th>Commentaire</th></tr></thead><tbody>${stopsRows}</tbody></table>` : '<p style="color:#888;font-style:italic;font-size:11px;">Aucun stop.</p>'}
+      ${stopsRows ? `<table class="st"><thead><tr><th>#</th><th>Lieu</th><th>Opération</th><th>Arrivée</th><th>Quai</th><th>Att.quai</th><th>Déb.opé</th><th>Dur.opé</th><th>CMR</th><th>Total</th><th>Fret</th><th>PJ</th><th>Commentaire</th></tr></thead><tbody>${stopsRows}</tbody></table>` : '<p style="color:#888;font-style:italic;font-size:11px;">Aucun stop.</p>'}
     </div>`;
   });
 

@@ -370,24 +370,35 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 
         <!-- CMR UPLOAD — 2 options -->
         <div class="fg">
-          <label class="fl">Photo du CMR signé <span style="color:var(--red);">*</span></label>
-          <div class="cmr-opts">
-            <!-- Option A: camera -->
-            <div class="cmr-opt" id="cmr-opt-camera" onclick="triggerCamera()">
-              <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-              <p>Prendre une photo</p>
+          <label class="fl">Photo du CMR signé <span id="cmr-required-star" style="color:var(--red);">*</span></label>
+          <div id="cmr-upload-block">
+            <div class="cmr-opts">
+              <!-- Option A: camera -->
+              <div class="cmr-opt" id="cmr-opt-camera" onclick="triggerCamera()">
+                <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <p>Prendre une photo</p>
+              </div>
+              <!-- Option B: gallery (requires AWB or ULD) -->
+              <div class="cmr-opt" id="cmr-opt-gallery" onclick="triggerGallery()">
+                <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                <p>Depuis la galerie</p>
+              </div>
             </div>
-            <!-- Option B: gallery (requires AWB or ULD) -->
-            <div class="cmr-opt" id="cmr-opt-gallery" onclick="triggerGallery()">
-              <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-              <p>Depuis la galerie</p>
-            </div>
+            <!-- hidden file inputs -->
+            <input type="file" id="cmr-file-camera" accept="image/*" capture="environment" onchange="handleCMR(event,'camera')"/>
+            <input type="file" id="cmr-file-gallery" accept="image/*" onchange="handleCMR(event,'gallery')"/>
+            <div id="cmr-prev" class="cprev" style="display:none;"></div>
+            <div class="cmr-valid-note" id="cmr-gallery-note">⚠️ Pour utiliser la galerie, veuillez d'abord encoder un AWB (Loose) ou un N° ULD ci-dessous.</div>
           </div>
-          <!-- hidden file inputs -->
-          <input type="file" id="cmr-file-camera" accept="image/*" capture="environment" onchange="handleCMR(event,'camera')"/>
-          <input type="file" id="cmr-file-gallery" accept="image/*" onchange="handleCMR(event,'gallery')"/>
-          <div id="cmr-prev" class="cprev" style="display:none;"></div>
-          <div class="cmr-valid-note" id="cmr-gallery-note">⚠️ Pour utiliser la galerie, veuillez d'abord encoder un AWB (Loose) ou un N° ULD ci-dessous.</div>
+          <!-- v1.12 : pas de pièce jointe -->
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 10px;border:1px solid var(--b2);border-radius:var(--rmd);background:var(--subcard);cursor:pointer;font-size:13px;">
+            <input type="checkbox" id="cmr-skip" onchange="onCmrSkipToggle()" style="width:16px;height:16px;cursor:pointer;"/>
+            <span>Pas de pièce jointe pour ce stop</span>
+          </label>
+          <div id="cmr-skip-reason-wrap" class="fg" style="display:none;margin-top:10px;margin-bottom:0;">
+            <label class="fl">Raison de l'absence de pièce jointe <span style="color:var(--red);font-weight:700;">*</span></label>
+            <textarea class="fi" id="cmr-skip-reason" placeholder="Ex: CMR non signé par le destinataire, document resté sur site, etc." rows="2"></textarea>
+          </div>
         </div>
 
         <!-- Cargo type -->
@@ -1145,14 +1156,26 @@ function doOpsStart() { curStop.tOpsStart=Date.now(); setStep(5); syncActive(); 
 function doOpsEnd() { curStop.tOpsEnd=Date.now(); resetCargo(); resetCMR(); setStep(6); syncActive(); toast('Opération terminée ■'); }
 
 function doDoc() {
-  // ── 1. Photo CMR obligatoire ──────────────────────────────
-  if (!active._cmr) {
-    toast('Veuillez joindre une photo du CMR avant de confirmer.', true);
-    return;
-  }
-  if (active._cmrSource === 'gallery' && !hasCargoEncoded()) {
-    toast('Pour la galerie, encodez d\'abord un AWB ou un N° ULD.', true);
-    return;
+  // v1.12 : mode "pas de pièce jointe" — raison obligatoire à la place
+  const skipCMR = $('cmr-skip')?.checked === true;
+  const skipReason = ($('cmr-skip-reason')?.value || '').trim();
+
+  if (skipCMR) {
+    if (!skipReason) {
+      toast('Veuillez indiquer la raison de l\'absence de pièce jointe.', true);
+      $('cmr-skip-reason')?.focus();
+      return;
+    }
+  } else {
+    // ── 1. Photo CMR obligatoire ──────────────────────────────
+    if (!active._cmr) {
+      toast('Veuillez joindre une photo du CMR ou cocher « Pas de pièce jointe » avec une raison.', true);
+      return;
+    }
+    if (active._cmrSource === 'gallery' && !hasCargoEncoded()) {
+      toast('Pour la galerie, encodez d\'abord un AWB ou un N° ULD.', true);
+      return;
+    }
   }
 
   // ── 2. Type de fret obligatoire (Loose ou ULD) ─────────────
@@ -1215,7 +1238,14 @@ function doDoc() {
   curStop.comment=$('f-comment').value;
   curStop.cargoType=document.querySelector('input[name="ctype"]:checked')?.value||'';
   curStop.cargo=collectCargo();
-  curStop.cmrData=active._cmr||null;
+  // v1.12 : gestion "sans pièce jointe" — cmrData null + raison stockée
+  if (skipCMR) {
+    curStop.cmrData = null;
+    curStop.noCmrReason = skipReason;
+  } else {
+    curStop.cmrData = active._cmr || null;
+    curStop.noCmrReason = null;
+  }
   active._cmr=null; active._cmrSource=null;
   curStop.minTransit= curStop.transitFromPrev;
   curStop.minWait   = curStop.tDockAssigned ? ms2min(curStop.tDockAssigned - curStop.tArrival) : null;
@@ -1458,6 +1488,44 @@ function resetCMR() {
   document.getElementById('cmr-opt-gallery').classList.remove('ok');
   document.getElementById('cmr-prev').style.display='none';
   document.getElementById('cmr-gallery-note').style.display='none';
+  // v1.12 : réinitialiser "pas de pièce jointe"
+  const sk = document.getElementById('cmr-skip');
+  const skWrap = document.getElementById('cmr-skip-reason-wrap');
+  const skReason = document.getElementById('cmr-skip-reason');
+  const upBlock = document.getElementById('cmr-upload-block');
+  const star = document.getElementById('cmr-required-star');
+  if (sk) sk.checked = false;
+  if (skReason) skReason.value = '';
+  if (skWrap) skWrap.style.display = 'none';
+  if (upBlock) upBlock.style.display = '';
+  if (star) star.style.display = '';
+}
+
+// v1.12 : toggle "pas de pièce jointe" — cache le bloc CMR et affiche la raison
+function onCmrSkipToggle() {
+  const sk = document.getElementById('cmr-skip');
+  const skWrap = document.getElementById('cmr-skip-reason-wrap');
+  const upBlock = document.getElementById('cmr-upload-block');
+  const star = document.getElementById('cmr-required-star');
+  const skReason = document.getElementById('cmr-skip-reason');
+  if (!sk) return;
+  if (sk.checked) {
+    // Mode "sans pièce jointe" activé → on efface tout CMR encodé
+    if (active) { active._cmr = null; active._cmrSource = null; }
+    document.getElementById('cmr-opt-camera')?.classList.remove('ok');
+    document.getElementById('cmr-opt-gallery')?.classList.remove('ok');
+    const prev = document.getElementById('cmr-prev'); if (prev) prev.style.display = 'none';
+    const gnote = document.getElementById('cmr-gallery-note'); if (gnote) gnote.style.display = 'none';
+    if (upBlock) upBlock.style.display = 'none';
+    if (star) star.style.display = 'none';
+    if (skWrap) skWrap.style.display = '';
+    setTimeout(() => skReason?.focus(), 50);
+  } else {
+    if (upBlock) upBlock.style.display = '';
+    if (star) star.style.display = '';
+    if (skWrap) skWrap.style.display = 'none';
+    if (skReason) skReason.value = '';
+  }
 }
 
 // ============================================================
