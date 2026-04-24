@@ -1177,13 +1177,13 @@ async function openFeuilleDeRoute(driverName, dateStr) {
       return new Date(ta).getTime() - new Date(tb).getTime();
     });
 
-    // 4. Construire et ouvrir la feuille de route
+    // 4. Construire et ouvrir la feuille de route (consultation uniquement, pas de print auto)
     const html = buildFeuilleDeRouteHTML(allMissions, allPauses, accountInfo, dateStr);
     const w = window.open('', '_blank');
-    if (!w) { showToast('Autorisez les pop-ups pour générer le PDF.'); return; }
+    if (!w) { showToast('Autorisez les pop-ups pour afficher la feuille.'); return; }
     w.document.write(html);
     w.document.close();
-    setTimeout(() => { w.focus(); w.print(); }, 700);
+    w.focus();
   } catch(e) {
     console.error('[FeuilleDeRoute]', e);
     showToast('Erreur : ' + e.message);
@@ -1287,8 +1287,17 @@ h3{font-size:13px;font-weight:700;color:#1a5c6e;margin:16px 0 8px;border-bottom:
 .sum div{margin-bottom:4px;}
 .sum b{display:inline-block;width:180px;}
 .bureau-tag{display:inline-block;background:#4da9be;color:#fff;padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;}
-@media print{body{padding:10px;}.mb{page-break-inside:avoid;}}
+.actions-bar{position:sticky;top:0;background:#fff;border-bottom:1px solid #e0e0e0;padding:10px 20px;margin:-20px -20px 16px;z-index:10;display:flex;gap:10px;justify-content:flex-end;align-items:center;}
+.act-btn{padding:8px 16px;border:1px solid #4da9be;background:#fff;color:#1a5c6e;font-size:13px;font-weight:600;border-radius:6px;cursor:pointer;transition:all .15s;}
+.act-btn:hover{background:#4da9be;color:#fff;}
+.act-btn.primary{background:#4da9be;color:#fff;}
+.act-btn.primary:hover{background:#1a5c6e;}
+@media print{body{padding:10px;}.mb{page-break-inside:avoid;}.actions-bar{display:none;}}
 </style></head><body>
+<div class="actions-bar">
+  <button class="act-btn" onclick="window.close();">✕ Fermer</button>
+  <button class="act-btn primary" onclick="window.print();">💾 Enregistrer en PDF</button>
+</div>
 <div class="hdr">
   <div>
     <div class="bureau-tag">Émis par le bureau</div>
