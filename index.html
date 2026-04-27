@@ -484,7 +484,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.17 (release: 24 avril 2026) — © Kalsj121</div>
+<div class="version-footer">Version 1.19 (release: 24 avril 2026) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -664,12 +664,18 @@ async function restoreDriverSession() {
       .eq('completed', false)
       .order('daystartts', { ascending: false })
       .limit(1);
-    if (error) { console.warn('[Restore] query error:', error.message); return false; }
+    if (error) console.warn('[Restore] query error:', error.message);
     const fromIso = window.fromISO || (v => (!v ? null : (typeof v === 'number' ? v : new Date(v).getTime())));
+    // v1.18 : si aucune mission en cours côté Supabase, tenter le cache local
+    // (couvre le cas où la sauvegarde Supabase n'a pas eu le temps d'aboutir
+    // avant un refresh). Le cache est invalidé à la fin de mission/journée.
     if (!data || !data.length) {
+      const cacheRestored = restoreFromLocalCache(driverName, today);
+      if (cacheRestored) return true;
+      // v1.19 : tenter le cache "entre-missions" avant de requêter Supabase
+      const betweenCached = restoreFromBetweenMissionsCache(driverName, today);
+      if (betweenCached) return true;
       // v1.13b : pas de mission en cours — mais peut-être un état "entre missions"
-      // (le chauffeur a terminé une mission et n'en a pas encore démarré une
-      // nouvelle, ou il est en pause entre missions).
       const restored = await restoreBetweenMissionsState(driverName, today, fromIso);
       if (!restored) console.log('[Restore] Aucune mission du jour à restaurer pour', driverName);
       return restored;
@@ -830,6 +836,186 @@ async function restoreDriverSession() {
     return true;
   } catch(e) {
     console.warn('[Restore] exception:', e.message);
+    return false;
+  }
+}
+
+// v1.18 : restaure depuis le cache local (synchrone) — appelé en fallback
+// quand Supabase ne renvoie aucune mission en cours, typiquement après un
+// refresh juste après "Démarrer ma journée" (sauvegarde async pas encore
+// aboutie ou réseau lent). Le cache a été écrit par syncActive().
+function restoreFromLocalCache(driverName, today) {
+  try {
+    const raw = localStorage.getItem('lca_active_cache');
+    if (!raw) return false;
+    const c = JSON.parse(raw);
+    if (!c || !c.mission) return false;
+    // Sécurité : cache obsolète (autre jour) → ne pas restaurer
+    if (c.mission.date && c.mission.date !== today) {
+      try { localStorage.removeItem('lca_active_cache'); } catch(e) {}
+      return false;
+    }
+    if (c.mission.driver && driverName && c.mission.driver !== driverName) return false;
+    // Cache trop vieux (> 18h) : on ignore par sécurité
+    if (c.savedAt && (Date.now() - c.savedAt) > 18 * 3600 * 1000) {
+      try { localStorage.removeItem('lca_active_cache'); } catch(e) {}
+      return false;
+    }
+
+    // Hydrater l'état global
+    active     = c.mission;
+    curStop    = c.curStop || null;
+    step       = (typeof c.step === 'number') ? c.step : 0;
+    dayStart   = c.dayStart || (active.dayStartTs ? (typeof active.dayStartTs === 'string' ? new Date(active.dayStartTs).getTime() : active.dayStartTs) : Date.now());
+    dayPauses  = Array.isArray(c.dayPauses) ? c.dayPauses : [];
+    pauseActive= !!c.pauseActive;
+
+    // Si curStop est en fin du tableau stops (artefact syncActive step 7), retirer
+    if (active.stops && active.stops.length && curStop) {
+      const last = active.stops[active.stops.length - 1];
+      if (last && last.id && curStop.id && last.id === curStop.id && last.tDoc) {
+        active.stops.pop();
+      }
+    }
+
+    // UI : passer en mode mission en cours
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('main-app').style.display = '';
+    show('ph0', false);
+    show('ph-mission', true);
+    show('pause-active-panel', false);
+    show('pause-section', false);
+    show('end-day-section', false);
+    $('dayhdr').style.display = '';
+    lockVehicleSelects(true);
+    const btnStart = document.getElementById('btn-start-day');
+    if (btnStart) { btnStart.textContent = '▶ Journée en cours…'; btnStart.disabled = false; }
+
+    if ($('d-name'))           $('d-name').value           = driverName || active.driver || '';
+    if ($('d-plate-tracteur')) $('d-plate-tracteur').value = active.plateTracteur || active.plate || '';
+    if ($('d-plate-remorque')) $('d-plate-remorque').value = active.plateRemorque || active.plate_remorque || '';
+
+    startTicker();
+
+    if (pauseActive) {
+      // pause-active-panel est dans #ph0
+      show('ph-mission', false);
+      show('ph0', true);
+      show('pause-section', false);
+      show('pause-active-panel', true);
+      show('end-day-section', false);
+      if (btnStart) btnStart.disabled = true;
+    } else {
+      setStep(step);
+    }
+
+    // Resync vers Supabase (on rattrape le coup si la sauvegarde initiale a échoué)
+    try { syncActive(); } catch(e) {}
+    // Réinscrire dans active_drivers
+    try {
+      registerActiveDriver(driverName, active.plateTracteur || active.plate || '', active.plateRemorque || active.plate_remorque || '');
+      updateActiveDriverState({
+        is_paused: pauseActive,
+        pause_start: pauseActive && dayPauses.length ? dayPauses[dayPauses.length-1].tStart : null,
+        between_missions: false
+      });
+    } catch(e) {}
+
+    if (!window._activeDriverInterval) {
+      window._activeDriverInterval = setInterval(() => {
+        if (active) registerActiveDriver(driverName, active.plateTracteur || active.plate || '', active.plateRemorque || active.plate_remorque || '');
+      }, 120000);
+    }
+
+    toast('Session restaurée ✓ (cache local)');
+    return true;
+  } catch(e) {
+    console.warn('[RestoreCache] exception:', e.message);
+    return false;
+  }
+}
+
+// v1.19 : restaure depuis le cache local "entre-missions" — appelé en
+// fallback quand Supabase ne renvoie rien. Reproduit l'écran exact (ph0 +
+// pause-section + end-day-section, ou pause-active-panel si pause en cours).
+function restoreFromBetweenMissionsCache(driverName, today) {
+  try {
+    const raw = localStorage.getItem('lca_between_cache');
+    if (!raw) return false;
+    const c = JSON.parse(raw);
+    if (!c) return false;
+    if (c.date && c.date !== today) {
+      try { localStorage.removeItem('lca_between_cache'); } catch(e) {}
+      return false;
+    }
+    if (c.driverName && driverName && c.driverName !== driverName) return false;
+    if (c.savedAt && (Date.now() - c.savedAt) > 18 * 3600 * 1000) {
+      try { localStorage.removeItem('lca_between_cache'); } catch(e) {}
+      return false;
+    }
+
+    // Hydrater l'état global (pas de mission active, mode entre-missions)
+    active     = null;
+    curStop    = null;
+    step       = 0;
+    dayStart   = c.dayStart || Date.now();
+    dayPauses  = Array.isArray(c.dayPauses) ? c.dayPauses : [];
+    pauseActive= !!c.pauseActive;
+
+    // UI : ph0 entre-missions
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('main-app').style.display = '';
+    show('ph-mission', false);
+    show('ph0', true);
+    for (let i = 0; i <= 8; i++) show('f' + i, false);
+    $('stops-tl').innerHTML = '';
+    $('live-banner').innerHTML = '';
+    $('dayhdr').style.display = '';
+    lockVehicleSelects(false);
+
+    if ($('d-name'))           $('d-name').value           = driverName || c.driverName || '';
+    if ($('d-plate-tracteur')) $('d-plate-tracteur').value = c.plateTracteur || '';
+    if ($('d-plate-remorque')) $('d-plate-remorque').value = c.plateRemorque || '';
+
+    const btnStart = document.getElementById('btn-start-day');
+    if (btnStart) btnStart.textContent = '▶ Démarrer nouvelle mission';
+
+    if (pauseActive) {
+      show('pause-section', false);
+      show('pause-active-panel', true);
+      show('end-day-section', false);
+      if (btnStart) btnStart.disabled = true;
+    } else {
+      show('pause-section', true);
+      show('pause-active-panel', false);
+      show('end-day-section', true);
+      if (btnStart) btnStart.disabled = false;
+    }
+
+    startTicker();
+
+    // Resync vers active_drivers pour cohérence avec le bureau
+    try {
+      registerActiveDriver(driverName, c.plateTracteur || '', c.plateRemorque || '');
+      updateActiveDriverState({
+        is_paused: pauseActive,
+        pause_start: pauseActive && dayPauses.length ? dayPauses[dayPauses.length-1].tStart : null,
+        between_missions: !pauseActive
+      });
+    } catch(e) {}
+
+    if (!window._activeDriverInterval) {
+      window._activeDriverInterval = setInterval(() => {
+        registerActiveDriver(driverName, c.plateTracteur || '', c.plateRemorque || '');
+      }, 120000);
+    }
+
+    toast(pauseActive
+      ? 'Session restaurée ✓ — pause en cours'
+      : 'Session restaurée ✓ — entre missions');
+    return true;
+  } catch(e) {
+    console.warn('[RestoreBetweenCache] exception:', e.message);
     return false;
   }
 }
@@ -1127,7 +1313,48 @@ function syncActive() {
   if (!active) return;
   const snapshot = JSON.parse(JSON.stringify(active));
   if (curStop) snapshot.stops = [...(active.stops || []), curStop];
+  // v1.18 : cache local de la mission en cours pour fallback si Supabase n'a
+  // pas encore reçu/répondu (ex : refresh juste après "Démarrer ma journée").
+  try {
+    localStorage.setItem('lca_active_cache', JSON.stringify({
+      mission:    snapshot,
+      curStop:    curStop ? JSON.parse(JSON.stringify(curStop)) : null,
+      step:       step,
+      dayStart:   dayStart,
+      dayPauses:  dayPauses,
+      pauseActive,
+      savedAt:    Date.now()
+    }));
+  } catch(e) {}
   saveMissionToSupabase(snapshot).catch(e => console.warn('[Sync] failed:', e.message));
+}
+
+// v1.18 : invalider le cache local (mission complétée / journée terminée)
+function clearActiveCache() {
+  try { localStorage.removeItem('lca_active_cache'); } catch(e) {}
+}
+
+// v1.19 : cache de l'écran "entre-missions" (le chauffeur a fini une mission
+// et n'a pas encore démarré la suivante / pas encore clôturé la journée).
+// Permet de restaurer l'UI exactement où elle était après un refresh.
+function saveBetweenMissionsCache() {
+  try {
+    const payload = {
+      driverName:    currentDriver?.fullName || currentDriver?.fullname || currentDriver?.username || '',
+      username:      currentDriver?.username || '',
+      plateTracteur: document.getElementById('d-plate-tracteur')?.value || currentDriver?.plateTracteur || '',
+      plateRemorque: document.getElementById('d-plate-remorque')?.value || currentDriver?.plateRemorque || '',
+      dayStart:      dayStart,
+      dayPauses:     dayPauses,
+      pauseActive:   !!pauseActive,
+      date:          todayStr(),
+      savedAt:       Date.now()
+    };
+    localStorage.setItem('lca_between_cache', JSON.stringify(payload));
+  } catch(e) {}
+}
+function clearBetweenMissionsCache() {
+  try { localStorage.removeItem('lca_between_cache'); } catch(e) {}
 }
 
 // ============================================================
@@ -1150,6 +1377,7 @@ function startDay() {
     stops: [], completed: false, _cmr: null
   };
   curStop = null;
+  clearBetweenMissionsCache(); // v1.19 : nouvelle mission démarrée, plus en mode entre-missions
 
   // Griser les sélecteurs pour la durée de la journée
   lockVehicleSelects(true);
@@ -1231,6 +1459,8 @@ async function doDriverLogout() {
     // Pas de mission en cours : on peut retirer de active_drivers
     const username = currentDriver?.username;
     if (username) await removeActiveDriver(username);
+    clearActiveCache(); // v1.18 : pas de mission, cache local inutile
+    clearBetweenMissionsCache(); // v1.19 : idem cache entre-missions
   }
   currentDriver = null; pauseActive = false; dayPauses = [];
   try { localStorage.removeItem('lca_current_driver'); } catch(e) {}
@@ -1285,6 +1515,7 @@ function startPause() {
   } else {
     // v1.09f : pause entre missions → accrocher à la dernière mission de la journée
     persistDayPausesToLastMission();
+    saveBetweenMissionsCache(); // v1.19 : refresh du cache entre-missions
   }
   show('pause-section', false);
   show('pause-active-panel', true);
@@ -1309,6 +1540,7 @@ function endPause() {
   } else {
     // v1.09f : pause terminée entre missions → accrocher à la dernière mission
     persistDayPausesToLastMission();
+    saveBetweenMissionsCache(); // v1.19 : refresh du cache entre-missions (pause levée)
   }
   show('pause-active-panel', false);
   // Si le chauffeur est entre missions, il retrouve l'écran ph0 normal
@@ -1657,6 +1889,8 @@ function endDay() {
   clearInterval(ticker);
   clearInterval(window._activeDriverInterval);
   window._activeDriverInterval = null;
+  clearActiveCache(); // v1.18 : invalider cache local — journée terminée
+  clearBetweenMissionsCache(); // v1.19 : idem cache entre-missions
 
   show('ph-mission', false); show('ph0', true);
   $('dayhdr').style.display = 'none'; $('dayhdr').textContent = '00:00:00';
@@ -1741,6 +1975,7 @@ function endMissionNewOne() {
   save();
   saveMissionToSupabase(active).catch(e => console.warn('Save failed:', e));
   archiveMissionData(active);
+  clearActiveCache(); // v1.18 : mission terminée, cache local invalide
   active = null; curStop = null;
   for (let i = 0; i <= 8; i++) show('f' + i, false);
   $('stops-tl').innerHTML = '';
@@ -1756,6 +1991,7 @@ function endMissionNewOne() {
   if (currentDriver) {
     updateActiveDriverState({ is_paused: false, pause_start: null, between_missions: true });
   }
+  saveBetweenMissionsCache(); // v1.19 : cache local de l'écran entre-missions
   toast('Mission terminée ✓ — choisissez vos véhicules et démarrez la prochaine');
 }
 
