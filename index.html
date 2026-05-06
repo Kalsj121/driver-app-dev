@@ -193,6 +193,11 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 </head>
 <body>
 
+<!-- v1.23 : bandeau DEV — auto-affiché par le script en bas si l'URL Supabase
+     pointe sur le projet de développement. Invisible en prod. -->
+<div id="dev-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:repeating-linear-gradient(45deg,#ff6b00,#ff6b00 10px,#cc5500 10px,#cc5500 20px);color:#fff;text-align:center;padding:6px 8px;font-size:13px;font-weight:700;letter-spacing:.04em;z-index:99999;text-shadow:0 1px 2px rgba(0,0,0,0.4);box-shadow:0 2px 8px rgba(0,0,0,0.3);">⚠️ DEV — Données de test, ne pas utiliser pour de vraies missions</div>
+
+
 <!-- LOGIN SCREEN -->
 <div id="login-screen">
   <div class="login-box">
@@ -484,7 +489,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.21 (release: 24 avril 2026) — © Kalsj121</div>
+<div class="version-footer">Version 1.23 (release: 6 mai 2026) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -500,6 +505,23 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 // Fallback: localStorage for offline use
 // ============================================================
 let currentDriver = null; // {username, fullName, plate, login}
+
+// v1.23 : Détection environnement DEV — affiche un bandeau orange si l'app
+// pointe sur le projet Supabase de développement. Invisible en prod.
+(function detectDevEnv() {
+  try {
+    const url = (window.SUPABASE_URL || (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '')) + '';
+    // Le sous-domaine du projet Supabase dev est codé en dur ici
+    const isDev = url.includes('qkvnggcecmukogctfgsl');
+    if (isDev) {
+      const banner = document.getElementById('dev-banner');
+      if (banner) banner.style.display = '';
+      // Pousse le contenu vers le bas pour ne pas être recouvert par le bandeau
+      document.body.style.paddingTop = '32px';
+      document.title = '[DEV] ' + document.title;
+    }
+  } catch(e) { /* silencieux */ }
+})();
 
 // Built-in fallback accounts (if Supabase not ready)
 // Format: {username, password, fullName}
@@ -1314,7 +1336,7 @@ function startTicker() {
 // ============================================================
 // SUPABASE SYNC
 // ============================================================
-function syncActive() {
+function syncActive(opts) {
   if (!active) return;
   const snapshot = JSON.parse(JSON.stringify(active));
   if (curStop) snapshot.stops = [...(active.stops || []), curStop];
@@ -1331,7 +1353,12 @@ function syncActive() {
       savedAt:    Date.now()
     }));
   } catch(e) {}
-  saveMissionToSupabase(snapshot).catch(e => console.warn('[Sync] failed:', e.message));
+  // v1.23 : par défaut, lightSync=true → ne pas réécrire la colonne stops
+  // (qui contient les photos lourdes). Les flux qui modifient les photos
+  // (doDoc, endMissionNewOne, endDay) appellent syncActive({ full: true }).
+  const lightSync = !(opts && opts.full);
+  saveMissionToSupabase(snapshot, { lightSync })
+    .catch(e => console.warn('[Sync] failed:', e.message));
 }
 
 // v1.18 : invalider le cache local (mission complétée / journée terminée)
@@ -1861,7 +1888,9 @@ function doDoc() {
   curStop.minTotal  = ms2min(curStop.tDoc - curStop.tArrival);
   active.stops.push(Object.assign({}, curStop));
   $('f-comment').value='';
-  setStep(7); syncActive();
+  // v1.23 : full=true → ce stop a une nouvelle photo CMR à persister, donc
+  // on doit réécrire la colonne stops complète (pas de lightSync).
+  setStep(7); syncActive({ full: true });
   toast('CMR enregistré ✓ — stop terminé');
 }
 

@@ -178,6 +178,9 @@ textarea.fi{resize:vertical;min-height:72px;}
 </head>
 <body>
 
+<!-- v1.23 : bandeau DEV — auto-affiché si l'URL Supabase pointe sur la dev -->
+<div id="dev-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:repeating-linear-gradient(45deg,#ff6b00,#ff6b00 10px,#cc5500 10px,#cc5500 20px);color:#fff;text-align:center;padding:6px 8px;font-size:13px;font-weight:700;letter-spacing:.04em;z-index:99999;text-shadow:0 1px 2px rgba(0,0,0,0.4);box-shadow:0 2px 8px rgba(0,0,0,0.3);">⚠️ DEV — Données de test, ne pas utiliser pour de vraies missions</div>
+
 <!-- LOGIN SCREEN -->
 <div id="login-screen">
   <div class="login-box">
@@ -448,7 +451,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.21 (release: 24 avril 2026) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.23 (release: 6 mai 2026) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -464,6 +467,20 @@ textarea.fi{resize:vertical;min-height:72px;}
 // ============================================================
 const MANAGER_CREDENTIALS = { username: 'AdminLCA', password: 'LCAlgg_2704!' };
 let currentUser = null;
+
+// v1.23 : Détection environnement DEV (même logique que index.html)
+(function detectDevEnv() {
+  try {
+    const url = (window.SUPABASE_URL || (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '')) + '';
+    const isDev = url.includes('qkvnggcecmukogctfgsl');
+    if (isDev) {
+      const banner = document.getElementById('dev-banner');
+      if (banner) banner.style.display = '';
+      document.body.style.paddingTop = '32px';
+      document.title = '[DEV] ' + document.title;
+    }
+  } catch(e) { /* silencieux */ }
+})();
 
 function doLogin() {
   const u = document.getElementById('l-user').value.trim();
@@ -2232,8 +2249,10 @@ async function onAppReady() {
   // v1.09 : rafraîchir toutes les 10s pour que la durée de pause s'incrémente visiblement
   // et pour rattraper un UPDATE Realtime manqué sur active_drivers.
   setInterval(() => { renderActiveDriversTable(); }, 10000);
-  setInterval(fetchDrivers, 30000);
-  setInterval(loadMessages, 15000);
+  // v1.23 : polling allongé pour réduire la pression IO sur Postgres
+  // (l'updates en temps réel Realtime restent actifs pour la fraîcheur).
+  setInterval(fetchDrivers, 60000);   // 30s → 60s
+  setInterval(loadMessages, 30000);   // 15s → 30s
   startRealtimeSync();
   // v1.09 : diagnostic — vérifie que les colonnes pause existent dans active_drivers
   if (window.supabaseClient) {
