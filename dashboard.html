@@ -469,18 +469,25 @@ const MANAGER_CREDENTIALS = { username: 'AdminLCA', password: 'LCAlgg_2704!' };
 let currentUser = null;
 
 // v1.23 : Détection environnement DEV (même logique que index.html)
-(function detectDevEnv() {
+// Résilient : réessaie jusqu'à ce que window.SUPABASE_URL soit disponible.
+function applyDevBanner(retries) {
   try {
-    const url = (window.SUPABASE_URL || (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '')) + '';
-    const isDev = url.includes('qkvnggcecmukogctfgsl');
-    if (isDev) {
-      const banner = document.getElementById('dev-banner');
+    var url = (window.SUPABASE_URL || '') + '';
+    if (!url) {
+      if ((retries || 0) < 60) {
+        setTimeout(function(){ applyDevBanner((retries || 0) + 1); }, 150);
+      }
+      return;
+    }
+    if (url.indexOf('qkvnggcecmukogctfgsl') !== -1) {
+      var banner = document.getElementById('dev-banner');
       if (banner) banner.style.display = '';
       document.body.style.paddingTop = '32px';
-      document.title = '[DEV] ' + document.title;
+      if (document.title.indexOf('[DEV]') !== 0) document.title = '[DEV] ' + document.title;
     }
   } catch(e) { /* silencieux */ }
-})();
+}
+applyDevBanner();
 
 function doLogin() {
   const u = document.getElementById('l-user').value.trim();

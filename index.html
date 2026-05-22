@@ -508,20 +508,26 @@ let currentDriver = null; // {username, fullName, plate, login}
 
 // v1.23 : Détection environnement DEV — affiche un bandeau orange si l'app
 // pointe sur le projet Supabase de développement. Invisible en prod.
-(function detectDevEnv() {
+// Résilient : réessaie jusqu'à ce que supabase_config.js (chargé en defer)
+// ait exposé window.SUPABASE_URL.
+function applyDevBanner(retries) {
   try {
-    const url = (window.SUPABASE_URL || (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '')) + '';
-    // Le sous-domaine du projet Supabase dev est codé en dur ici
-    const isDev = url.includes('qkvnggcecmukogctfgsl');
-    if (isDev) {
-      const banner = document.getElementById('dev-banner');
+    var url = (window.SUPABASE_URL || '') + '';
+    if (!url) {
+      if ((retries || 0) < 60) {
+        setTimeout(function(){ applyDevBanner((retries || 0) + 1); }, 150);
+      }
+      return;
+    }
+    if (url.indexOf('qkvnggcecmukogctfgsl') !== -1) {
+      var banner = document.getElementById('dev-banner');
       if (banner) banner.style.display = '';
-      // Pousse le contenu vers le bas pour ne pas être recouvert par le bandeau
       document.body.style.paddingTop = '32px';
-      document.title = '[DEV] ' + document.title;
+      if (document.title.indexOf('[DEV]') !== 0) document.title = '[DEV] ' + document.title;
     }
   } catch(e) { /* silencieux */ }
-})();
+}
+applyDevBanner();
 
 // Built-in fallback accounts (if Supabase not ready)
 // Format: {username, password, fullName}

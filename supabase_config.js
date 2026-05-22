@@ -357,6 +357,8 @@ window.supabaseClient                 = supabaseClient;
 // v1.13 : helpers de conversion timestamp pour la restauration de session
 window.fromISO                        = fromISO;
 window.stopFromStorage                = stopFromStorage;
+// v1.23 : exposer l'URL pour la détection d'environnement (bandeau DEV)
+window.SUPABASE_URL                   = SUPABASE_URL;
 
 console.log('[Supabase] Functions registered globally');
 
