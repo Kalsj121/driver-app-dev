@@ -2417,7 +2417,15 @@ function startDriverRealtimeSync() {
         // Éviter les doublons
         const already = messages.find(m => String(m.id) === String(raw.id));
         if (already) return;
-        const msg = { ...raw, ts: new Date(raw.ts).getTime() };
+        // v1.25 : normaliser les colonnes snake_case (DB) → camelCase (UI)
+        const msg = {
+          ...raw,
+          ts:             new Date(raw.ts).getTime(),
+          fromName:       raw.fromName       || raw.fromname       || '',
+          toLabel:        raw.toLabel        || raw.tolabel        || '',
+          attachmentUrl:  raw.attachmentUrl  || raw.attachment_url  || null,
+          attachmentType: raw.attachmentType || raw.attachment_type || null
+        };
         messages.push(msg);
         try { localStorage.setItem('lca_msgs', JSON.stringify(messages)); } catch(e) {}
         renderMessages();
@@ -2527,8 +2535,8 @@ function clearMsgAttach() {
   const img = document.getElementById('msg-attach-img');
   const aud = document.getElementById('msg-attach-audio');
   if (wrap) wrap.style.display = 'none';
-  if (img) { img.src = ''; img.style.display = 'none'; }
-  if (aud) { aud.src = ''; aud.style.display = 'none'; }
+  if (img) { img.removeAttribute('src'); img.style.display = 'none'; }
+  if (aud) { aud.removeAttribute('src'); aud.load && aud.load(); aud.style.display = 'none'; }
 }
 
 function renderMsgAttachPreview() {

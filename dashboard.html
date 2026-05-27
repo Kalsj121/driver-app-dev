@@ -1201,8 +1201,8 @@ function clearMsgAttach() {
   const img = document.getElementById('msg-attach-img');
   const aud = document.getElementById('msg-attach-audio');
   if (wrap) wrap.style.display = 'none';
-  if (img) { img.src = ''; img.style.display = 'none'; }
-  if (aud) { aud.src = ''; aud.style.display = 'none'; }
+  if (img) { img.removeAttribute('src'); img.style.display = 'none'; }
+  if (aud) { aud.removeAttribute('src'); aud.load && aud.load(); aud.style.display = 'none'; }
 }
 
 function renderMsgAttachPreview() {
