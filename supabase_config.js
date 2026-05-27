@@ -92,15 +92,14 @@ async function loadMissionsFromSupabase() {
   } catch (e) { console.warn('[Supabase] Mission load failed:', e.message); return []; }
 }
 
-// v1.23 : option `lightSync` — quand true, n'écrit PAS la colonne `stops`
-// (qui contient les photos CMR base64). Économise plusieurs MB d'IO disque
-// à chaque appel. Les autres colonnes (timestamps d'état, completed, etc.)
-// sont mises à jour normalement via UPDATE ciblé.
-// À n'utiliser QUE pour les sync intermédiaires (syncActive). Les flux qui
-// modifient les stops (doDoc, end of mission) doivent appeler sans lightSync.
+// v1.24 — Sauvegarde de la mission. Le paramètre `opts` est conservé pour
+// rétrocompatibilité mais ignoré : depuis la migration Storage, les photos
+// ne sont plus en base64 dans `stops`, donc la colonne `stops` ne pèse plus
+// que quelques Ko — l'upsert complet est désormais bon marché en IO.
+// (L'optimisation `lightSync` v1.23 cassait les nouvelles missions car un
+// UPDATE sur une ligne inexistante ne crée rien.)
 async function saveMissionToSupabase(mission, opts) {
   if (!supabaseClient) return false;
-  const lightSync = !!(opts && opts.lightSync);
   try {
     const payload = {
       id:             mission.id,
@@ -121,20 +120,6 @@ async function saveMissionToSupabase(mission, opts) {
     if (mission.tDispatchReceived != null)         payload.tdispatchreceived = toISO(mission.tDispatchReceived);
     if (typeof mission.isPaused === 'boolean')     payload.ispaused          = mission.isPaused;
     if (mission.tPauseStart != null)               payload.tpausestart       = toISO(mission.tPauseStart);
-
-    // v1.23 — lightSync : ne pas réécrire la colonne stops (lourde, contient
-    // les photos base64). On UPDATE uniquement les colonnes légères.
-    // En cas d'échec (ligne inexistante par ex.), on retombe sur l'upsert complet.
-    if (lightSync) {
-      const { stops: _heavy, ...lightPayload } = payload;
-      const { error: lightErr } = await supabaseClient
-        .from('missions').update(lightPayload).eq('id', mission.id);
-      if (!lightErr) {
-        console.log('[Supabase] ✅ lightSync', Math.round(JSON.stringify(lightPayload).length/1024), 'KB');
-        return true;
-      }
-      console.warn('[Supabase] lightSync échec, fallback upsert complet:', lightErr.message);
-    }
 
     // Retry robuste : si une colonne optionnelle n'existe pas encore dans la DB,
     // on l'enlève et on réessaie (jusqu'à épuisement des colonnes optionnelles).
