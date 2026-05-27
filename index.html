@@ -489,7 +489,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.23 (release: 6 mai 2026) — © Kalsj121</div>
+<div class="version-footer">Version 1.24 (release: 6 mai 2026) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -1877,15 +1877,24 @@ function doDoc() {
   curStop.comment=$('f-comment').value;
   curStop.cargoType=document.querySelector('input[name="ctype"]:checked')?.value||'';
   curStop.cargo=collectCargo();
-  // v1.12 : gestion "sans pièce jointe" — cmrData null + raison stockée
+  // v1.12 : gestion "sans pièce jointe" — cmrData/cmrUrl null + raison stockée
+  // v1.23 : la photo est désormais une URL Storage (cmrUrl). Fallback base64
+  // (cmrData) uniquement si l'upload Storage a échoué.
   if (skipCMR) {
     curStop.cmrData = null;
+    curStop.cmrUrl  = null;
     curStop.noCmrReason = skipReason;
   } else {
-    curStop.cmrData = active._cmr || null;
+    if (active._cmrIsUrl) {
+      curStop.cmrUrl  = active._cmr || null;
+      curStop.cmrData = null;
+    } else {
+      curStop.cmrData = active._cmr || null;
+      curStop.cmrUrl  = null;
+    }
     curStop.noCmrReason = null;
   }
-  active._cmr=null; active._cmrSource=null;
+  active._cmr=null; active._cmrSource=null; active._cmrIsUrl=false;
   curStop.minTransit= curStop.transitFromPrev;
   curStop.minWait   = curStop.tDockAssigned ? ms2min(curStop.tDockAssigned - curStop.tArrival) : null;
   curStop.minDock   = (curStop.tDockAssigned&&curStop.tDockReady) ? ms2min(curStop.tDockReady - curStop.tDockAssigned) : null;
@@ -2141,6 +2150,35 @@ async function compressImage(file, maxWidth = 1800, quality = 0.78) {
   }
 }
 
+// v1.23 : upload d'une photo CMR vers Supabase Storage (bucket "cmrs").
+// Reçoit un dataURL, retourne l'URL publique du fichier uploadé, ou null en
+// cas d'échec (l'appelant retombe alors sur le stockage base64 historique).
+async function uploadCmrToStorage(dataUrl, missionId, stopId) {
+  if (!window.supabaseClient || !dataUrl) return null;
+  try {
+    // Convertir le dataURL en Blob
+    const resp = await fetch(dataUrl);
+    const blob = await resp.blob();
+    // Construire un chemin organisé : AAAA/MM/JJ/mission_stop_timestamp.jpg
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const safe = v => String(v || 'x').replace(/[^a-zA-Z0-9_-]/g, '');
+    const fileName = safe(missionId) + '_' + safe(stopId) + '_' + Date.now() + '.jpg';
+    const path = y + '/' + m + '/' + d + '/' + fileName;
+    const { error } = await window.supabaseClient.storage
+      .from('cmrs')
+      .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+    if (error) { console.warn('[Storage] upload échec:', error.message); return null; }
+    const { data } = window.supabaseClient.storage.from('cmrs').getPublicUrl(path);
+    return (data && data.publicUrl) ? data.publicUrl : null;
+  } catch (e) {
+    console.warn('[Storage] upload exception:', e?.message || e);
+    return null;
+  }
+}
+
 async function handleCMR(e, source) {
   const f=e.target.files[0]; if(!f) return;
   // Feedback : la compression d'une grosse photo (5 MB) peut prendre 1-2s sur
@@ -2158,15 +2196,33 @@ async function handleCMR(e, source) {
       r.readAsDataURL(f);
     });
   }
-  if(active) { active._cmr=dataUrl; active._cmrSource=source; }
-  // Mark correct option as ok
+  // Afficher la preview tout de suite (depuis le dataURL local)
   document.getElementById('cmr-opt-camera').classList.remove('ok');
   document.getElementById('cmr-opt-gallery').classList.remove('ok');
   document.getElementById('cmr-opt-'+source).classList.add('ok');
   document.getElementById('cmr-gallery-note').style.display='none';
   const prev = document.getElementById('cmr-prev');
   prev.innerHTML='<img src="'+dataUrl+'"/>'; prev.style.display='';
-  // Petit indicateur de la taille gagnée (utile en debug, anodin en prod)
+
+  // v1.23 : tenter l'upload vers Supabase Storage. En cas de succès, on stocke
+  // l'URL (légère) ; en cas d'échec, on retombe sur le base64 (historique).
+  toast('Envoi de la photo…');
+  const url = await uploadCmrToStorage(dataUrl, active?.id, curStop?.id);
+  if (active) {
+    if (url) {
+      active._cmr      = url;
+      active._cmrIsUrl = true;
+      console.log('[CMR] ✓ photo uploadée vers Storage');
+    } else {
+      active._cmr      = dataUrl;
+      active._cmrIsUrl = false;
+      console.warn('[CMR] Storage indisponible → fallback base64');
+    }
+    active._cmrSource = source;
+  }
+  toast(url ? 'Photo enregistrée ✓' : 'Photo enregistrée (mode local) ✓');
+
+  // Petit indicateur de la taille (utile en debug)
   try {
     const sizeKB = Math.round((dataUrl.length * 0.75) / 1024);
     console.log('[CMR] photo prête :', sizeKB, 'KB (source:', Math.round(f.size/1024), 'KB)');
@@ -2186,7 +2242,7 @@ async function handleCMR(e, source) {
 }
 
 function resetCMR() {
-  if(active){ active._cmr=null; active._cmrSource=null; }
+  if(active){ active._cmr=null; active._cmrSource=null; active._cmrIsUrl=false; }
   document.getElementById('cmr-opt-camera').classList.remove('ok');
   document.getElementById('cmr-opt-gallery').classList.remove('ok');
   document.getElementById('cmr-prev').style.display='none';
@@ -2214,7 +2270,7 @@ function onCmrSkipToggle() {
   if (!sk) return;
   if (sk.checked) {
     // Mode "sans pièce jointe" activé → on efface tout CMR encodé
-    if (active) { active._cmr = null; active._cmrSource = null; }
+    if (active) { active._cmr = null; active._cmrSource = null; active._cmrIsUrl = false; }
     document.getElementById('cmr-opt-camera')?.classList.remove('ok');
     document.getElementById('cmr-opt-gallery')?.classList.remove('ok');
     const prev = document.getElementById('cmr-prev'); if (prev) prev.style.display = 'none';

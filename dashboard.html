@@ -432,6 +432,28 @@ textarea.fi{resize:vertical;min-height:72px;}
     </p>
   </div>
 
+  <div class="card" style="margin-top:16px;border-color:rgba(15,110,86,0.35);">
+    <div class="ctit" style="color:var(--green);">📦 Migration des photos vers Storage</div>
+    <p style="font-size:13px;color:var(--t2);margin-bottom:12px;">
+      Déplace les anciennes photos CMR stockées en base64 dans la base de données
+      vers <strong>Supabase Storage</strong> (espace de fichiers dédié). Cela allège
+      fortement la base de données et améliore les performances. Les nouvelles photos
+      sont déjà envoyées directement vers Storage — cet outil ne concerne que
+      l'<strong>historique</strong> existant.
+    </p>
+    <p style="font-size:12px;color:var(--t3);margin-bottom:12px;">
+      💡 Opération à lancer une seule fois. Elle peut prendre plusieurs minutes selon
+      le nombre de photos. Vous pouvez fermer la fenêtre pendant qu'elle tourne — non,
+      restez sur la page jusqu'à la fin. Le bouclier : chaque photo migrée est vérifiée
+      avant que l'ancienne donnée base64 ne soit retirée.
+    </p>
+    <div id="migrate-progress" style="display:none;font-size:13px;color:var(--green);margin-bottom:10px;"></div>
+    <button class="btn bo" id="btn-migrate-photos" onclick="migratePhotosToStorage()"
+      style="border-color:var(--green);color:var(--green);">
+      📦 Migrer les anciennes photos vers Storage
+    </button>
+  </div>
+
   <div class="card" style="margin-top:16px;border-color:rgba(163,45,45,0.3);">
     <div class="ctit" style="color:var(--red);">⚠️ Restauration</div>
     <p style="font-size:13px;color:var(--t2);">
@@ -451,7 +473,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.23 (release: 6 mai 2026) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.24 (release: 6 mai 2026) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -509,6 +531,17 @@ function showApp() {
   document.getElementById('ver-footer').style.display = '';
   document.getElementById('user-name').textContent = currentUser?.full_name || 'Bureau';
   onAppReady();
+}
+
+// v1.23 : helpers pièce jointe CMR.
+// La photo peut être soit une URL Supabase Storage (cmrUrl, nouveau format),
+// soit un base64 (cmrData, ancien format). Ces helpers gèrent les deux.
+function cmrSrc(stop) {
+  if (!stop) return null;
+  return stop.cmrUrl || stop.cmrData || null;
+}
+function hasCmr(stop) {
+  return !!(stop && (stop.cmrUrl || stop.cmrData));
 }
 
 function doLogout() {
@@ -1299,10 +1332,10 @@ function renderArchiveTable(container, missions, matchMap) {
     const stops = (m.stops||[]);
     g.stopsCount += stops.length;
     // A-t-il des pièces jointes (CMR dans au moins un stop) ?
-    if (stops.some(s => s && s.cmrData)) g.hasAttachments = true;
+    if (stops.some(s => hasCmr(s))) g.hasAttachments = true;
     // v1.12 : collecter les stops sans PJ (avec raison saisie)
     stops.forEach((s, idx) => {
-      if (s && !s.cmrData && s.noCmrReason) {
+      if (s && !hasCmr(s) && s.noCmrReason) {
         g.noCmrItems.push({ stopIdx: idx + 1, location: s.location || '—', operation: s.operation || '', reason: s.noCmrReason });
       }
     });
@@ -1418,14 +1451,14 @@ async function loadDayAttachments(driverName, dateStr) {
   const items = [];
   missions.forEach(m => {
     (m.stops||[]).forEach((s, idx) => {
-      if (s && s.cmrData) {
+      if (hasCmr(s)) {
         items.push({
           missionId: m.id,
           stopIdx: idx+1,
           stopIdx0: idx,
           location: s.location||'',
           operation: s.operation||'',
-          cmrData: s.cmrData
+          cmrData: cmrSrc(s)   // v1.23 : URL Storage ou base64 selon le format
         });
       }
     });
@@ -1433,7 +1466,7 @@ async function loadDayAttachments(driverName, dateStr) {
   // Dédoublonner par contenu (même stop présent dans missions + missions_archive)
   const seen = new Set(); const uniq = [];
   items.forEach(it => {
-    const sig = it.cmrData.slice(0, 120) + '|' + it.location;
+    const sig = String(it.cmrData).slice(0, 120) + '|' + it.location;
     if (!seen.has(sig)) { seen.add(sig); uniq.push(it); }
   });
   return uniq;
@@ -1451,7 +1484,8 @@ async function deleteAttachmentCMR(missionId, stopIdx0) {
       if (mrow && mrow[0]) {
         const stops = Array.isArray(mrow[0].stops) ? [...mrow[0].stops] : [];
         if (stops[stopIdx0]) {
-          stops[stopIdx0] = { ...stops[stopIdx0], cmrData: null };
+          // v1.23 : effacer les deux formats (base64 + URL Storage)
+          stops[stopIdx0] = { ...stops[stopIdx0], cmrData: null, cmrUrl: null };
           const { error } = await window.supabaseClient.from('missions').update({
             stops,
             updatedat: new Date().toISOString()
@@ -1467,7 +1501,8 @@ async function deleteAttachmentCMR(missionId, stopIdx0) {
       if (arow && arow[0]) {
         const stops = Array.isArray(arow[0].stops) ? [...arow[0].stops] : [];
         if (stops[stopIdx0]) {
-          stops[stopIdx0] = { ...stops[stopIdx0], cmrData: null };
+          // v1.23 : effacer les deux formats (base64 + URL Storage)
+          stops[stopIdx0] = { ...stops[stopIdx0], cmrData: null, cmrUrl: null };
           const { error } = await window.supabaseClient.from('missions_archive').update({
             stops,
             updatedat: new Date().toISOString()
@@ -1484,7 +1519,7 @@ async function deleteAttachmentCMR(missionId, stopIdx0) {
         _archiveCache = _archiveCache.map(m => {
           if (String(m.id) !== String(missionId)) return m;
           const stops = Array.isArray(m.stops) ? [...m.stops] : [];
-          if (stops[stopIdx0]) stops[stopIdx0] = { ...stops[stopIdx0], cmrData: null };
+          if (stops[stopIdx0]) stops[stopIdx0] = { ...stops[stopIdx0], cmrData: null, cmrUrl: null };
           return { ...m, stops };
         });
       }
@@ -1568,7 +1603,13 @@ function buildAttachmentsViewerHTML(driverName, dateStr, items) {
   let ITEMS = ${itemsJson};
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  function extOf(d){ return /image\\/png/.test(d)?'png':(/image\\/jpe?g/.test(d)?'jpg':'bin'); }
+  function extOf(d){
+    d = String(d||'');
+    if (/^data:/.test(d)) return /image\\/png/.test(d)?'png':(/image\\/jpe?g/.test(d)?'jpg':'bin');
+    if (/\\.png(\\?|$)/i.test(d)) return 'png';
+    if (/\\.webp(\\?|$)/i.test(d)) return 'webp';
+    return 'jpg';
+  }
   function fileName(it){
     const loc = (it.location||'').replace(/[^a-zA-Z0-9_-]/g,'_');
     return 'CMR_' + SAFE_DRV + '_' + SAFE_DT + '_stop' + it.stopIdx + (loc?'_'+loc:'') + '.' + extOf(it.cmrData);
@@ -1591,14 +1632,28 @@ function buildAttachmentsViewerHTML(driverName, dateStr, items) {
       </div>
     \`).join('');
   }
-  function downloadOne(i){
+  async function downloadOne(i){
     const it = ITEMS[i]; if (!it) return;
-    const a = document.createElement('a');
-    a.href = it.cmrData; a.download = fileName(it);
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    try {
+      let href = it.cmrData;
+      // v1.23 : pour une URL distante (Supabase Storage), le téléchargement
+      // direct via l'attribut download est ignoré (cross-origin). On récupère
+      // donc le fichier en blob et on télécharge ce blob.
+      if (/^https?:/.test(String(href))) {
+        const resp = await fetch(href);
+        const blob = await resp.blob();
+        href = URL.createObjectURL(blob);
+      }
+      const a = document.createElement('a');
+      a.href = href; a.download = fileName(it);
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      if (String(href).indexOf('blob:') === 0) setTimeout(function(){ URL.revokeObjectURL(href); }, 3000);
+    } catch(e) {
+      alert('Echec du telechargement : ' + (e.message || e));
+    }
   }
-  function downloadAll(){
-    ITEMS.forEach((_,i) => downloadOne(i));
+  async function downloadAll(){
+    for (let i = 0; i < ITEMS.length; i++) { await downloadOne(i); }
   }
   async function deleteOne(i){
     const it = ITEMS[i]; if (!it) return;
@@ -1794,7 +1849,7 @@ function buildFeuilleDeRouteHTML(allMissions, pauses, driver, dateStr) {
       const cargoStr = (s.cargo||[]).map(c=>c.type==='uld'?(c.uld||'ULD'):((c.pieces||'')+'pc '+(c.awb||''))).join(', ')||'—';
       // v1.12 : statut CMR — ✓ présent, ⚠️ sans PJ + raison, ou —
       let cmrStatusCell = '—';
-      if (s.cmrData) {
+      if (hasCmr(s)) {
         cmrStatusCell = '<span style="color:#0f6e56;font-weight:600;">✓ PJ</span>';
       } else if (s.noCmrReason) {
         const reasonEsc = String(s.noCmrReason).replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -2413,6 +2468,101 @@ async function createBackupZip() {
   } finally {
     btn.disabled = false;
     btn.textContent = '💾 Créer une sauvegarde ZIP maintenant';
+  }
+}
+
+// ============================================================
+// MIGRATION PHOTOS BASE64 → SUPABASE STORAGE (v1.23)
+// ============================================================
+
+// Upload d'un dataURL base64 vers le bucket Storage "cmrs". Retourne l'URL
+// publique, ou null en cas d'échec.
+async function migrateUploadToStorage(dataUrl, missionId, stopIdx) {
+  if (!window.supabaseClient || !dataUrl) return null;
+  try {
+    const resp = await fetch(dataUrl);
+    const blob = await resp.blob();
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const safe = v => String(v || 'x').replace(/[^a-zA-Z0-9_-]/g, '');
+    const path = y + '/' + m + '/' + d + '/migr_' + safe(missionId) + '_s' + stopIdx + '_' + Date.now() + '.jpg';
+    const { error } = await window.supabaseClient.storage
+      .from('cmrs').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+    if (error) { console.warn('[Migration] upload échec:', error.message); return null; }
+    const { data } = window.supabaseClient.storage.from('cmrs').getPublicUrl(path);
+    return (data && data.publicUrl) ? data.publicUrl : null;
+  } catch(e) {
+    console.warn('[Migration] upload exception:', e?.message || e);
+    return null;
+  }
+}
+
+async function migratePhotosToStorage() {
+  const btn = document.getElementById('btn-migrate-photos');
+  const prog = document.getElementById('migrate-progress');
+  if (!window.supabaseClient) { showToast('⚠️ Supabase non disponible'); return; }
+  if (!confirm('Lancer la migration des anciennes photos vers Storage ?\n\nL\'opération peut prendre plusieurs minutes. Restez sur cette page jusqu\'à la fin.')) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Migration en cours…';
+  prog.style.display = '';
+  prog.textContent = '⏳ Lecture des missions…';
+
+  let migrated = 0, failed = 0, scanned = 0;
+
+  try {
+    // Traiter les deux tables : missions et missions_archive
+    for (const table of ['missions', 'missions_archive']) {
+      const rows = await fetchAllRows(table);
+      for (const row of rows) {
+        const stops = Array.isArray(row.stops) ? row.stops : [];
+        let rowChanged = false;
+        for (let i = 0; i < stops.length; i++) {
+          const s = stops[i];
+          // Cible : un stop avec une photo base64 (cmrData) et pas encore d'URL
+          if (s && typeof s.cmrData === 'string' && s.cmrData.indexOf('data:') === 0 && !s.cmrUrl) {
+            scanned++;
+            prog.textContent = '⏳ Migration… ' + migrated + ' photo(s) déplacée(s)';
+            const url = await migrateUploadToStorage(s.cmrData, row.id, i);
+            if (url) {
+              stops[i] = { ...s, cmrUrl: url, cmrData: null };
+              rowChanged = true;
+              migrated++;
+            } else {
+              failed++;
+            }
+          }
+        }
+        if (rowChanged) {
+          // Sauvegarder la ligne mise à jour (uniquement la colonne stops)
+          const idVal = (table === 'missions_archive') ? String(row.id) : row.id;
+          const { error } = await window.supabaseClient
+            .from(table)
+            .update({ stops, updatedat: new Date().toISOString() })
+            .eq('id', idVal);
+          if (error) {
+            console.warn('[Migration] échec update', table, row.id, error.message);
+            failed++;
+          }
+        }
+      }
+    }
+
+    prog.textContent = '✅ Terminé — ' + migrated + ' photo(s) migrée(s)'
+      + (failed ? ', ' + failed + ' échec(s)' : '');
+    showToast('Migration terminée : ' + migrated + ' photo(s) déplacée(s) ✓');
+    if (failed) {
+      showToast('⚠️ ' + failed + ' échec(s) — relancez la migration pour réessayer');
+    }
+  } catch(e) {
+    console.error('[Migration] erreur:', e);
+    prog.textContent = '❌ Erreur : ' + (e.message || e);
+    showToast('Erreur migration : ' + (e.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📦 Migrer les anciennes photos vers Storage';
   }
 }
 </script>
