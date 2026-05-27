@@ -132,7 +132,27 @@ textarea.fi{resize:vertical;min-height:72px;}
 .reg-table tr:last-child td{border-bottom:none;}
 .online-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--gmid);margin-right:6px;}
 
-/* MESSAGES */
+/* MESSAGES — v1.26 : layout style messagerie (composer en bas, thread défilant) */
+.view#view-messages.on{
+  display:flex;flex-direction:column;
+  position:fixed;top:113px;left:0;right:0;bottom:0;
+  background:var(--bg);z-index:5;padding:0;
+}
+.msg-header-bar{
+  flex:0 0 auto;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:10px 24px;background:var(--card);border-bottom:1px solid var(--b1);
+}
+.msg-thread-wrap{
+  flex:1 1 auto;overflow-y:auto;min-height:0;
+  padding:12px 24px;
+}
+.msg-composer-wrap{
+  flex:0 0 auto;
+  padding:12px 24px 16px;background:var(--card);border-top:1px solid var(--b1);
+  box-shadow:0 -2px 8px rgba(0,0,0,0.04);
+}
+.msg-composer-wrap .msg-compose{background:none;border:none;padding:0;margin:0;border-radius:0;}
 .msg-compose{background:var(--card);border:1px solid var(--b1);border-radius:12px;padding:16px;margin-bottom:14px;}
 .msg-thread{display:flex;flex-direction:column;gap:8px;}
 .msg-bubble{border-radius:12px;padding:10px 14px;max-width:80%;}
@@ -267,51 +287,58 @@ textarea.fi{resize:vertical;min-height:72px;}
 
 <!-- ============================================================ MESSAGES -->
 <div class="view" id="view-messages">
-<div class="page-narrow">
-
-  <div class="msg-compose">
-    <div class="ctit" style="color:var(--blue);">📨 Envoyer un message</div>
-    <div class="fg">
-      <label class="fl">Destinataire</label>
-      <select class="fi" id="msg-to">
-        <option value="all">📢 Tous les chauffeurs</option>
-      </select>
-    </div>
-    <div class="fg" style="margin-bottom:12px;">
-      <label class="fl">Message</label>
-      <textarea class="fi" id="msg-text" placeholder="Ex : Attention retard WFS 32 — ne pas partir avant 14h…" style="min-height:80px;"></textarea>
-    </div>
-    <!-- v1.25 : pièce jointe image ou audio -->
-    <input type="file" id="msg-img-input" accept="image/*" style="display:none;" onchange="onMsgImagePicked(this)"/>
-    <div id="msg-attach-preview" style="display:none;margin-bottom:10px;padding:8px;background:var(--blt);border-radius:8px;position:relative;max-width:280px;">
-      <img id="msg-attach-img" style="display:none;max-width:140px;max-height:140px;border-radius:6px;"/>
-      <audio id="msg-attach-audio" controls preload="none" style="display:none;width:100%;max-width:240px;"></audio>
-      <button type="button" onclick="clearMsgAttach()" style="position:absolute;top:4px;right:4px;background:#fff;border:1px solid var(--b2);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <button type="button" onclick="document.getElementById('msg-img-input').click()" title="Joindre une photo" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--b2);background:#fff;font-size:18px;cursor:pointer;padding:0;flex-shrink:0;">📷</button>
-      <button type="button" id="btn-msg-record" onclick="toggleMsgRecord()" title="Enregistrer un audio (max 1 min)" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--b2);background:#fff;font-size:18px;cursor:pointer;padding:0;flex-shrink:0;">🎤</button>
-      <span id="msg-record-timer" style="display:none;font-variant-numeric:tabular-nums;font-weight:700;color:var(--red);min-width:40px;">0:00</span>
-      <button class="btn bp" style="max-width:200px;margin:0;" onclick="sendMsg()">Envoyer</button>
-    </div>
-  </div>
-
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-    <p style="font-size:13px;font-weight:700;">Fil des messages</p>
-    <div style="display:flex;gap:4px;align-items:center;">
-      <label style="font-size:12px;color:var(--t2);">Filtrer :</label>
+  <!-- v1.26 : header sticky en haut avec filtre + actions -->
+  <div class="msg-header-bar">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:15px;font-weight:700;color:var(--t1);">💬 Messages</span>
+      <label style="font-size:12px;color:var(--t2);margin-left:8px;">Filtrer :</label>
       <select class="fi" id="msg-filter" onchange="renderMessages()" style="width:auto;font-size:12px;padding:5px 8px;">
         <option value="all">Tous</option>
       </select>
-      <button class="btn bo bsm" onclick="exportMsgsCSV()" style="margin-left:4px;">CSV</button>
-      <button class="btn bsm" onclick="deleteAllMessages()" style="margin-left:4px;background:none;border:1px solid rgba(163,45,45,0.4);color:var(--red);">🗑 Tout supprimer</button>
+    </div>
+    <div style="display:flex;gap:4px;align-items:center;">
+      <button class="btn bo bsm" onclick="exportMsgsCSV()">CSV</button>
+      <button class="btn bsm" onclick="deleteAllMessages()" style="background:none;border:1px solid rgba(163,45,45,0.4);color:var(--red);">🗑 Tout supprimer</button>
     </div>
   </div>
 
-  <div id="msg-thread" class="msg-thread">
-    <div class="empty"><p>Aucun message.</p></div>
+  <!-- Thread défilant (zone centrale extensible) -->
+  <div class="msg-thread-wrap">
+    <div id="msg-thread" class="msg-thread">
+      <div class="empty"><p>Aucun message.</p></div>
+    </div>
   </div>
-</div>
+
+  <!-- v1.26 : composer toujours visible en bas -->
+  <div class="msg-composer-wrap">
+    <div class="msg-compose">
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:0;">
+        <div style="flex:0 0 220px;min-width:160px;">
+          <label class="fl" style="margin-bottom:4px;">Destinataire</label>
+          <select class="fi" id="msg-to" style="font-size:13px;padding:8px 10px;">
+            <option value="all">📢 Tous les chauffeurs</option>
+          </select>
+        </div>
+        <div style="flex:1 1 auto;">
+          <label class="fl" style="margin-bottom:4px;">Message</label>
+          <textarea class="fi" id="msg-text" placeholder="Ex : Attention retard WFS 32 — ne pas partir avant 14h…" style="min-height:54px;max-height:140px;resize:vertical;font-size:13px;padding:8px 10px;"></textarea>
+        </div>
+      </div>
+      <!-- v1.25 : pièce jointe image ou audio -->
+      <input type="file" id="msg-img-input" accept="image/*" style="display:none;" onchange="onMsgImagePicked(this)"/>
+      <div id="msg-attach-preview" style="display:none;margin-top:10px;padding:8px;background:var(--blt);border-radius:8px;position:relative;max-width:280px;">
+        <img id="msg-attach-img" style="display:none;max-width:140px;max-height:140px;border-radius:6px;"/>
+        <audio id="msg-attach-audio" controls preload="none" style="display:none;width:100%;max-width:240px;"></audio>
+        <button type="button" onclick="clearMsgAttach()" style="position:absolute;top:4px;right:4px;background:#fff;border:1px solid var(--b2);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+        <button type="button" onclick="document.getElementById('msg-img-input').click()" title="Joindre une photo" style="width:38px;height:38px;border-radius:50%;border:1px solid var(--b2);background:#fff;font-size:17px;cursor:pointer;padding:0;flex-shrink:0;">📷</button>
+        <button type="button" id="btn-msg-record" onclick="toggleMsgRecord()" title="Enregistrer un audio (max 1 min)" style="width:38px;height:38px;border-radius:50%;border:1px solid var(--b2);background:#fff;font-size:17px;cursor:pointer;padding:0;flex-shrink:0;">🎤</button>
+        <span id="msg-record-timer" style="display:none;font-variant-numeric:tabular-nums;font-weight:700;color:var(--red);min-width:40px;">0:00</span>
+        <button class="btn bp" style="margin-left:auto;margin-top:0;max-width:180px;" onclick="sendMsg()">📨 Envoyer</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ============================================================ REPORTS -->
@@ -485,7 +512,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.25 (release: 6 mai 2026) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.26 (release: 6 mai 2026) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
