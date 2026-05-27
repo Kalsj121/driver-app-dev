@@ -480,7 +480,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
       <input type="file" id="msg-img-input" accept="image/*" capture="environment" style="display:none;" onchange="onMsgImagePicked(this)"/>
       <div id="msg-attach-preview" style="display:none;margin-bottom:10px;padding:8px;background:var(--blt);border-radius:8px;position:relative;">
         <img id="msg-attach-img" style="display:none;max-width:140px;max-height:140px;border-radius:6px;"/>
-        <audio id="msg-attach-audio" controls style="display:none;width:100%;max-width:240px;"></audio>
+        <audio id="msg-attach-audio" controls preload="none" style="display:none;width:100%;max-width:240px;"></audio>
         <button type="button" onclick="clearMsgAttach()" style="position:absolute;top:4px;right:4px;background:#fff;border:1px solid var(--b2);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
@@ -2408,15 +2408,15 @@ function startDriverRealtimeSync() {
     _realtimeChannel = window.supabaseClient
       .channel('driver-messages-rt')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
+        console.log('[Driver Realtime] INSERT reçu:', payload?.new);
         const raw = payload.new;
         if (!raw) return;
         const driverName = active ? active.driver : (currentDriver?.fullName || '');
-        // N'accepter que les messages bureau destinés à ce chauffeur ou à tous
-        if (raw.from !== 'bureau') return;
-        if (raw.to !== 'all' && raw.to !== driverName) return;
-        // Éviter les doublons
+        console.log('[Driver Realtime] filtrage — driverName=', driverName, ' / msg.to=', raw.to, ' / msg.from=', raw.from);
+        if (raw.from !== 'bureau') { console.log('[Driver Realtime] ignoré (pas bureau)'); return; }
+        if (raw.to !== 'all' && raw.to !== driverName) { console.log('[Driver Realtime] ignoré (pas destiné à ce chauffeur)'); return; }
         const already = messages.find(m => String(m.id) === String(raw.id));
-        if (already) return;
+        if (already) { console.log('[Driver Realtime] doublon ignoré'); return; }
         // v1.25 : normaliser les colonnes snake_case (DB) → camelCase (UI)
         const msg = {
           ...raw,
@@ -2426,18 +2426,47 @@ function startDriverRealtimeSync() {
           attachmentUrl:  raw.attachmentUrl  || raw.attachment_url  || null,
           attachmentType: raw.attachmentType || raw.attachment_type || null
         };
+        console.log('[Driver Realtime] ✓ message ajouté:', msg);
         messages.push(msg);
         try { localStorage.setItem('lca_msgs', JSON.stringify(messages)); } catch(e) {}
         renderMessages();
-        // Badge + toast discret
         const badge = $('msg-badge');
         if (badge) { const n = parseInt(badge.textContent||'0')+1; badge.textContent=n; badge.style.display=''; }
         toast('📨 Nouveau message du bureau');
       })
       .subscribe(status => {
-        console.log('[Driver Realtime] status:', status);
+        console.log('[Driver Realtime] subscription status:', status);
       });
   } catch(e) { console.warn('[Driver Realtime] failed:', e.message); }
+
+  // v1.25 : polling de secours toutes les 20s au cas où le realtime aurait
+  // un hoquet. Recharge les messages depuis Supabase et merge sans doublon.
+  if (!window._driverMsgPolling) {
+    window._driverMsgPolling = setInterval(async () => {
+      if (!window.loadMessagesFromSupabase) return;
+      const driverName = active ? active.driver : (currentDriver?.fullName || '');
+      if (!driverName) return;
+      try {
+        const sb = await window.loadMessagesFromSupabase();
+        if (!Array.isArray(sb)) return;
+        let added = 0;
+        for (const m of sb) {
+          const isMine =
+            (m.from === 'bureau' && (m.to === 'all' || m.to === driverName)) ||
+            (m.from === 'driver' && m.fromName === driverName);
+          if (!isMine) continue;
+          if (messages.find(x => String(x.id) === String(m.id))) continue;
+          messages.push({ ...m, ts: (typeof m.ts === 'number') ? m.ts : new Date(m.ts).getTime() });
+          added++;
+        }
+        if (added) {
+          try { localStorage.setItem('lca_msgs', JSON.stringify(messages)); } catch(e) {}
+          renderMessages();
+          console.log('[Driver poll] +'+added+' message(s) récupéré(s) en backup');
+        }
+      } catch(e) { /* silencieux */ }
+    }, 20000);
+  }
 }
 
 async function saveMsgs() {

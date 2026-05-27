@@ -285,7 +285,7 @@ textarea.fi{resize:vertical;min-height:72px;}
     <input type="file" id="msg-img-input" accept="image/*" style="display:none;" onchange="onMsgImagePicked(this)"/>
     <div id="msg-attach-preview" style="display:none;margin-bottom:10px;padding:8px;background:var(--blt);border-radius:8px;position:relative;max-width:280px;">
       <img id="msg-attach-img" style="display:none;max-width:140px;max-height:140px;border-radius:6px;"/>
-      <audio id="msg-attach-audio" controls style="display:none;width:100%;max-width:240px;"></audio>
+      <audio id="msg-attach-audio" controls preload="none" style="display:none;width:100%;max-width:240px;"></audio>
       <button type="button" onclick="clearMsgAttach()" style="position:absolute;top:4px;right:4px;background:#fff;border:1px solid var(--b2);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
