@@ -476,7 +476,19 @@ select.fi-locked{pointer-events:none;opacity:.7;}
     <div style="margin-top:16px;background:var(--card);border:1px solid var(--b1);border-radius:var(--rlg);padding:14px 16px;">
       <label class="fl">Répondre au bureau</label>
       <textarea class="fi" id="driver-reply" placeholder="Votre message…" style="min-height:68px;margin-bottom:8px;"></textarea>
-      <button class="btn bp" onclick="sendDriverMessage()">📨 Envoyer au bureau</button>
+      <!-- v1.25 : pièce jointe (image ou audio) — input cachés, déclenchés par les boutons -->
+      <input type="file" id="msg-img-input" accept="image/*" capture="environment" style="display:none;" onchange="onMsgImagePicked(this)"/>
+      <div id="msg-attach-preview" style="display:none;margin-bottom:10px;padding:8px;background:var(--blt);border-radius:8px;position:relative;">
+        <img id="msg-attach-img" style="display:none;max-width:140px;max-height:140px;border-radius:6px;"/>
+        <audio id="msg-attach-audio" controls style="display:none;width:100%;max-width:240px;"></audio>
+        <button type="button" onclick="clearMsgAttach()" style="position:absolute;top:4px;right:4px;background:#fff;border:1px solid var(--b2);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" onclick="document.getElementById('msg-img-input').click()" title="Joindre une photo" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--b2);background:#fff;font-size:18px;cursor:pointer;padding:0;flex-shrink:0;">📷</button>
+        <button type="button" id="btn-msg-record" onclick="toggleMsgRecord()" title="Enregistrer un audio (max 1 min)" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--b2);background:#fff;font-size:18px;cursor:pointer;padding:0;flex-shrink:0;">🎤</button>
+        <span id="msg-record-timer" style="display:none;font-variant-numeric:tabular-nums;font-weight:700;color:var(--red);min-width:40px;">0:00</span>
+        <button class="btn bp" onclick="sendDriverMessage()" style="flex:1;margin:0;">📨 Envoyer au bureau</button>
+      </div>
     </div>
   </div>
 </div>
@@ -489,7 +501,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.24 (release: 6 mai 2026) — © Kalsj121</div>
+<div class="version-footer">Version 1.25 (release: 6 mai 2026) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -2424,14 +2436,182 @@ async function saveMsgs() {
   try { localStorage.setItem('lca_msgs', JSON.stringify(messages)); } catch(e) {}
 }
 
-function sendDriverMessage() {
+// ============================================================
+// MESSAGE ATTACHMENTS (v1.25) — image + audio
+// ============================================================
+let _msgAttachment = null;     // { blob, dataUrl, type, durationSec? }
+let _msgRecorder = null;
+let _msgRecorderStream = null;
+let _msgRecorderTimer = null;
+let _msgRecorderStartedAt = 0;
+
+async function onMsgImagePicked(input) {
+  const f = input.files[0]; if (!f) return;
+  input.value = '';
+  toast('Optimisation de la photo…');
+  let dataUrl = null;
+  try { dataUrl = await compressImage(f, 1800, 0.78); } catch(e) {}
+  if (!dataUrl) {
+    dataUrl = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = ev => resolve(ev.target.result);
+      r.onerror = reject;
+      r.readAsDataURL(f);
+    });
+  }
+  const resp = await fetch(dataUrl);
+  const blob = await resp.blob();
+  _msgAttachment = { blob, dataUrl, type: 'image' };
+  renderMsgAttachPreview();
+}
+
+async function toggleMsgRecord() {
+  const btn = document.getElementById('btn-msg-record');
+  const timerEl = document.getElementById('msg-record-timer');
+  // Si déjà en cours d'enregistrement → on arrête
+  if (_msgRecorder && _msgRecorder.state === 'recording') {
+    try { _msgRecorder.stop(); } catch(e) {}
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+    toast('Microphone non supporté sur ce navigateur', true);
+    return;
+  }
+  try {
+    _msgRecorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    let mime = 'audio/webm;codecs=opus';
+    if (!MediaRecorder.isTypeSupported(mime)) {
+      mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+           : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+    }
+    const opts = mime ? { mimeType: mime } : {};
+    _msgRecorder = new MediaRecorder(_msgRecorderStream, opts);
+    const chunks = [];
+    _msgRecorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    _msgRecorder.onstop = async () => {
+      try { if (_msgRecorderStream) _msgRecorderStream.getTracks().forEach(t => t.stop()); } catch(e) {}
+      clearInterval(_msgRecorderTimer); _msgRecorderTimer = null;
+      const elapsed = Math.round((Date.now() - _msgRecorderStartedAt)/1000);
+      const finalType = (chunks[0] && chunks[0].type) || mime || 'audio/webm';
+      const blob = new Blob(chunks, { type: finalType });
+      const dataUrl = await new Promise(res => {
+        const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob);
+      });
+      _msgAttachment = { blob, dataUrl, type: 'audio', durationSec: elapsed };
+      btn.textContent = '🎤';
+      btn.style.background = ''; btn.style.color = '';
+      timerEl.style.display = 'none';
+      renderMsgAttachPreview();
+    };
+    _msgRecorder.start();
+    _msgRecorderStartedAt = Date.now();
+    btn.textContent = '⏹';
+    btn.style.background = 'var(--red)'; btn.style.color = '#fff';
+    timerEl.style.display = '';
+    timerEl.textContent = '0:00';
+    _msgRecorderTimer = setInterval(() => {
+      const s = Math.round((Date.now() - _msgRecorderStartedAt)/1000);
+      timerEl.textContent = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+      // v1.25 : arrêt automatique à 60s
+      if (s >= 60) { try { _msgRecorder.stop(); } catch(e) {} }
+    }, 250);
+  } catch(e) {
+    console.warn('[MicRecord] failed:', e?.message || e);
+    toast('Impossible d\'accéder au microphone — autorisez l\'app dans les paramètres.', true);
+  }
+}
+
+function clearMsgAttach() {
+  _msgAttachment = null;
+  const wrap = document.getElementById('msg-attach-preview');
+  const img = document.getElementById('msg-attach-img');
+  const aud = document.getElementById('msg-attach-audio');
+  if (wrap) wrap.style.display = 'none';
+  if (img) { img.src = ''; img.style.display = 'none'; }
+  if (aud) { aud.src = ''; aud.style.display = 'none'; }
+}
+
+function renderMsgAttachPreview() {
+  if (!_msgAttachment) { clearMsgAttach(); return; }
+  const wrap = document.getElementById('msg-attach-preview');
+  const img = document.getElementById('msg-attach-img');
+  const aud = document.getElementById('msg-attach-audio');
+  if (!wrap) return;
+  wrap.style.display = '';
+  if (_msgAttachment.type === 'image') {
+    img.src = _msgAttachment.dataUrl;
+    img.style.display = '';
+    aud.style.display = 'none';
+  } else if (_msgAttachment.type === 'audio') {
+    aud.src = _msgAttachment.dataUrl;
+    aud.style.display = '';
+    img.style.display = 'none';
+  }
+}
+
+async function uploadMsgAttachment(blob, type) {
+  if (!window.supabaseClient || !blob) return null;
+  try {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth()+1).padStart(2,'0');
+    const d = String(now.getDate()).padStart(2,'0');
+    const rnd = Math.random().toString(36).slice(2, 8);
+    const ext = (type === 'image') ? 'jpg' : ((blob.type || '').indexOf('mp4') !== -1 ? 'mp4' : 'webm');
+    const path = y + '/' + m + '/' + d + '/' + type + '_' + Date.now() + '_' + rnd + '.' + ext;
+    const ct = (type === 'image') ? 'image/jpeg' : (blob.type || 'audio/webm');
+    const { error } = await window.supabaseClient.storage
+      .from('messages').upload(path, blob, { contentType: ct, upsert: true });
+    if (error) { console.warn('[Msg upload] failed:', error.message); return null; }
+    const { data } = window.supabaseClient.storage.from('messages').getPublicUrl(path);
+    return (data && data.publicUrl) ? data.publicUrl : null;
+  } catch(e) {
+    console.warn('[Msg upload] exception:', e?.message || e);
+    return null;
+  }
+}
+
+function renderMsgAttachment(m) {
+  if (!m.attachmentUrl) return '';
+  const url = String(m.attachmentUrl).replace(/"/g, '&quot;');
+  if (m.attachmentType === 'image') {
+    return '<div style="margin-top:6px;"><img src="' + url + '" style="max-width:240px;max-height:240px;border-radius:8px;cursor:pointer;display:block;" onclick="window.open(\'' + url.replace(/'/g, '%27') + '\',\'_blank\')"></div>';
+  }
+  if (m.attachmentType === 'audio') {
+    return '<div style="margin-top:6px;"><audio controls src="' + url + '" style="max-width:240px;height:36px;"></audio></div>';
+  }
+  return '';
+}
+
+async function sendDriverMessage() {
   const txt = $('driver-reply')?.value.trim();
-  if (!txt) { toast('Veuillez saisir un message.', true); return; }
+  const hasAtt = !!_msgAttachment;
+  if (!txt && !hasAtt) { toast('Veuillez saisir un message ou joindre une photo/audio.', true); return; }
   const driverName = active ? active.driver : (currentDriver?.fullName || 'Chauffeur');
-  const msg = {id:Date.now(),from:'driver',fromName:driverName,to:'bureau',toLabel:'Bureau',text:txt,ts:Date.now(),read:false};
+
+  let attachmentUrl = null, attachmentType = null;
+  if (hasAtt) {
+    toast('Envoi de la pièce jointe…');
+    attachmentUrl = await uploadMsgAttachment(_msgAttachment.blob, _msgAttachment.type);
+    if (!attachmentUrl) { toast('Échec de l\'envoi de la pièce jointe', true); return; }
+    attachmentType = _msgAttachment.type;
+  }
+
+  const msg = {
+    id: Date.now(),
+    from: 'driver',
+    fromName: driverName,
+    to: 'bureau',
+    toLabel: 'Bureau',
+    text: txt || '',
+    ts: Date.now(),
+    read: false,
+    attachmentUrl, attachmentType
+  };
   messages.push(msg); saveMsgs();
   saveMessageToSupabase(msg).catch(e => console.warn('Msg save failed:', e));
   if($('driver-reply')) $('driver-reply').value='';
+  clearMsgAttach();
   renderMessages();
   toast('Message envoyé au bureau ✓');
 }
@@ -2451,10 +2631,13 @@ function renderMessages() {
   if(!myMsgs.length){container.innerHTML='<div class="empty"><p>Aucun message du bureau.</p></div>';return;}
   // Tri chronologique (ancien → récent) pour afficher les plus récents EN BAS (style messagerie)
   const sorted = [...myMsgs].sort((a,b) => (a.ts||0) - (b.ts||0));
+  const escHtml = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   container.innerHTML = sorted.map(m=>{
     const isBureau=m.from==='bureau';
     const cls=isBureau?'msg-bubble msg-bureau'+(m.read?'':' msg-unread'):'msg-bubble msg-driver';
-    return `<div class="${cls}">${isBureau?'<div class="msg-meta">Bureau</div>':''}<div class="msg-txt">${m.text}</div><div class="msg-time">${fmtTime(m.ts)}</div></div>`;
+    const txtHtml = m.text ? '<div class="msg-txt">'+escHtml(m.text)+'</div>' : '';
+    const attHtml = m.attachmentUrl ? renderMsgAttachment(m) : '';
+    return `<div class="${cls}">${isBureau?'<div class="msg-meta">Bureau</div>':''}${txtHtml}${attHtml}<div class="msg-time">${fmtTime(m.ts)}</div></div>`;
   }).join('');
   messages.forEach(m=>{if(m.from==='bureau'&&(m.to==='all'||m.to===driverName))m.read=true;});
   saveMsgs();

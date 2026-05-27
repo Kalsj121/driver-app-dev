@@ -156,10 +156,13 @@ async function loadMessagesFromSupabase() {
       .order('ts', { ascending: true });
     if (error) { console.warn('[Supabase] Error loading messages:', error.message); return []; }
     // Normalise snake_case DB columns (fromname, tolabel) → camelCase JS (fromName, toLabel)
+    // v1.25 : ajout attachmentUrl / attachmentType
     return (data || []).map(m => ({
       ...m,
-      fromName: m.fromName || m.fromname || '',
-      toLabel:  m.toLabel  || m.tolabel  || '',
+      fromName:       m.fromName       || m.fromname       || '',
+      toLabel:        m.toLabel        || m.tolabel        || '',
+      attachmentUrl:  m.attachmentUrl  || m.attachment_url  || null,
+      attachmentType: m.attachmentType || m.attachment_type || null,
       ts: fromISO(m.ts),
     }));
   } catch (e) { console.warn('[Supabase] Message load failed:', e.message); return []; }
@@ -168,18 +171,27 @@ async function loadMessagesFromSupabase() {
 async function saveMessageToSupabase(message) {
   if (!supabaseClient) return false;
   try {
-    const { error } = await supabaseClient
-      .from('messages')
-      .insert([{
-        id:       message.id,
-        from:     message.from,
-        fromname: message.fromName || '',
-        to:       message.to,
-        tolabel:  message.toLabel || '',
-        text:     message.text,
-        ts:       toISO(message.ts),
-        read:     message.read || false
-      }]);
+    // v1.25 : payload avec attachment_* optionnels
+    const payload = {
+      id:       message.id,
+      from:     message.from,
+      fromname: message.fromName || '',
+      to:       message.to,
+      tolabel:  message.toLabel || '',
+      text:     message.text || '',
+      ts:       toISO(message.ts),
+      read:     message.read || false
+    };
+    if (message.attachmentUrl)  payload.attachment_url  = message.attachmentUrl;
+    if (message.attachmentType) payload.attachment_type = message.attachmentType;
+
+    let { error } = await supabaseClient.from('messages').insert([payload]);
+    if (error && /attachment_/i.test(error.message || '')) {
+      delete payload.attachment_url;
+      delete payload.attachment_type;
+      const r = await supabaseClient.from('messages').insert([payload]);
+      error = r.error;
+    }
     if (error) { console.error('[Supabase] Error saving message:', error.message); return false; }
     return true;
   } catch (e) { return false; }
