@@ -132,10 +132,14 @@ textarea.fi{resize:vertical;min-height:72px;}
 .reg-table tr:last-child td{border-bottom:none;}
 .online-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--gmid);margin-right:6px;}
 
-/* MESSAGES — v1.26 : layout style messagerie (composer en bas, thread défilant) */
+/* MESSAGES — v1.26 : layout style messagerie (composer en bas, thread défilant)
+   La hauteur du header+tabs varie, donc --msg-top est calculée en JS au switch
+   d'onglet et lors d'un resize. Fallback à 113px si JS n'a pas encore tourné. */
 .view#view-messages.on{
   display:flex;flex-direction:column;
-  position:fixed;top:113px;left:0;right:0;bottom:0;
+  position:fixed;
+  top:var(--msg-top, 113px);
+  left:0;right:0;bottom:0;
   background:var(--bg);z-index:5;padding:0;
 }
 .msg-header-bar{
@@ -628,12 +632,26 @@ function switchView(v) {
     if(tab) tab.classList.toggle('on', id===v);
     if(view) view.classList.toggle('on', id===v);
   });
-  if (v === 'messages') renderMessages();
+  if (v === 'messages') { adjustMsgViewTop(); renderMessages(); }
   if (v === 'reports')  loadArchiveList();
   if (v === 'accounts') loadAccounts();
   if (v === 'vehicles') loadVehicles();
   if (v === 'backups')  loadBackupSummary();
 }
+
+// v1.26 : calcule dynamiquement l'offset top pour la view Messages (style chat),
+// pour que l'overlay soit pile sous le header + tabs (dont les hauteurs réelles
+// varient selon le navigateur / la résolution).
+function adjustMsgViewTop() {
+  const hdr = document.querySelector('.hdr');
+  const tabs = document.querySelector('.tabs');
+  const h = (hdr ? hdr.offsetHeight : 64) + (tabs ? tabs.offsetHeight : 44);
+  document.documentElement.style.setProperty('--msg-top', h + 'px');
+}
+// Recalculer sur resize (changement de taille de fenêtre, rotation mobile, etc.)
+window.addEventListener('resize', adjustMsgViewTop);
+// Premier calcul une fois la page chargée
+setTimeout(adjustMsgViewTop, 100);
 
 // ============================================================
 // CONSTANTS
