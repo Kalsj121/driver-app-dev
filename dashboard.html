@@ -639,14 +639,18 @@ function switchView(v) {
   if (v === 'backups')  loadBackupSummary();
 }
 
-// v1.26 : calcule dynamiquement l'offset top pour la view Messages (style chat),
-// pour que l'overlay soit pile sous le header + tabs (dont les hauteurs réelles
-// varient selon le navigateur / la résolution).
+// v1.26 : calcule dynamiquement l'offset top pour la view Messages (style chat).
+// On prend directement la position du BAS de la barre des onglets via
+// getBoundingClientRect — ça inclut automatiquement TOUT ce qui est au-dessus
+// (bandeau DEV, header, padding éventuels) sans qu'on ait à le sommer.
 function adjustMsgViewTop() {
-  const hdr = document.querySelector('.hdr');
   const tabs = document.querySelector('.tabs');
-  const h = (hdr ? hdr.offsetHeight : 64) + (tabs ? tabs.offsetHeight : 44);
-  document.documentElement.style.setProperty('--msg-top', h + 'px');
+  if (!tabs) {
+    document.documentElement.style.setProperty('--msg-top', '113px');
+    return;
+  }
+  const bottom = Math.round(tabs.getBoundingClientRect().bottom);
+  document.documentElement.style.setProperty('--msg-top', bottom + 'px');
 }
 // Recalculer sur resize (changement de taille de fenêtre, rotation mobile, etc.)
 window.addEventListener('resize', adjustMsgViewTop);
