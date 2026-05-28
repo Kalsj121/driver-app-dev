@@ -2430,11 +2430,15 @@ function resetCargo() {
 let messages = [];
 
 async function initMessages() {
+  console.log('[initMessages] ↪ démarrage');
   if (window.messagesFromSupabase && window.messagesFromSupabase.length > 0) {
     messages = window.messagesFromSupabase;
+    console.log('[initMessages] ', messages.length, 'message(s) chargé(s) depuis Supabase');
   } else {
     try { messages = JSON.parse(localStorage.getItem('lca_msgs') || '[]'); } catch(e) {}
+    console.log('[initMessages] ', messages.length, 'message(s) chargé(s) depuis localStorage');
   }
+  console.log('[initMessages] → appel de startDriverRealtimeSync()');
   startDriverRealtimeSync();
 }
 
@@ -2443,8 +2447,12 @@ async function initMessages() {
 // ============================================================
 let _realtimeChannel = null;
 function startDriverRealtimeSync() {
-  if (!window.supabaseClient) { setTimeout(startDriverRealtimeSync, 2000); return; }
-  if (_realtimeChannel) return; // déjà abonné
+  console.log('[startDriverRealtimeSync] appel — supabaseClient présent ?', !!window.supabaseClient, ' / canal déjà créé ?', !!_realtimeChannel);
+  if (!window.supabaseClient) {
+    console.log('[startDriverRealtimeSync] supabaseClient pas prêt, retry dans 2s');
+    setTimeout(startDriverRealtimeSync, 2000); return;
+  }
+  if (_realtimeChannel) { console.log('[startDriverRealtimeSync] déjà abonné, skip'); return; }
   try {
     _realtimeChannel = window.supabaseClient
       .channel('driver-messages-rt')
