@@ -516,7 +516,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.26 (release: 6 mai 2026) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.27 (release: 6 mai 2026) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -528,10 +528,34 @@ textarea.fi{resize:vertical;min-height:72px;}
 'use strict';
 
 // ============================================================
-// AUTH — Manager login
+// AUTH — Bureau login (v1.27 : comptes multiples avec rôles)
 // ============================================================
-const MANAGER_CREDENTIALS = { username: 'AdminLCA', password: 'LCAlgg_2704!' };
+// AdminLCA  : accès complet à tous les onglets
+// OperationsLCA : accès Temps réel, Messages, Rapports, Véhicules
+//                 (PAS d'accès Comptes ni Sauvegardes)
+const BUREAU_ACCOUNTS = [
+  {
+    username:     'AdminLCA',
+    password:     'AdminQuality-LCAlgg2704!',
+    full_name:    'Admin LCA',
+    role:         'admin',
+    allowedViews: ['dashboard','messages','reports','accounts','vehicles','backups']
+  },
+  {
+    username:     'OperationsLCA',
+    password:     'LCAlgg2704!',
+    full_name:    'Operations LCA',
+    role:         'operations',
+    allowedViews: ['dashboard','messages','reports','vehicles']
+  }
+];
 let currentUser = null;
+
+function isViewAllowed(viewId) {
+  if (!currentUser) return false;
+  const allowed = currentUser.allowedViews || [];
+  return allowed.indexOf(viewId) !== -1;
+}
 
 // v1.23 : Détection environnement DEV (même logique que index.html)
 // Résilient : réessaie jusqu'à ce que window.SUPABASE_URL soit disponible.
@@ -559,9 +583,13 @@ function doLogin() {
   const p = document.getElementById('l-pass').value;
   const errEl = document.getElementById('login-err');
   errEl.style.display = 'none';
-  if (u === MANAGER_CREDENTIALS.username && p === MANAGER_CREDENTIALS.password) {
-    currentUser = { full_name: 'Bureau', username: u };
-    try { sessionStorage.setItem('lca_bureau_session', '1'); } catch(e) {}
+  // v1.27 : recherche dans la liste BUREAU_ACCOUNTS
+  const acct = BUREAU_ACCOUNTS.find(a => a.username === u && a.password === p);
+  if (acct) {
+    currentUser = { ...acct };
+    try {
+      sessionStorage.setItem('lca_bureau_session', JSON.stringify({ u: acct.username }));
+    } catch(e) {}
     showApp();
   } else {
     errEl.style.display = '';
@@ -573,7 +601,26 @@ function showApp() {
   document.getElementById('main-app').style.display = '';
   document.getElementById('ver-footer').style.display = '';
   document.getElementById('user-name').textContent = currentUser?.full_name || 'Bureau';
+  // v1.27 : masquer les onglets non autorisés selon le rôle
+  applyTabPermissions();
   onAppReady();
+}
+
+// v1.27 : Cache les onglets non autorisés + re-route si la vue active est interdite.
+function applyTabPermissions() {
+  const allViews = ['dashboard','messages','reports','accounts','vehicles','backups'];
+  allViews.forEach(viewId => {
+    const tab = document.getElementById('tab-'+viewId);
+    if (tab) tab.style.display = isViewAllowed(viewId) ? '' : 'none';
+  });
+  // Si la vue actuelle n'est plus autorisée, rebasculer sur dashboard
+  const activeTab = document.querySelector('.tab.on');
+  if (activeTab) {
+    const id = activeTab.id.replace('tab-', '');
+    if (!isViewAllowed(id)) {
+      switchView('dashboard');
+    }
+  }
 }
 
 // v1.23 : helpers pièce jointe CMR.
@@ -594,16 +641,29 @@ function doLogout() {
 }
 
 // Auto-restore session on page reload (Cmd+Shift+R stays logged in)
+// v1.27 : on stocke maintenant le username pour pouvoir retrouver le rôle.
 (function tryRestoreSession() {
   try {
-    if (sessionStorage.getItem('lca_bureau_session') === '1') {
-      currentUser = { full_name: 'Bureau', username: MANAGER_CREDENTIALS.username };
-      // Wait for DOM then show app
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', showApp);
-      } else {
-        showApp();
-      }
+    const raw = sessionStorage.getItem('lca_bureau_session');
+    if (!raw) return;
+    let savedUsername = null;
+    // Rétrocompat : ancien format "1" → on bascule sur AdminLCA par défaut
+    if (raw === '1') {
+      savedUsername = 'AdminLCA';
+    } else {
+      try {
+        const parsed = JSON.parse(raw);
+        savedUsername = parsed.u || null;
+      } catch(_) { savedUsername = null; }
+    }
+    if (!savedUsername) return;
+    const acct = BUREAU_ACCOUNTS.find(a => a.username === savedUsername);
+    if (!acct) return;
+    currentUser = { ...acct };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showApp);
+    } else {
+      showApp();
     }
   } catch(e) {}
 })();
@@ -626,6 +686,11 @@ document.addEventListener('DOMContentLoaded', () => {
 // VIEWS
 // ============================================================
 function switchView(v) {
+  // v1.27 : si la vue n'est pas autorisée pour ce rôle, on bloque proprement
+  if (!isViewAllowed(v)) {
+    showToast('🔒 Accès non autorisé pour votre compte');
+    return;
+  }
   ['dashboard','messages','reports','accounts','vehicles','backups'].forEach(id => {
     const tab = document.getElementById('tab-'+id);
     const view = document.getElementById('view-'+id);
