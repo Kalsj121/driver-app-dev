@@ -53,6 +53,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .view{display:none;padding:16px;max-width:560px;margin:0 auto;}
 .view.on{display:block;}
 
+/* v1.28 : layout style messagerie pour la view Messages (chauffeur)
+   --msg-top calculée en JS depuis la position du bas des tabs (inclut header + bandeau éventuel). */
+.view#view-messages.on{
+  display:flex;flex-direction:column;
+  position:fixed;
+  top:var(--msg-top, 113px);
+  left:0;right:0;bottom:0;
+  background:var(--bg);z-index:5;padding:0;max-width:none;margin:0;
+}
+.msg-header-bar{
+  flex:0 0 auto;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:10px 16px;background:var(--card);border-bottom:1px solid var(--b1);
+}
+.msg-thread-wrap{
+  flex:1 1 auto;overflow-y:auto;min-height:0;
+  padding:12px 16px;
+}
+.msg-composer-wrap{
+  flex:0 0 auto;
+  padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--b1);
+  box-shadow:0 -2px 8px rgba(0,0,0,0.04);
+}
+
 /* CARD */
 .card{background:var(--card);border:1px solid var(--b1);border-radius:var(--rlg);padding:14px 16px;margin-bottom:10px;}
 .subcard{background:var(--subcard);border:1px solid var(--b1);border-radius:var(--rmd);padding:12px 14px;margin-bottom:8px;}
@@ -465,30 +489,32 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 
 <!-- ============================================================ MESSAGES -->
 <div class="view" id="view-messages">
+  <!-- v1.28 : header sticky en haut -->
+  <div class="msg-header-bar">
+    <span style="font-size:15px;font-weight:700;color:var(--t1);">💬 Messages du bureau</span>
+    <span style="font-size:11px;color:var(--t3);" id="msg-lastcheck">—</span>
+  </div>
 
-  <!-- DRIVER PANEL -->
-  <div id="msg-driver-panel">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <p style="font-size:15px;font-weight:700;">Messages du bureau</p>
-      <span style="font-size:11px;color:var(--t3);" id="msg-lastcheck">—</span>
-    </div>
+  <!-- Thread défilant -->
+  <div class="msg-thread-wrap">
     <div id="msg-list-driver"><div class="empty"><p>Aucun message.</p></div></div>
-    <div style="margin-top:16px;background:var(--card);border:1px solid var(--b1);border-radius:var(--rlg);padding:14px 16px;">
-      <label class="fl">Répondre au bureau</label>
-      <textarea class="fi" id="driver-reply" placeholder="Votre message…" style="min-height:68px;margin-bottom:8px;"></textarea>
-      <!-- v1.25 : pièce jointe (image ou audio) — input cachés, déclenchés par les boutons -->
-      <input type="file" id="msg-img-input" accept="image/*" capture="environment" style="display:none;" onchange="onMsgImagePicked(this)"/>
-      <div id="msg-attach-preview" style="display:none;margin-bottom:10px;padding:8px;background:var(--blt);border-radius:8px;position:relative;">
-        <img id="msg-attach-img" style="display:none;max-width:140px;max-height:140px;border-radius:6px;"/>
-        <audio id="msg-attach-audio" controls preload="none" style="display:none;width:100%;max-width:240px;"></audio>
-        <button type="button" onclick="clearMsgAttach()" style="position:absolute;top:4px;right:4px;background:#fff;border:1px solid var(--b2);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button type="button" onclick="document.getElementById('msg-img-input').click()" title="Joindre une photo" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--b2);background:#fff;font-size:18px;cursor:pointer;padding:0;flex-shrink:0;">📷</button>
-        <button type="button" id="btn-msg-record" onclick="toggleMsgRecord()" title="Enregistrer un audio (max 1 min)" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--b2);background:#fff;font-size:18px;cursor:pointer;padding:0;flex-shrink:0;">🎤</button>
-        <span id="msg-record-timer" style="display:none;font-variant-numeric:tabular-nums;font-weight:700;color:var(--red);min-width:40px;">0:00</span>
-        <button class="btn bp" onclick="sendDriverMessage()" style="flex:1;margin:0;">📨 Envoyer au bureau</button>
-      </div>
+  </div>
+
+  <!-- v1.28 : composer fixe en bas -->
+  <div class="msg-composer-wrap">
+    <textarea class="fi" id="driver-reply" placeholder="Votre message…" style="min-height:54px;max-height:140px;resize:vertical;font-size:14px;padding:8px 10px;margin-bottom:8px;"></textarea>
+    <!-- v1.25 : pièce jointe (image ou audio) — input cachés, déclenchés par les boutons -->
+    <input type="file" id="msg-img-input" accept="image/*" capture="environment" style="display:none;" onchange="onMsgImagePicked(this)"/>
+    <div id="msg-attach-preview" style="display:none;margin-bottom:10px;padding:8px;background:var(--blt);border-radius:8px;position:relative;">
+      <img id="msg-attach-img" style="display:none;max-width:140px;max-height:140px;border-radius:6px;"/>
+      <audio id="msg-attach-audio" controls preload="none" style="display:none;width:100%;max-width:240px;"></audio>
+      <button type="button" onclick="clearMsgAttach()" style="position:absolute;top:4px;right:4px;background:#fff;border:1px solid var(--b2);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;line-height:1;padding:0;">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button type="button" onclick="document.getElementById('msg-img-input').click()" title="Joindre une photo" style="width:38px;height:38px;border-radius:50%;border:1px solid var(--b2);background:#fff;font-size:17px;cursor:pointer;padding:0;flex-shrink:0;">📷</button>
+      <button type="button" id="btn-msg-record" onclick="toggleMsgRecord()" title="Enregistrer un audio (max 1 min)" style="width:38px;height:38px;border-radius:50%;border:1px solid var(--b2);background:#fff;font-size:17px;cursor:pointer;padding:0;flex-shrink:0;">🎤</button>
+      <span id="msg-record-timer" style="display:none;font-variant-numeric:tabular-nums;font-weight:700;color:var(--red);min-width:40px;">0:00</span>
+      <button class="btn bp" onclick="sendDriverMessage()" style="flex:1;margin:0;">📨 Envoyer au bureau</button>
     </div>
   </div>
 </div>
@@ -501,7 +527,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.25 (release: 6 mai 2026) — © Kalsj121</div>
+<div class="version-footer">Version 1.28 (release: 6 mai 2026) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -1244,8 +1270,23 @@ function switchTab(tab) {
     if(te) te.classList.toggle('on', t===tab);
     if(ve) ve.classList.toggle('on', t===tab);
   });
-  if (tab === 'messages') { renderMessages(); }
+  if (tab === 'messages') { adjustMsgViewTop(); renderMessages(); }
 }
+
+// v1.28 : calcule dynamiquement l'offset top pour la view Messages (chauffeur).
+// Prend le BAS de la barre des onglets via getBoundingClientRect, ce qui inclut
+// automatiquement TOUT ce qui est au-dessus (header app + éventuel bandeau DEV).
+function adjustMsgViewTop() {
+  const tabs = document.querySelector('.tabs');
+  if (!tabs) {
+    document.documentElement.style.setProperty('--msg-top', '113px');
+    return;
+  }
+  const bottom = Math.round(tabs.getBoundingClientRect().bottom);
+  document.documentElement.style.setProperty('--msg-top', bottom + 'px');
+}
+window.addEventListener('resize', adjustMsgViewTop);
+setTimeout(adjustMsgViewTop, 100);
 
 // ============================================================
 // STEP CONTROL & BACK NAVIGATION
