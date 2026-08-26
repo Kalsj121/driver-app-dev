@@ -356,6 +356,10 @@ window.fromISO                        = fromISO;
 window.stopFromStorage                = stopFromStorage;
 // v1.23 : exposer l'URL pour la détection d'environnement (bandeau DEV)
 window.SUPABASE_URL                   = SUPABASE_URL;
+// v1.29 : exposer la anon key (pour appeler les Edge Functions depuis l'app)
+//         et la clé publique VAPID (pour l'abonnement Web Push)
+window.SUPABASE_ANON                  = SUPABASE_ANON;
+window.VAPID_PUBLIC_KEY               = 'BOmlj45rRhgjl6fW_j0tvQPgwvxK23SKSWP8Cxa_GmqDHyuQD4U9OzeeBbp5kw2k-I0RTZz8WHfaAgQsLmkoFb8';
 
 console.log('[Supabase] Functions registered globally');
 

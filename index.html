@@ -2,7 +2,14 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"/>
+<!-- v1.29 : PWA — manifest + meta tags pour installation sur écran d'accueil -->
+<meta name="theme-color" content="#4da9be"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="LCA Transfert"/>
+<link rel="manifest" href="./manifest.json"/>
+<link rel="apple-touch-icon" href="https://lca.hevra.app/assets/img/logo.png"/>
 <title>LCA · Transfert</title>
 <style>
 :root{
@@ -268,6 +275,8 @@ select.fi-locked{pointer-events:none;opacity:.7;}
     <div><div class="ltx">LCA Transfert</div><div class="lsb">Liege Cargo Agency</div></div>
   </div>
   <div class="dayhdr" id="dayhdr">00:00:00</div>
+  <!-- v1.29 : bouton notifications push -->
+  <button id="btn-notif-toggle" onclick="toggleNotif()" title="Notifications" style="background:rgba(255,255,255,0.18);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;display:none;margin-right:8px;padding:0;">🔕</button>
   <button class="btn-logout-driver" onclick="doDriverLogout()">Déconnexion</button>
 </div>
 
@@ -527,7 +536,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.28 (release: 6 mai 2026) — © Kalsj121</div>
+<div class="version-footer">Version 1.29 (release: dev PWA + Push) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -653,6 +662,9 @@ async function doLogin() {
   await initMessages();
   // v1.13 : tenter de restaurer une mission en cours (completed=false)
   await restoreDriverSession();
+  // v1.29 : afficher le bouton notif + proposer l'activation au 1er login
+  updateNotifBadge();
+  maybePromptNotifPermission();
 }
 
 // Auto-restore session
@@ -678,6 +690,8 @@ async function doLogin() {
       await initMissions();
       await initMessages();
       await restoreDriverSession();
+      // v1.29 : refresh badge notif après restauration de session
+      updateNotifBadge();
     }
   } catch(e) {}
 })();
@@ -2741,11 +2755,149 @@ function renderMessages() {
 }
 
 // ============================================================
+// WEB PUSH NOTIFICATIONS (v1.29)
+// ============================================================
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = atob(base64);
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) { console.warn('[SW] non supporté'); return null; }
+  try {
+    const reg = await navigator.serviceWorker.register('./sw.js');
+    console.log('[SW] ✓ enregistré', reg.scope);
+    return reg;
+  } catch (e) {
+    console.warn('[SW] échec enregistrement:', e?.message || e);
+    return null;
+  }
+}
+
+async function subscribePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    toast('Notifications non supportées sur ce navigateur.', true); return false;
+  }
+  if (Notification.permission === 'denied') {
+    toast('Permission refusée — réactivez dans les Réglages de votre téléphone.', true); return false;
+  }
+  if (!window.VAPID_PUBLIC_KEY) {
+    toast('Clé VAPID manquante — impossible de s\'abonner.', true); return false;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { toast('Permission refusée.'); return false; }
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(window.VAPID_PUBLIC_KEY)
+      });
+    }
+    const j = sub.toJSON();
+    if (window.supabaseClient && currentDriver) {
+      const { error } = await window.supabaseClient.from('push_subscriptions').upsert({
+        driver_username: currentDriver.username || '',
+        driver_fullname: currentDriver.fullName || '',
+        endpoint:        j.endpoint,
+        p256dh:          j.keys.p256dh,
+        auth:            j.keys.auth,
+        user_agent:      (navigator.userAgent || '').slice(0, 200),
+        last_used_at:    new Date().toISOString()
+      }, { onConflict: 'endpoint' });
+      if (error) { console.warn('[Push] save sub failed:', error.message); }
+    }
+    toast('🔔 Notifications activées');
+    updateNotifBadge();
+    return true;
+  } catch (e) {
+    console.error('[Push] subscribe failed:', e);
+    toast('Échec activation notifications', true);
+    return false;
+  }
+}
+
+async function unsubscribePush() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      const endpoint = sub.endpoint;
+      await sub.unsubscribe();
+      if (window.supabaseClient) {
+        await window.supabaseClient.from('push_subscriptions').delete().eq('endpoint', endpoint);
+      }
+    }
+    toast('🔕 Notifications désactivées');
+  } catch(e) { console.warn('[Push] unsubscribe failed:', e); }
+  updateNotifBadge();
+}
+
+async function toggleNotif() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    toast('Notifications non supportées sur ce navigateur.', true);
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await unsubscribePush();
+    else     await subscribePush();
+  } catch(e) { console.warn('[Push] toggle failed:', e); }
+}
+
+async function updateNotifBadge() {
+  const btn = document.getElementById('btn-notif-toggle');
+  if (!btn) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    btn.style.display = 'none'; return;
+  }
+  const mainVisible = document.getElementById('main-app')?.style.display !== 'none';
+  btn.style.display = mainVisible ? '' : 'none';
+  let isSub = false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    isSub = !!(await reg.pushManager.getSubscription());
+  } catch(_) {}
+  const granted = (typeof Notification !== 'undefined') && Notification.permission === 'granted';
+  if (granted && isSub) {
+    btn.textContent = '🔔';
+    btn.title = 'Notifications activées (cliquer pour désactiver)';
+  } else {
+    btn.textContent = '🔕';
+    btn.title = 'Activer les notifications';
+  }
+}
+
+async function maybePromptNotifPermission() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission !== 'default') return;
+  setTimeout(() => {
+    if (confirm('🔔 Recevoir les notifications du bureau ?\n\nVous serez averti immédiatement (même écran verrouillé) lorsque le bureau vous envoie un message.')) {
+      subscribePush();
+    }
+  }, 1500);
+}
+
+// Quand le SW signale un clic sur notification, basculer sur l'onglet messages
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'NOTIF_CLICK') {
+      try { switchTab('messages'); } catch(_) {}
+    }
+  });
+}
+
+// ============================================================
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
   // Charger les listes véhicules pour le login (sélecteurs tracteur/remorque)
-  // On attend que Supabase soit prêt avant de peupler
   const waitSB = async (maxMs = 8000) => {
     let w = 0;
     while (w < maxMs) {
@@ -2755,9 +2907,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
   waitSB().then(() => { loadVehicleDropdowns(); loadLocationsDropdown(); });
-  // v1.13 : initMissions / initMessages / restoreDriverSession sont désormais
-  // pris en charge par l'IIFE tryRestore et par doLogin — plus besoin de les
-  // rappeler ici pour éviter toute double initialisation.
+  // v1.29 : enregistrer le service worker + afficher le bouton notif si loggé
+  registerServiceWorker().then(updateNotifBadge);
 });
 </script>
 </body>

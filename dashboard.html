@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<!-- v1.29 : theme + apple icon (bureau utilisable comme PWA aussi, optionnel) -->
+<meta name="theme-color" content="#4da9be"/>
+<link rel="apple-touch-icon" href="https://lca.hevra.app/assets/img/logo.png"/>
 <title>LCA Transfert · Bureau</title>
 <style>
 :root{
@@ -516,7 +519,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.27 (release: 6 mai 2026) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.29 (release: dev PWA + Push) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1397,6 +1400,39 @@ async function sendMsg() {
   clearMsgAttach();
   renderMessages();
   showToast('Message envoyé à '+toLabel+' ✓');
+  // v1.29 : déclencher la push notification (best-effort, ne bloque pas l'UI)
+  sendDriverPush(to, msg).catch(e => console.warn('[Push] échec:', e));
+}
+
+// v1.29 : appelle l'Edge Function send-driver-push pour notifier le(s) chauffeur(s)
+async function sendDriverPush(toFullname, msg) {
+  const url = (window.SUPABASE_URL || '') + '/functions/v1/send-driver-push';
+  const key = window.SUPABASE_ANON || '';
+  if (!url || !key) { console.warn('[Push] URL/clé Supabase manquantes'); return; }
+  const title = msg.fromName ? ('Bureau · ' + msg.fromName) : 'Bureau LCA';
+  let bodyText = (msg.text || '').slice(0, 140);
+  if (!bodyText && msg.attachmentType === 'image') bodyText = '📷 Photo';
+  if (!bodyText && msg.attachmentType === 'audio') bodyText = '🎤 Message audio';
+  const payload = (toFullname === 'all')
+    ? { sendToAll: true, title, body: bodyText, msgId: msg.id }
+    : { driverFullname: toFullname, title, body: bodyText, msgId: msg.id };
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + key,
+        'apikey':        key
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      console.log('[Push] ✓ envoyé', data);
+    } else {
+      console.warn('[Push] erreur HTTP', res.status, data);
+    }
+  } catch(e) { console.warn('[Push] fetch failed:', e?.message || e); }
 }
 
 function quickMsg(driverName) {
