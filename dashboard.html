@@ -519,7 +519,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.29 (release: dev PWA + Push) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.30 (release: dev badge + notif bureau + restauration endDay) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1167,12 +1167,61 @@ function saveMsgs(){try{localStorage.setItem('lca_bureau_msgs',JSON.stringify(me
 function loadMessages() {
   if (window.loadMessagesFromSupabase) {
     window.loadMessagesFromSupabase().then(sb => {
+      // v1.30 : détecter les NOUVEAUX messages driver pour notifier le bureau
+      const prevIds = new Set(messages.map(m => String(m.id)));
+      const newDriverMsgs = (sb || []).filter(m =>
+        m.from === 'driver' && !prevIds.has(String(m.id))
+      );
       // Always sync with Supabase — if Supabase has 0 messages, clear local cache too
       messages = sb || [];
       saveMsgs();
       renderMessages();
+      // v1.30 : notification bureau pour chaque nouveau message driver reçu
+      // (ne pas notifier au premier chargement pour éviter le spam)
+      if (window._msgsInitialLoaded && newDriverMsgs.length) {
+        newDriverMsgs.forEach(m => notifyBureauNewDriverMsg(m));
+      }
+      window._msgsInitialLoaded = true;
     }).catch(() => renderMessages());
   } else { renderMessages(); }
+}
+
+// v1.30 : notifie le bureau (visuel + son + notification native browser) quand
+// un chauffeur envoie un nouveau message. Utile quand l'admin n'est pas sur
+// l'onglet Messages ou a une autre fenêtre au premier plan.
+function notifyBureauNewDriverMsg(msg) {
+  try {
+    // 1. Toast visuel dans le dashboard
+    showToast('🚛 Message de ' + (msg.fromName || 'un chauffeur'));
+    // 2. Son court (bip système-like)
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.type = 'sine'; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.35);
+    } catch(e) { /* audio API indisponible, tant pis */ }
+    // 3. Notification native browser (si tab pas au focus ET permission accordée)
+    if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+      const n = new Notification('🚛 ' + (msg.fromName || 'Chauffeur'), {
+        body: msg.text ? msg.text.slice(0, 120) : '(pièce jointe)',
+        tag: 'lca-driver-msg-' + msg.id,
+        icon: 'https://lca.hevra.app/assets/img/logo.png'
+      });
+      n.onclick = () => { window.focus(); switchView('messages'); n.close(); };
+    }
+  } catch(e) { console.warn('[Notify Bureau]', e.message); }
+}
+
+// v1.30 : demander la permission de notifier au premier chargement du dashboard
+async function initBureauNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    try { await Notification.requestPermission(); } catch(e) {}
+  }
 }
 
 async function deleteAllMessages() {
@@ -1484,8 +1533,15 @@ function renderMessages() {
       </div>
     </div>`;
   }).join('');
-  messages.forEach(m=>{ if(m.from==='driver') m.read=true; });
-  saveMsgs();
+  // v1.30 : ne marquer comme lus QUE si l'onglet Messages est réellement ouvert.
+  // Auparavant, renderMessages() était appelée par le realtime même quand l'admin
+  // était sur un autre onglet, ce qui marquait tout comme lu et cachait le badge.
+  const msgTabActive = document.getElementById('view-messages')?.classList.contains('on');
+  if (msgTabActive) {
+    messages.forEach(m=>{ if(m.from==='driver') m.read=true; });
+    saveMsgs();
+    if (badge) { badge.textContent = '0'; badge.style.display = 'none'; }
+  }
   // Scroll automatique vers le dernier message (en bas)
   setTimeout(() => {
     const last = thread.lastElementChild;
@@ -2648,6 +2704,8 @@ async function onAppReady() {
   await waitForSupabase();
   loadMessages();
   await fetchDrivers();
+  // v1.30 : demander la permission de notifier au premier rendu du bureau
+  initBureauNotifPermission();
   // v1.09 : rafraîchir toutes les 10s pour que la durée de pause s'incrémente visiblement
   // et pour rattraper un UPDATE Realtime manqué sur active_drivers.
   setInterval(() => { renderActiveDriversTable(); }, 10000);

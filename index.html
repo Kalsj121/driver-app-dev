@@ -24,7 +24,13 @@
   --rmd:8px;--rlg:12px;--rxl:16px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+/* v1.30 : bloquer le rebond élastique iOS pour éviter que la barre d'onglets bleue
+   et le fond gris apparaissent sous l'app quand on scroll dans la vue Messages. */
+html,body{overscroll-behavior:none;-webkit-overflow-scrolling:auto;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;}
+/* v1.30 : quand on est dans la vue Messages, empêcher totalement le scroll du body
+   pour bloquer le bounce/rebond. Le scroll interne du fil reste OK (msg-thread-wrap). */
+body.msg-view-open{overflow:hidden;position:fixed;left:0;right:0;top:0;bottom:0;}
 
 /* LOGIN SCREEN */
 #login-screen{position:fixed;inset:0;background:var(--header);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;padding:24px;}
@@ -536,7 +542,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.29 (release: dev PWA + Push) — © Kalsj121</div>
+<div class="version-footer">Version 1.30 (release: dev badge + overscroll + restauration endDay) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -1139,6 +1145,17 @@ async function restoreBetweenMissionsState(driverName, today, fromIso) {
     // il n'y a rien à restaurer côté entre-missions.
     if (!lastCompleted && !adBetween) return false;
 
+    // v1.30 : correctif restauration après « Terminer la journée » depuis entre-missions.
+    // Si le chauffeur n'est PLUS dans active_drivers, cela signifie qu'il a explicitement
+    // clôturé sa journée (endDay ou déconnexion depuis entre-missions). On ne doit alors
+    // PAS restaurer l'écran entre-missions — il faut lui afficher un fresh start
+    // (Démarrer ma journée). Sans ce check, la présence de la mission complétée du jour
+    // faisait revenir l'UI en entre-missions même après clôture.
+    if (!adRow) {
+      console.log('[Restore] active_drivers vide → journée clôturée, pas de restauration entre-missions');
+      return false;
+    }
+
     // 2. Extraire les pauses et détecter pause en cours
     const rawPauses = (lastCompleted && Array.isArray(lastCompleted.pauses)) ? lastCompleted.pauses : [];
     dayPauses = rawPauses.map(p => ({
@@ -1284,6 +1301,9 @@ function switchTab(tab) {
     if(te) te.classList.toggle('on', t===tab);
     if(ve) ve.classList.toggle('on', t===tab);
   });
+  // v1.30 : bloquer le scroll du body quand on entre dans Messages
+  // (empêche le bounce iOS qui montre le fond gris et le pied de page).
+  document.body.classList.toggle('msg-view-open', tab === 'messages');
   if (tab === 'messages') { adjustMsgViewTop(); renderMessages(); }
 }
 
@@ -2492,9 +2512,9 @@ function startDriverRealtimeSync() {
         console.log('[Driver Realtime] ✓ message ajouté:', msg);
         messages.push(msg);
         try { localStorage.setItem('lca_msgs', JSON.stringify(messages)); } catch(e) {}
+        // v1.30 : ne PAS incrémenter manuellement le badge — renderMessages
+        // affiche déjà le vrai nombre de messages non lus (ancien code doublait).
         renderMessages();
-        const badge = $('msg-badge');
-        if (badge) { const n = parseInt(badge.textContent||'0')+1; badge.textContent=n; badge.style.display=''; }
         toast('📨 Nouveau message du bureau');
       })
       .subscribe(status => {
@@ -2739,10 +2759,16 @@ function renderMessages() {
     const attHtml = m.attachmentUrl ? renderMsgAttachment(m) : '';
     return `<div class="${cls}">${isBureau?'<div class="msg-meta">Bureau</div>':''}${txtHtml}${attHtml}<div class="msg-time">${fmtTime(m.ts)}</div></div>`;
   }).join('');
-  messages.forEach(m=>{if(m.from==='bureau'&&(m.to==='all'||m.to===driverName))m.read=true;});
-  saveMsgs();
-  if($('msg-lastcheck'))$('msg-lastcheck').textContent='Lu à '+new Date().toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'});
-  if(badge)badge.style.display='none';
+  // v1.30 : ne marquer comme lus QUE si la view Messages est réellement affichée à l'écran.
+  // Sinon on garde le badge visible pour signaler des non-lus (ex: message reçu via
+  // realtime pendant que le chauffeur est sur l'onglet Chauffeur).
+  const msgViewActive = document.getElementById('view-messages')?.classList.contains('on');
+  if (msgViewActive) {
+    messages.forEach(m=>{if(m.from==='bureau'&&(m.to==='all'||m.to===driverName))m.read=true;});
+    saveMsgs();
+    if($('msg-lastcheck'))$('msg-lastcheck').textContent='Lu à '+new Date().toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'});
+    if(badge){badge.textContent='0';badge.style.display='none';}
+  }
   // Scroll automatique vers le dernier message (en bas) — comme les messageries modernes
   setTimeout(() => {
     const last = container.lastElementChild;
