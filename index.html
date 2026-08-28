@@ -563,7 +563,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.32c (dev: bouton "Continuer la journée" + renderMessages au init) — © Kalsj121</div>
+<div class="version-footer">Version 1.32d (dev: force re-login si restore auto rate + username pré-rempli) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -740,6 +740,22 @@ function clearCurrentDriverPersist() {
   try { document.cookie = 'lca_current_driver=; path=/; max-age=0; SameSite=Lax'; } catch(e) {}
 }
 
+// v1.32c : vérifie côté Supabase si une mission ouverte existe pour ce chauffeur.
+// Utilisé pour décider si on force le login screen (restauration auto ratée mais
+// mission en base = on doit re-authentifier proprement pour repartir).
+async function hasPendingMissionForDriver(driverName) {
+  if (!window.supabaseClient || !driverName) return false;
+  try {
+    const { data } = await window.supabaseClient
+      .from('missions')
+      .select('id')
+      .eq('driver', driverName)
+      .eq('completed', false)
+      .limit(1);
+    return !!(data && data.length);
+  } catch(e) { return false; }
+}
+
 // Auto-restore session
 (async function tryRestore() {
   try {
@@ -765,11 +781,28 @@ function clearCurrentDriverPersist() {
       const restored = await restoreDriverSession();
       // v1.29 : refresh badge notif après restauration de session
       updateNotifBadge();
-      // v1.32b : si restauration auto n'a pas eu lieu mais qu'une mission ouverte
-      // existe (edge case), le bouton passe en "Continuer la journée"
-      if (!restored) updateStartDayButtonForPending();
+      if (!restored) {
+        // v1.32c : la restauration auto a échoué. Deux cas possibles :
+        //   (A) Aucune mission en base → tout va bien, chauffeur en ph0 fresh
+        //   (B) Mission en base mais restore raté (timing Supabase / edge case)
+        //       → forcer le re-login avec l-login pré-rempli pour repartir proprement.
+        const hasPending = await hasPendingMissionForDriver(currentDriver.fullName);
+        if (hasPending) {
+          console.log('[tryRestore] Mission en base mais restauration ratée → force re-login');
+          const lLogin = document.getElementById('l-login');
+          if (lLogin) lLogin.value = currentDriver.username || '';
+          document.getElementById('main-app').style.display = 'none';
+          document.getElementById('login-screen').classList.remove('hidden');
+          toast('Ré-authentification nécessaire pour reprendre votre shift', false);
+          const lPass = document.getElementById('l-password');
+          if (lPass) setTimeout(() => lPass.focus(), 200);
+        } else {
+          // Cas A : pas de mission, on met à jour le bouton "Continuer" au cas où
+          updateStartDayButtonForPending();
+        }
+      }
     }
-  } catch(e) {}
+  } catch(e) { console.warn('[tryRestore] exception:', e.message); }
 })();
 
 // ============================================================
