@@ -24,13 +24,20 @@
   --rmd:8px;--rlg:12px;--rxl:16px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-/* v1.30 : bloquer le rebond élastique iOS pour éviter que la barre d'onglets bleue
-   et le fond gris apparaissent sous l'app quand on scroll dans la vue Messages. */
-html,body{overscroll-behavior:none;-webkit-overflow-scrolling:auto;}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;}
-/* v1.30 : quand on est dans la vue Messages, empêcher totalement le scroll du body
-   pour bloquer le bounce/rebond. Le scroll interne du fil reste OK (msg-thread-wrap). */
-body.msg-view-open{overflow:hidden;position:fixed;left:0;right:0;top:0;bottom:0;}
+/* v1.32 : body en position:fixed sur toute la viewport avec scroll interne
+   overflow-y:auto — méthode fiable sur iOS PWA pour bloquer le bounce/rebond
+   élastique qui exposait le fond gris et le pied de page. Marche sur toutes
+   les vues (Chauffeur + Messages), pas uniquement sur Messages. */
+html{overscroll-behavior:none;height:100%;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--t1);
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  overflow-y:auto;overscroll-behavior:none;
+  -webkit-overflow-scrolling:auto;
+}
+/* Compat rétro : ancien flag pour la vue Messages, on garde vide au cas où */
+body.msg-view-open{}
 
 /* LOGIN SCREEN */
 #login-screen{position:fixed;inset:0;background:var(--header);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;padding:24px;}
@@ -556,7 +563,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.32 (release: shift 10h/30h + popup reprise + auto-clôture) — © Kalsj121</div>
+<div class="version-footer">Version 1.32b (dev: read persisté + fresh init + body fixed + safety startDay) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -1699,6 +1706,29 @@ async function startDay() {
   const btnStartLock = document.getElementById('btn-start-day');
   if (btnStartLock) btnStartLock.disabled = true;
 
+  // v1.32 : safety net — si Supabase a déjà une mission ouverte pour ce chauffeur,
+  // on la reprend au lieu d'en créer une nouvelle (évite les doublons côté bureau
+  // quand la restauration automatique a échoué pour X raison).
+  if (window.supabaseClient) {
+    try {
+      const { data: existing } = await window.supabaseClient
+        .from('missions')
+        .select('id,daystartts')
+        .eq('driver', name)
+        .eq('completed', false)
+        .order('daystartts', { ascending: false })
+        .limit(1);
+      if (existing && existing.length) {
+        const ageH = getShiftAgeHours(new Date(existing[0].daystartts).getTime());
+        console.log('[startDay] Mission existante détectée id=', existing[0].id, 'âge=', fmtDurationHours(ageH), '→ reprise au lieu de création');
+        toast('Shift déjà en cours (depuis ' + fmtDurationHours(ageH) + ') — reprise...');
+        await restoreDriverSession();
+        if (btnStartLock) btnStartLock.disabled = false;
+        return;
+      }
+    } catch(e) { console.warn('[startDay] safety check failed:', e.message); }
+  }
+
   dayStart = Date.now();
   active = {
     id: Date.now(), driver: name,
@@ -2682,12 +2712,30 @@ let messages = [];
 
 async function initMessages() {
   console.log('[initMessages] ↪ démarrage');
-  if (window.messagesFromSupabase && window.messagesFromSupabase.length > 0) {
-    messages = window.messagesFromSupabase;
-    console.log('[initMessages] ', messages.length, 'message(s) chargé(s) depuis Supabase');
-  } else {
-    try { messages = JSON.parse(localStorage.getItem('lca_msgs') || '[]'); } catch(e) {}
-    console.log('[initMessages] ', messages.length, 'message(s) chargé(s) depuis localStorage');
+  // v1.32 : toujours fetch frais depuis Supabase — les messages arrivés pendant
+  // que l'app était fermée ne sont PAS dans window.messagesFromSupabase (rempli
+  // uniquement au boot script). Sans fresh fetch, on rate les messages récents
+  // et l'utilisateur voit uniquement les anciens.
+  let fresh = null;
+  if (window.loadMessagesFromSupabase) {
+    try {
+      fresh = await window.loadMessagesFromSupabase();
+      if (Array.isArray(fresh)) {
+        messages = fresh;
+        try { localStorage.setItem('lca_msgs', JSON.stringify(messages)); } catch(e) {}
+        console.log('[initMessages] ✓', messages.length, 'message(s) chargé(s) depuis Supabase (fresh)');
+      }
+    } catch(e) { console.warn('[initMessages] fetch failed:', e.message); }
+  }
+  if (!Array.isArray(fresh)) {
+    // Fallback : cache pré-chargé au boot, puis localStorage
+    if (window.messagesFromSupabase && window.messagesFromSupabase.length > 0) {
+      messages = window.messagesFromSupabase;
+      console.log('[initMessages] fallback boot cache:', messages.length, 'message(s)');
+    } else {
+      try { messages = JSON.parse(localStorage.getItem('lca_msgs') || '[]'); } catch(e) {}
+      console.log('[initMessages] fallback localStorage:', messages.length, 'message(s)');
+    }
   }
   console.log('[initMessages] → appel de startDriverRealtimeSync()');
   startDriverRealtimeSync();
@@ -2977,14 +3025,24 @@ function renderMessages() {
     return `<div class="${cls}">${isBureau?'<div class="msg-meta">Bureau</div>':''}${txtHtml}${attHtml}<div class="msg-time">${fmtTime(m.ts)}</div></div>`;
   }).join('');
   // v1.30 : ne marquer comme lus QUE si la view Messages est réellement affichée à l'écran.
-  // Sinon on garde le badge visible pour signaler des non-lus (ex: message reçu via
-  // realtime pendant que le chauffeur est sur l'onglet Chauffeur).
+  // Sinon on garde le badge visible pour signaler des non-lus.
   const msgViewActive = document.getElementById('view-messages')?.classList.contains('on');
   if (msgViewActive) {
+    // v1.32 : capturer les IDs à marquer comme lu pour les persister ensuite en base
+    const newlyRead = messages.filter(m => m.from==='bureau' && !m.read && (m.to==='all'||m.to===driverName)).map(m => m.id).filter(Boolean);
     messages.forEach(m=>{if(m.from==='bureau'&&(m.to==='all'||m.to===driverName))m.read=true;});
     saveMsgs();
     if($('msg-lastcheck'))$('msg-lastcheck').textContent='Lu à '+new Date().toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'});
     if(badge){badge.textContent='0';badge.style.display='none';}
+    // v1.32 : persister read=true côté Supabase
+    if (newlyRead.length && window.supabaseClient) {
+      window.supabaseClient.from('messages').update({ read: true }).in('id', newlyRead)
+        .then(({error}) => {
+          if (error) console.warn('[Msg] Mark read Supabase failed:', error.message);
+          else console.log('[Msg] ✓', newlyRead.length, 'message(s) bureau marqué(s) lu(s) en base');
+        })
+        .catch(e => console.warn('[Msg] Mark read exception:', e.message));
+    }
   }
   // Scroll automatique vers le dernier message (en bas) — comme les messageries modernes
   setTimeout(() => {

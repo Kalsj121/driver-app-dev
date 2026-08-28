@@ -19,7 +19,16 @@
   --header:#4da9be;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;}
+/* v1.32 : body en position:fixed avec scroll interne pour éviter le bounce
+   iOS (dashboard admin ouvert sur iPad ou navigation depuis mobile). */
+html{overscroll-behavior:none;height:100%;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--t1);
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  overflow-y:auto;overscroll-behavior:none;
+  -webkit-overflow-scrolling:auto;
+}
 
 /* LOGIN */
 #login-screen{position:fixed;inset:0;background:var(--header);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;}
@@ -522,7 +531,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.32 (release: dev badge + notif auto-clôture chauffeur) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.32b (dev: read persisté + body fixed) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1556,9 +1565,21 @@ function renderMessages() {
   // était sur un autre onglet, ce qui marquait tout comme lu et cachait le badge.
   const msgTabActive = document.getElementById('view-messages')?.classList.contains('on');
   if (msgTabActive) {
+    // v1.32 : capturer les IDs à marquer comme lu AVANT de modifier localement
+    const newlyRead = messages.filter(m => m.from==='driver' && !m.read).map(m => m.id).filter(Boolean);
     messages.forEach(m=>{ if(m.from==='driver') m.read=true; });
     saveMsgs();
     if (badge) { badge.textContent = '0'; badge.classList.remove('on'); }
+    // v1.32 : persister read=true côté Supabase — sans ça, le prochain
+    // loadMessages() re-fetch read=false et le badge remonte à chaque fois.
+    if (newlyRead.length && window.supabaseClient) {
+      window.supabaseClient.from('messages').update({ read: true }).in('id', newlyRead)
+        .then(({error}) => {
+          if (error) console.warn('[Msg] Mark read Supabase failed:', error.message);
+          else console.log('[Msg] ✓', newlyRead.length, 'message(s) driver marqué(s) lu(s) en base');
+        })
+        .catch(e => console.warn('[Msg] Mark read exception:', e.message));
+    }
   }
   // Scroll automatique vers le dernier message (en bas)
   setTimeout(() => {
