@@ -539,10 +539,24 @@ select.fi-locked{pointer-events:none;opacity:.7;}
   <div class="modal"><h3>Terminer la journée ?</h3><p>Tous les stops seront clôturés et la mission enregistrée.</p>
   <div class="mbtns"><button class="btn bo" onclick="document.getElementById('end-modal').classList.remove('open')">Annuler</button><button class="btn bp" onclick="endDay()">Terminer</button></div></div>
 </div>
+<!-- v1.32 : Modal de reprise de shift ambigu (âge 10h-30h) -->
+<div class="mov" id="shift-resume-modal">
+  <div class="modal" style="max-width:420px;">
+    <h3>🕐 Shift en cours retrouvé</h3>
+    <div id="shift-resume-info" style="font-size:13px;color:var(--t1);margin-bottom:16px;line-height:1.6;">
+      <!-- Rempli dynamiquement -->
+    </div>
+    <p style="margin-bottom:14px;">Le shift a dépassé la durée habituelle. Que souhaitez-vous faire ?</p>
+    <div class="mbtns" style="flex-direction:column;">
+      <button class="btn bp" id="shift-resume-continue" style="margin-bottom:8px;">▶ Continuer ce shift</button>
+      <button class="btn bo" id="shift-resume-new">✓ Terminer et démarrer un nouveau shift</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.30 (release: dev badge + overscroll + restauration endDay) — © Kalsj121</div>
+<div class="version-footer">Version 1.32 (release: shift 10h/30h + popup reprise + auto-clôture) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -649,7 +663,9 @@ async function doLogin() {
 
   // Connexion réussie
   currentDriver = { username: login, fullName: account.fullname || account.username, plateTracteur, plateRemorque, pdfAllowed: !!account.pdf_allowed };
-  localStorage.setItem('lca_current_driver', JSON.stringify(currentDriver));
+  // v1.31 : double persistance (localStorage + cookie) car iOS purge le localStorage
+  // des PWA quand elles sont killées via l'app switcher — le cookie reste intact.
+  saveCurrentDriverPersist(currentDriver);
 
   // Pré-remplir les champs chauffeur (grisés)
   document.getElementById('d-name').value = currentDriver.fullName;
@@ -673,10 +689,50 @@ async function doLogin() {
   maybePromptNotifPermission();
 }
 
+// ============================================================
+// v1.31 : persistance double couche (localStorage + cookie) pour survivre
+// aux purges de localStorage que fait iOS quand l'app PWA est killée depuis
+// l'app switcher. Le cookie reste 90 jours et est lu en fallback.
+// ============================================================
+function saveCurrentDriverPersist(driver) {
+  try { localStorage.setItem('lca_current_driver', JSON.stringify(driver)); } catch(e) {}
+  try {
+    const val = encodeURIComponent(JSON.stringify(driver));
+    document.cookie = 'lca_current_driver=' + val + '; path=/; max-age=' + (60*60*24*90) + '; SameSite=Lax';
+  } catch(e) {}
+}
+function readCurrentDriverPersist() {
+  // Priorité au localStorage (plus rapide et à jour), fallback cookie
+  try {
+    const ls = localStorage.getItem('lca_current_driver');
+    if (ls && ls !== 'null') {
+      const parsed = JSON.parse(ls);
+      if (parsed && parsed.username) return parsed;
+    }
+  } catch(e) {}
+  try {
+    const match = document.cookie.match(/(?:^|;\s*)lca_current_driver=([^;]*)/);
+    if (match) {
+      const parsed = JSON.parse(decodeURIComponent(match[1]));
+      if (parsed && parsed.username) {
+        // Recopier dans localStorage pour qu'il soit à jour au prochain read
+        try { localStorage.setItem('lca_current_driver', JSON.stringify(parsed)); } catch(e) {}
+        console.log('[Persist] currentDriver restauré depuis cookie (localStorage purgé par iOS)');
+        return parsed;
+      }
+    }
+  } catch(e) {}
+  return null;
+}
+function clearCurrentDriverPersist() {
+  try { localStorage.removeItem('lca_current_driver'); } catch(e) {}
+  try { document.cookie = 'lca_current_driver=; path=/; max-age=0; SameSite=Lax'; } catch(e) {}
+}
+
 // Auto-restore session
 (async function tryRestore() {
   try {
-    const saved = JSON.parse(localStorage.getItem('lca_current_driver') || 'null');
+    const saved = readCurrentDriverPersist();
     if (saved && saved.username) {
       currentDriver = saved;
       document.getElementById('d-name').value = currentDriver.fullName || '';
@@ -723,11 +779,121 @@ async function initMissions() {
 }
 
 // ============================================================
+// v1.32 : SHIFT AGE HELPERS + RESTAURATION AVEC DÉCISION 10H/30H
+// - Silence si < 10h (cas normal, chauffeur en plein shift)
+// - Popup obligatoire si 10h ≤ âge ≤ 30h (probable oubli ou HS)
+// - Auto-clôture + notif bureau si > 30h (orphelin certain)
+// ============================================================
+const SHIFT_AGE_SILENT_HOURS    = 10;
+const SHIFT_AGE_AUTOCLOSE_HOURS = 30;
+
+function getShiftAgeHours(dayStartTs) {
+  if (!dayStartTs) return null;
+  const ms = Date.now() - dayStartTs;
+  return ms / (3600 * 1000);
+}
+
+function getShiftLabel(dayStartTs) {
+  if (!dayStartTs) return 'Shift';
+  const h = new Date(dayStartTs).getHours();
+  if (h >= 6  && h < 14) return 'Matin (6h-14h)';
+  if (h >= 14 && h < 22) return 'Après-midi (14h-22h)';
+  return 'Nuit (22h-6h)';
+}
+
+function fmtDurationHours(hours) {
+  if (hours == null) return '?';
+  const h = Math.floor(hours);
+  const m = Math.floor((hours - h) * 60);
+  return h + 'h' + String(m).padStart(2, '0');
+}
+
+// v1.32 : envoie un message auto au bureau quand un shift est auto-clôturé
+async function notifyBureauAutoClose(mission, ageHours, reason) {
+  if (!window.supabaseClient) return;
+  try {
+    const driverName = mission.driver || currentDriver?.fullName || '';
+    const shiftLbl = getShiftLabel(mission.dayStartTs || (mission.daystartts ? new Date(mission.daystartts).getTime() : null));
+    const startedFmt = mission.dayStartTs
+      ? new Date(mission.dayStartTs).toLocaleString('fr-BE', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+      : (mission.daystartts ? new Date(mission.daystartts).toLocaleString('fr-BE', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '?');
+    const payload = {
+      id:       Date.now(),
+      from:     'driver',
+      fromname: driverName,
+      to:       'bureau',
+      tolabel:  'Bureau',
+      text:     `⚠️ Shift ${shiftLbl} auto-clôturé après ${fmtDurationHours(ageHours)} (${reason}). Démarré ${startedFmt}. À vérifier avec le chauffeur.`,
+      ts:       new Date().toISOString(),
+      read:     false
+    };
+    await window.supabaseClient.from('messages').insert(payload);
+    console.log('[AutoClose] Message notif bureau envoyé');
+  } catch(e) { console.warn('[AutoClose] Notif bureau échouée:', e.message); }
+}
+
+// v1.32 : marque une mission comme complétée automatiquement (côté Supabase)
+// + nettoie les caches locaux + retire de active_drivers + notifie le bureau
+async function autoCloseStaleMission(missionRow, ageHours, reason) {
+  if (!missionRow || !window.supabaseClient) return false;
+  try {
+    await window.supabaseClient
+      .from('missions')
+      .update({
+        completed: true,
+        dayendts:  new Date().toISOString()
+      })
+      .eq('id', missionRow.id);
+    console.log('[AutoClose] Mission', missionRow.id, 'clôturée (âge', fmtDurationHours(ageHours), '- reason:', reason, ')');
+    // Nettoyer les caches locaux et active_drivers pour éviter une re-restauration
+    try { clearActiveCache(); } catch(e) {}
+    try { clearBetweenMissionsCache(); } catch(e) {}
+    try {
+      const uname = currentDriver?.username || missionRow.driver;
+      if (uname) await removeActiveDriver(uname);
+    } catch(e) {}
+    await notifyBureauAutoClose(missionRow, ageHours, reason);
+    return true;
+  } catch(e) { console.warn('[AutoClose] failed:', e.message); return false; }
+}
+
+// v1.32 : affiche la modal de choix reprendre/terminer pour un shift ambigu
+// Retourne 'continue' ou 'new'
+function showShiftResumeModal(missionRow, ageHours) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('shift-resume-modal');
+    const info  = document.getElementById('shift-resume-info');
+    const btnC  = document.getElementById('shift-resume-continue');
+    const btnN  = document.getElementById('shift-resume-new');
+    if (!modal || !info || !btnC || !btnN) { resolve('continue'); return; }
+
+    const dayStart = missionRow.dayStartTs || (missionRow.daystartts ? new Date(missionRow.daystartts).getTime() : null);
+    const shiftLbl = getShiftLabel(dayStart);
+    const startedFmt = dayStart
+      ? new Date(dayStart).toLocaleString('fr-BE', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+      : '?';
+    const stopsCount = Array.isArray(missionRow.stops) ? missionRow.stops.length : 0;
+
+    info.innerHTML = ''
+      + '<div><strong>Shift :</strong> ' + shiftLbl + '</div>'
+      + '<div><strong>Démarré :</strong> ' + startedFmt + '</div>'
+      + '<div><strong>Durée écoulée :</strong> ' + fmtDurationHours(ageHours) + '</div>'
+      + '<div><strong>Missions traitées :</strong> ' + stopsCount + '</div>';
+
+    const cleanup = () => {
+      modal.classList.remove('open');
+      btnC.onclick = null; btnN.onclick = null;
+    };
+    btnC.onclick = () => { cleanup(); resolve('continue'); };
+    btnN.onclick = () => { cleanup(); resolve('new'); };
+    modal.classList.add('open');
+  });
+}
+
+// ============================================================
 // v1.13 : RESTAURATION DE SESSION
-// Permet à un chauffeur qui se reconnecte de reprendre sa mission
-// en cours (si completed=false dans Supabase pour aujourd'hui).
-// Le bouton "Forcer fin de journée" côté bureau reste le moyen de
-// clôturer la journée sans que le chauffeur ait à se reconnecter.
+// v1.32 : Query par completed=false SANS filtre date (fonctionne
+// pour shifts nuit qui traversent minuit). Décision basée sur âge.
 // ============================================================
 async function restoreDriverSession() {
   if (!currentDriver || !window.supabaseClient) return false;
@@ -742,16 +908,49 @@ async function restoreDriverSession() {
     const driverName = currentDriver.fullName || currentDriver.fullname || currentDriver.username;
     if (!driverName) return false;
 
+    // v1.32 : plus de filtre .eq('date', today) — un shift Nuit démarré le 28/08
+    // à 22h continue le 29/08 à 4h, mais la mission a date='28/08/2026'. On query
+    // simplement le mission completed=false le plus récent pour ce chauffeur, puis
+    // on décide en fonction de l'âge (< 10h silence / 10-30h popup / > 30h auto-close).
     const { data, error } = await window.supabaseClient
       .from('missions')
       .select('*')
       .eq('driver', driverName)
-      .eq('date', today)
       .eq('completed', false)
       .order('daystartts', { ascending: false })
       .limit(1);
     if (error) console.warn('[Restore] query error:', error.message);
     const fromIso = window.fromISO || (v => (!v ? null : (typeof v === 'number' ? v : new Date(v).getTime())));
+
+    // v1.32 : décision selon l'âge du shift retrouvé
+    if (data && data.length) {
+      const missionRow = data[0];
+      const dayStartMs = missionRow.daystartts ? new Date(missionRow.daystartts).getTime() : null;
+      const ageH = getShiftAgeHours(dayStartMs);
+      console.log('[Restore] Mission trouvée id=', missionRow.id, ', âge=', fmtDurationHours(ageH));
+
+      if (ageH != null && ageH > SHIFT_AGE_AUTOCLOSE_HOURS) {
+        // Cas 3 : orphelin certain — auto-clôture silencieuse
+        console.log('[Restore] Âge >', SHIFT_AGE_AUTOCLOSE_HOURS, 'h → auto-clôture');
+        await autoCloseStaleMission(missionRow, ageH, 'dépassement 30h sans activité');
+        toast('Ancien shift auto-clôturé — nouvelle journée à démarrer ✓');
+        return false; // fresh start
+      }
+      if (ageH != null && ageH >= SHIFT_AGE_SILENT_HOURS) {
+        // Cas 2 : popup obligatoire — laisser le chauffeur choisir
+        console.log('[Restore] Âge entre', SHIFT_AGE_SILENT_HOURS, 'et', SHIFT_AGE_AUTOCLOSE_HOURS, 'h → popup');
+        const choice = await showShiftResumeModal(missionRow, ageH);
+        if (choice === 'new') {
+          await autoCloseStaleMission(missionRow, ageH, 'clôturé par le chauffeur au retour sur l\'app');
+          toast('Ancien shift clôturé — démarrez votre nouveau shift ✓');
+          return false; // fresh start
+        }
+        // Sinon 'continue' → on tombe dans le flux de restauration normal ci-dessous
+        console.log('[Restore] Choix chauffeur : continuer le shift');
+      } else {
+        console.log('[Restore] Âge <', SHIFT_AGE_SILENT_HOURS, 'h → restauration silencieuse');
+      }
+    }
     // v1.18 : si aucune mission en cours côté Supabase, tenter le cache local
     // (couvre le cas où la sauvegarde Supabase n'a pas eu le temps d'aboutir
     // avant un refresh). Le cache est invalidé à la fin de mission/journée.
@@ -1430,7 +1629,7 @@ function startTicker() {
 // SUPABASE SYNC
 // ============================================================
 function syncActive(opts) {
-  if (!active) return;
+  if (!active) return Promise.resolve();
   const snapshot = JSON.parse(JSON.stringify(active));
   if (curStop) snapshot.stops = [...(active.stops || []), curStop];
   // v1.18 : cache local de la mission en cours pour fallback si Supabase n'a
@@ -1450,7 +1649,10 @@ function syncActive(opts) {
   // (qui contient les photos lourdes). Les flux qui modifient les photos
   // (doDoc, endMissionNewOne, endDay) appellent syncActive({ full: true }).
   const lightSync = !(opts && opts.full);
-  saveMissionToSupabase(snapshot, { lightSync })
+  // v1.31 : retourner la promesse pour que les callers puissent await
+  // (essentiel côté startDay pour garantir que la mission est en base
+  // avant que l'utilisateur puisse fermer l'app).
+  return saveMissionToSupabase(snapshot, { lightSync })
     .catch(e => console.warn('[Sync] failed:', e.message));
 }
 
@@ -1485,12 +1687,17 @@ function clearBetweenMissionsCache() {
 // ============================================================
 // ACTIONS
 // ============================================================
-function startDay() {
+async function startDay() {
   const name          = document.getElementById('d-name').value.trim();
   const plateTracteur = document.getElementById('d-plate-tracteur').value.trim();
   const plateRemorque = document.getElementById('d-plate-remorque').value.trim();
   if (!name)          { toast('Erreur : nom chauffeur introuvable.', true); return; }
   if (!plateTracteur) { toast('Veuillez sélectionner un tracteur.', true); return; }
+
+  // v1.31 : désactiver le bouton pour éviter les double-clics et créations
+  // de missions multiples si l'utilisateur re-clique après un swipe-close
+  const btnStartLock = document.getElementById('btn-start-day');
+  if (btnStartLock) btnStartLock.disabled = true;
 
   dayStart = Date.now();
   active = {
@@ -1516,14 +1723,23 @@ function startDay() {
   startTicker();
   setStep(0);
 
-  // Enregistrement immédiat dans active_drivers
-  registerActiveDriver(name, plateTracteur, plateRemorque).then(() => {
-    console.log('[Driver] Registered in active_drivers');
-    // État initial : en attente de notification de disponibilité
+  // v1.31 : AWAIT pour que la mission et l'inscription soient persistées AVANT
+  // que l'utilisateur puisse fermer / killer l'app. Sans await, iOS peut couper
+  // la requête au moment du swipe-close et la mission ne serait jamais en base
+  // → à la reconnexion, restoreDriverSession ne trouve rien et affiche
+  // « Démarrer une nouvelle journée » à nouveau.
+  try {
+    await Promise.all([
+      registerActiveDriver(name, plateTracteur, plateRemorque),
+      syncActive()
+    ]);
     updateActiveDriverState({ is_paused: false, pause_start: null, between_missions: false });
-  });
-  syncActive();
+    console.log('[Driver] ✓ Mission persistée en base');
+  } catch(e) {
+    console.warn('[Driver] Persistence partielle :', e?.message || e);
+  }
   toast('Bonne journée ' + name + ' !');
+  if (btnStartLock) btnStartLock.disabled = false;
 
   // Mise à jour lastseen toutes les 2 minutes
   if (!window._activeDriverInterval) {
@@ -1588,7 +1804,8 @@ async function doDriverLogout() {
     clearBetweenMissionsCache(); // v1.19 : idem cache entre-missions
   }
   currentDriver = null; pauseActive = false; dayPauses = [];
-  try { localStorage.removeItem('lca_current_driver'); } catch(e) {}
+  // v1.31 : effacer AUSSI le cookie de backup lors d'une déconnexion volontaire
+  clearCurrentDriverPersist();
   show('ph-mission', false); show('ph0', true);
   show('pause-section', false); show('pause-active-panel', false); show('end-day-section', false);
   $('dayhdr').style.display = 'none'; $('dayhdr').textContent = '00:00:00';

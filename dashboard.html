@@ -50,10 +50,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .btn-logout{font-size:12px;color:#fff;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:5px 10px;cursor:pointer;}
 
 /* TABS */
-.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--b1);}
+/* v1.31 : tabs sticky sous le header pour que la barre d'onglets reste visible
+   pendant qu'on scrolle dans la vue Temps réel (grille chauffeurs qui déborde). */
+.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--b1);position:sticky;top:var(--hdr-h,48px);z-index:99;}
 .tab{flex:1;padding:11px;text-align:center;font-size:13px;font-weight:500;color:var(--t2);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;max-width:220px;}
 .tab.on{color:var(--blue);border-bottom-color:var(--blue);}
 .msg-badge{display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;}
+.msg-badge.on{display:inline-block;}
 
 /* LAYOUT */
 .view{display:none;}
@@ -519,7 +522,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.30 (release: dev badge + notif bureau + restauration endDay) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.32 (release: dev badge + notif auto-clôture chauffeur) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -720,10 +723,19 @@ function adjustMsgViewTop() {
   const bottom = Math.round(tabs.getBoundingClientRect().bottom);
   document.documentElement.style.setProperty('--msg-top', bottom + 'px');
 }
+// v1.31 : calcule la hauteur du header pour que les tabs sticky se positionnent
+// juste en-dessous — évite que la barre bleue « LCA Transfert · Bureau » scroll
+// avec le contenu de Temps réel.
+function adjustHdrHeight() {
+  const hdr = document.querySelector('.hdr');
+  if (!hdr) { document.documentElement.style.setProperty('--hdr-h', '48px'); return; }
+  const h = Math.round(hdr.getBoundingClientRect().height);
+  document.documentElement.style.setProperty('--hdr-h', h + 'px');
+}
 // Recalculer sur resize (changement de taille de fenêtre, rotation mobile, etc.)
-window.addEventListener('resize', adjustMsgViewTop);
+window.addEventListener('resize', () => { adjustHdrHeight(); adjustMsgViewTop(); });
 // Premier calcul une fois la page chargée
-setTimeout(adjustMsgViewTop, 100);
+setTimeout(() => { adjustHdrHeight(); adjustMsgViewTop(); }, 100);
 
 // ============================================================
 // CONSTANTS
@@ -1511,7 +1523,13 @@ function renderMessages() {
     + ' · ' + new Date(ts).toLocaleDateString('fr-BE',{day:'2-digit',month:'2-digit'});
   const unread = messages.filter(m=>m.from==='driver'&&!m.read).length;
   const badge = document.getElementById('msg-badge');
-  if(badge){badge.textContent=unread;badge.style.display=unread>0?'':'none';}
+  // v1.31 : la CSS .msg-badge a display:none par défaut. Utiliser un toggle
+  // de classe .on pour surcharger — mettre style.display='' ne suffit pas car
+  // ça retombe sur la règle CSS display:none.
+  if(badge){
+    badge.textContent = unread;
+    badge.classList.toggle('on', unread > 0);
+  }
   const thread = document.getElementById('msg-thread');
   if (!thread) return;
   if (!shown.length) { thread.innerHTML='<div class="empty"><p>Aucun message.</p></div>'; return; }
@@ -1540,7 +1558,7 @@ function renderMessages() {
   if (msgTabActive) {
     messages.forEach(m=>{ if(m.from==='driver') m.read=true; });
     saveMsgs();
-    if (badge) { badge.textContent = '0'; badge.style.display = 'none'; }
+    if (badge) { badge.textContent = '0'; badge.classList.remove('on'); }
   }
   // Scroll automatique vers le dernier message (en bas)
   setTimeout(() => {
