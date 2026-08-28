@@ -563,7 +563,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.32d (dev: force re-login si restore auto rate + username pré-rempli) — © Kalsj121</div>
+<div class="version-footer">Version 1.32e (dev: wait _supabaseReady dans initMessages + hasPending) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -744,7 +744,14 @@ function clearCurrentDriverPersist() {
 // Utilisé pour décider si on force le login screen (restauration auto ratée mais
 // mission en base = on doit re-authentifier proprement pour repartir).
 async function hasPendingMissionForDriver(driverName) {
-  if (!window.supabaseClient || !driverName) return false;
+  if (!driverName) return false;
+  // v1.32d : attendre que Supabase soit prêt (sinon on renvoie false à tort)
+  let w = 0;
+  while (w < 8000 && !window._supabaseReady) {
+    await new Promise(r => setTimeout(r, 100));
+    w += 100;
+  }
+  if (!window.supabaseClient) return false;
   try {
     const { data } = await window.supabaseClient
       .from('missions')
@@ -2780,6 +2787,15 @@ let messages = [];
 
 async function initMessages() {
   console.log('[initMessages] ↪ démarrage');
+  // v1.32d : ATTENDRE que Supabase soit complètement prêt avant de fetcher.
+  // Sans ce wait, le fetch retourne [] parce que supabaseClient n'est pas encore
+  // initialisé côté boot → messages perdus au reopen après swipe kill iOS.
+  let w = 0;
+  while (w < 8000 && !window._supabaseReady) {
+    await new Promise(r => setTimeout(r, 100));
+    w += 100;
+  }
+  if (!window._supabaseReady) console.warn('[initMessages] timeout attente Supabase (8s)');
   // v1.32 : toujours fetch frais depuis Supabase — les messages arrivés pendant
   // que l'app était fermée ne sont PAS dans window.messagesFromSupabase (rempli
   // uniquement au boot script). Sans fresh fetch, on rate les messages récents
