@@ -563,7 +563,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.32b (dev: read persisté + fresh init + body fixed + safety startDay) — © Kalsj121</div>
+<div class="version-footer">Version 1.32c (dev: bouton "Continuer la journée" + renderMessages au init) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -690,10 +690,14 @@ async function doLogin() {
   await initMissions();
   await initMessages();
   // v1.13 : tenter de restaurer une mission en cours (completed=false)
-  await restoreDriverSession();
+  const restored = await restoreDriverSession();
   // v1.29 : afficher le bouton notif + proposer l'activation au 1er login
   updateNotifBadge();
   maybePromptNotifPermission();
+  // v1.32b : si restauration auto n'a pas eu lieu mais qu'une mission ouverte existe,
+  // le bouton passe en "Continuer la journée (depuis Xh)". Le chauffeur clique et
+  // le safety net de startDay détecte + reprend la mission (pas de doublon).
+  if (!restored) updateStartDayButtonForPending();
 }
 
 // ============================================================
@@ -758,9 +762,12 @@ function clearCurrentDriverPersist() {
       // v1.13 : restaurer mission en cours si présente
       await initMissions();
       await initMessages();
-      await restoreDriverSession();
+      const restored = await restoreDriverSession();
       // v1.29 : refresh badge notif après restauration de session
       updateNotifBadge();
+      // v1.32b : si restauration auto n'a pas eu lieu mais qu'une mission ouverte
+      // existe (edge case), le bouton passe en "Continuer la journée"
+      if (!restored) updateStartDayButtonForPending();
     }
   } catch(e) {}
 })();
@@ -862,6 +869,34 @@ async function autoCloseStaleMission(missionRow, ageHours, reason) {
     await notifyBureauAutoClose(missionRow, ageHours, reason);
     return true;
   } catch(e) { console.warn('[AutoClose] failed:', e.message); return false; }
+}
+
+// v1.32b : si une mission completed=false existe pour ce chauffeur, change
+// le bouton "Démarrer ma journée" en "Continuer la journée" avec la durée.
+// Appelée juste après doDriverLogin / tryRestore quand la restauration auto
+// n'a pas déclenché (mission trouvée mais < 10h → aurait dû restaurer, mais
+// si un edge case fait qu'on reste sur ph0, l'UI reflète la réalité).
+async function updateStartDayButtonForPending() {
+  const btn = document.getElementById('btn-start-day');
+  if (!btn || !window.supabaseClient || !currentDriver?.fullName) return;
+  try {
+    const { data } = await window.supabaseClient
+      .from('missions')
+      .select('id,daystartts')
+      .eq('driver', currentDriver.fullName)
+      .eq('completed', false)
+      .order('daystartts', { ascending: false })
+      .limit(1);
+    if (data && data.length && data[0].daystartts) {
+      const ageH = getShiftAgeHours(new Date(data[0].daystartts).getTime());
+      btn.textContent = '▶ Continuer la journée (depuis ' + fmtDurationHours(ageH) + ')';
+      btn.dataset.pendingMission = 'true';
+      console.log('[UI] Mission ouverte détectée âge', fmtDurationHours(ageH), '→ bouton passe en "Continuer"');
+    } else {
+      btn.textContent = '▶ Démarrer ma journée';
+      delete btn.dataset.pendingMission;
+    }
+  } catch(e) { console.warn('[UI] updateStartDayButtonForPending:', e.message); }
 }
 
 // v1.32 : affiche la modal de choix reprendre/terminer pour un shift ambigu
@@ -2739,6 +2774,11 @@ async function initMessages() {
   }
   console.log('[initMessages] → appel de startDriverRealtimeSync()');
   startDriverRealtimeSync();
+  // v1.32b : rendre les messages ET rafraîchir le badge non-lus immédiatement.
+  // Sans ça, si l'utilisateur reçoit un message pendant que l'app est fermée,
+  // au reopen il ne voit pas le badge (renderMessages n'était appelé que par
+  // realtime → seulement pour les NOUVEAUX messages arrivés après connexion).
+  try { renderMessages(); } catch(e) { console.warn('[initMessages] renderMessages exception:', e.message); }
 }
 
 // ============================================================
