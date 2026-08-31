@@ -19,15 +19,21 @@
   --header:#4da9be;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-/* v1.32 : body en position:fixed avec scroll interne pour éviter le bounce
-   iOS (dashboard admin ouvert sur iPad ou navigation depuis mobile). */
-html{overscroll-behavior:none;height:100%;}
+/* v1.32f : anti-bounce iOS PWA — html et body verrouillés, scroll sur #main-app.
+   Cette architecture est plus fiable sur iOS que body:fixed pour les pages longues. */
+html,body{
+  height:100%;
+  overflow:hidden;
+  overscroll-behavior:none;
+}
 body{
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   background:var(--bg);color:var(--t1);
-  position:fixed;top:0;left:0;right:0;bottom:0;
+}
+#main-app{
+  position:absolute;top:0;left:0;right:0;bottom:0;
   overflow-y:auto;overscroll-behavior:none;
-  -webkit-overflow-scrolling:auto;
+  -webkit-overflow-scrolling:touch;
 }
 
 /* LOGIN */
@@ -531,7 +537,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.32b (dev: read persisté + body fixed) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.32g (dev: scroll sur #main-app pour fix scroll bloqué) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
