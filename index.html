@@ -563,7 +563,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.32e (dev: wait _supabaseReady dans initMessages + hasPending) — © Kalsj121</div>
+<div class="version-footer">Version 1.32f (dev: login screen systématique au reopen + username pré-rempli) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
@@ -763,53 +763,36 @@ async function hasPendingMissionForDriver(driverName) {
   } catch(e) { return false; }
 }
 
-// Auto-restore session
-(async function tryRestore() {
+// v1.32f : tryRestore ne fait PLUS d'auto-restauration silencieuse. On force
+// systématiquement le login screen à chaque ouverture (page load / reopen post
+// swipe-kill). Le username est pré-rempli depuis le persist pour minimiser la
+// friction — le chauffeur tape juste son mot de passe et tout est reloadé
+// proprement via doDriverLogin (qui appelle initMessages + restoreDriverSession
+// dans un contexte Supabase complètement warm).
+//
+// Rationale : sur iOS PWA, distinguer « swipe kill » d'un vrai fresh load
+// est impossible depuis le JS. Le comportement précédent d'auto-restore rentrait
+// dans des edge cases (Supabase pas prêt → mission restaurée mais messages [],
+// ou faux « Démarrer ma journée » alors qu'une mission tournait). Login systématique
+// = comportement prédictible et sans surprise.
+//
+// Note : quand l'utilisateur switche brièvement d'app (sans killer la PWA), iOS
+// met le processus en pause mais ne fait pas de fresh page load → aucun login
+// nécessaire. Seul un swipe-kill ou long-absent-then-relaunch déclenche login.
+(async function prepareLoginScreen() {
   try {
     const saved = readCurrentDriverPersist();
     if (saved && saved.username) {
-      currentDriver = saved;
-      document.getElementById('d-name').value = currentDriver.fullName || '';
-      document.getElementById('login-screen').classList.add('hidden');
-      document.getElementById('main-app').style.display = '';
-      show('ph0', true);
-      show('ph-mission', false);
-      // v1.17 : déverrouiller par défaut les sélecteurs véhicules — ainsi, même
-      // si la restauration Supabase échoue, le chauffeur peut démarrer une nouvelle
-      // journée sans rester bloqué sur un écran en lecture seule.
-      lockVehicleSelects(false);
-      // Charger les listes véhicules et pré-sélectionner
-      loadVehicleDropdowns();
-      // v1.11 : charger la liste des lieux
-      loadLocationsDropdown();
-      // v1.13 : restaurer mission en cours si présente
-      await initMissions();
-      await initMessages();
-      const restored = await restoreDriverSession();
-      // v1.29 : refresh badge notif après restauration de session
-      updateNotifBadge();
-      if (!restored) {
-        // v1.32c : la restauration auto a échoué. Deux cas possibles :
-        //   (A) Aucune mission en base → tout va bien, chauffeur en ph0 fresh
-        //   (B) Mission en base mais restore raté (timing Supabase / edge case)
-        //       → forcer le re-login avec l-login pré-rempli pour repartir proprement.
-        const hasPending = await hasPendingMissionForDriver(currentDriver.fullName);
-        if (hasPending) {
-          console.log('[tryRestore] Mission en base mais restauration ratée → force re-login');
-          const lLogin = document.getElementById('l-login');
-          if (lLogin) lLogin.value = currentDriver.username || '';
-          document.getElementById('main-app').style.display = 'none';
-          document.getElementById('login-screen').classList.remove('hidden');
-          toast('Ré-authentification nécessaire pour reprendre votre shift', false);
-          const lPass = document.getElementById('l-password');
-          if (lPass) setTimeout(() => lPass.focus(), 200);
-        } else {
-          // Cas A : pas de mission, on met à jour le bouton "Continuer" au cas où
-          updateStartDayButtonForPending();
-        }
-      }
+      // Pré-remplir l'input login pour ne demander que le mot de passe
+      const lLogin = document.getElementById('l-login');
+      if (lLogin) lLogin.value = saved.username;
+      // Pré-focus sur le mot de passe (petit délai pour laisser le DOM se poser)
+      setTimeout(() => {
+        const lPass = document.getElementById('l-password');
+        if (lPass) lPass.focus();
+      }, 300);
     }
-  } catch(e) { console.warn('[tryRestore] exception:', e.message); }
+  } catch(e) { console.warn('[prepareLoginScreen] exception:', e.message); }
 })();
 
 // ============================================================
