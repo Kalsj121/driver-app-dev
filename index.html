@@ -24,19 +24,26 @@
   --rmd:8px;--rlg:12px;--rxl:16px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-/* v1.32 : body en position:fixed sur toute la viewport avec scroll interne
-   overflow-y:auto — méthode fiable sur iOS PWA pour bloquer le bounce/rebond
-   élastique qui exposait le fond gris et le pied de page. Marche sur toutes
-   les vues (Chauffeur + Messages), pas uniquement sur Messages. */
-html{overscroll-behavior:none;height:100%;}
+/* v1.32f : anti-bounce iOS PWA — html et body verrouillés, scroll sur #main-app.
+   Cette architecture est plus fiable sur iOS que body:fixed pour les pages longues
+   (étape 7 avec timeline de stops + boutons Partir/Terminer/Journée).
+   Le login-screen reste position:fixed inset:0 donc pas affecté. */
+html,body{
+  height:100%;
+  overflow:hidden;
+  overscroll-behavior:none;
+}
 body{
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   background:var(--bg);color:var(--t1);
-  position:fixed;top:0;left:0;right:0;bottom:0;
-  overflow-y:auto;overscroll-behavior:none;
-  -webkit-overflow-scrolling:auto;
 }
-/* Compat rétro : ancien flag pour la vue Messages, on garde vide au cas où */
+/* Le container principal devient le scroller — momentum tactile iOS activé. */
+#main-app{
+  position:absolute;top:0;left:0;right:0;bottom:0;
+  overflow-y:auto;overscroll-behavior:none;
+  -webkit-overflow-scrolling:touch;
+}
+/* Compat rétro : ancien flag msg-view-open, on garde vide au cas où */
 body.msg-view-open{}
 
 /* LOGIN SCREEN */
@@ -563,7 +570,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.32f (dev: login screen systématique au reopen + username pré-rempli) — © Kalsj121</div>
+<div class="version-footer">Version 1.32g (dev: scroll sur #main-app pour fix scroll bloqué étape 7) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
