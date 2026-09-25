@@ -403,17 +403,87 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- ============================================================ ACCOUNTS -->
 <div class="view" id="view-accounts">
 <div class="page-narrow">
-  <div class="card">
-    <div class="ctit">Créer un compte chauffeur</div>
-    <div class="fg"><label class="fl">Nom complet</label><input class="fi" type="text" id="acc-name" placeholder="Ex: Marc Dupont"/></div>
-    <div class="fg"><label class="fl">Login (identifiant)</label><input class="fi" type="text" id="acc-login" placeholder="Ex: marc.d"/></div>
-    <div class="fg" style="margin-bottom:0;"><label class="fl">Mot de passe</label><input class="fi" type="password" id="acc-pass" placeholder="••••••••"/></div>
-    <button class="btn bp" style="margin-top:12px;" onclick="createAccount()">Créer le compte</button>
+  <!-- v1.33 : sub-tabs Chauffeurs / Bureau / Historique -->
+  <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--b1);">
+    <button class="acc-subtab on" data-sub="drivers" onclick="switchAccountsSub('drivers')" style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;">🚛 Chauffeurs</button>
+    <button class="acc-subtab" data-sub="bureau"  onclick="switchAccountsSub('bureau')"  style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;display:none;" id="acc-subtab-bureau">👥 Bureau</button>
+    <button class="acc-subtab" data-sub="history" onclick="switchAccountsSub('history')" style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;display:none;" id="acc-subtab-history">📋 Historique</button>
   </div>
 
-  <div class="card">
-    <div class="ctit">Comptes chauffeurs existants</div>
-    <div id="accounts-list"><div class="empty"><p>Chargement…</p></div></div>
+  <!-- SUB CHAUFFEURS -->
+  <div id="acc-sub-drivers">
+    <div class="card">
+      <div class="ctit">Créer un compte chauffeur</div>
+      <div class="fg"><label class="fl">Nom complet</label><input class="fi" type="text" id="acc-name" placeholder="Ex: Marc Dupont"/></div>
+      <div class="fg"><label class="fl">Login (identifiant)</label><input class="fi" type="text" id="acc-login" placeholder="Ex: marc.d"/></div>
+      <div class="fg" style="margin-bottom:0;"><label class="fl">Mot de passe</label>
+        <div class="pw-wrap"><input class="fi" type="password" id="acc-pass" placeholder="••••••••"/><button type="button" class="pw-eye" onclick="togglePw('acc-pass',this)" tabindex="-1">👁</button></div>
+      </div>
+      <button class="btn bp" style="margin-top:12px;" onclick="createAccount()">Créer le compte</button>
+    </div>
+    <div class="card">
+      <div class="ctit">Comptes chauffeurs existants</div>
+      <div id="accounts-list"><div class="empty"><p>Chargement…</p></div></div>
+    </div>
+  </div>
+
+  <!-- SUB BUREAU (visible seulement pour super_admin) -->
+  <div id="acc-sub-bureau" style="display:none;">
+    <div class="card">
+      <div class="ctit">Créer un compte bureau</div>
+      <div class="fg"><label class="fl">Nom complet</label><input class="fi" type="text" id="bacc-name" placeholder="Ex: Marie Dupont"/></div>
+      <div class="fg"><label class="fl">Login (identifiant)</label><input class="fi" type="text" id="bacc-login" placeholder="Ex: MarieD"/></div>
+      <div class="fg"><label class="fl">Rôle / étiquette</label><input class="fi" type="text" id="bacc-role" placeholder="Ex: Comptable, Dispatcher, Operations LCA…"/></div>
+      <div class="fg">
+        <label class="fl">Mot de passe</label>
+        <div class="pw-wrap">
+          <input class="fi" type="password" id="bacc-pass" placeholder="Généré automatiquement" style="padding-right:80px;"/>
+          <button type="button" class="pw-eye" onclick="togglePw('bacc-pass',this)" tabindex="-1">👁</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button type="button" class="btn bo bsm" style="flex:1;margin-top:0;" onclick="generateBureauPassword()">⚙️ Générer</button>
+          <button type="button" class="btn bo bsm" style="flex:1;margin-top:0;" onclick="copyBureauPassword()">📋 Copier</button>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Vues autorisées</label>
+        <div id="bacc-views" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;padding:8px;background:var(--subcard);border-radius:6px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="dashboard"/> Temps réel</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="messages"/> Messages</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="reports"/> Rapports</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="accounts"/> Comptes</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="vehicles"/> Véhicules</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="backups"/> Sauvegardes</label>
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:0;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
+          <input type="checkbox" id="bacc-superadmin"/> Super Administrateur (accès total + gestion des comptes)
+        </label>
+      </div>
+      <button class="btn bp" style="margin-top:12px;" onclick="createBureauAccount()">Créer le compte bureau</button>
+    </div>
+    <div class="card">
+      <div class="ctit">Comptes bureau existants</div>
+      <div id="bureau-list"><div class="empty"><p>Chargement…</p></div></div>
+    </div>
+  </div>
+
+  <!-- SUB HISTORIQUE (visible seulement pour super_admin) -->
+  <div id="acc-sub-history" style="display:none;">
+    <div class="card">
+      <div class="ctit">Historique des connexions bureau</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <input class="fi" type="text" id="hist-filter-user" placeholder="Filtrer par utilisateur…" style="flex:1;min-width:180px;"/>
+        <select class="fi" id="hist-filter-outcome" style="flex:0 0 auto;width:auto;">
+          <option value="all">Tous</option>
+          <option value="success">Succès uniquement</option>
+          <option value="fail">Échecs uniquement</option>
+        </select>
+        <button class="btn bo bsm" style="margin:0;flex:0 0 auto;" onclick="loadLoginHistory()">↺ Actualiser</button>
+      </div>
+      <div id="history-list"><div class="empty"><p>Chargement…</p></div></div>
+    </div>
   </div>
 </div>
 </div>
@@ -537,7 +607,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div><!-- /main-app -->
 
 <!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.32g (dev: scroll sur #main-app pour fix scroll bloqué) — © Kalsj121</div>
+<div class="version-footer" id="ver-footer" style="display:none;">Version 1.33 (dev: auth bureau DB + sessions 2h + brute-force + comptes CRUD + historique) — © Kalsj121</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -549,34 +619,40 @@ textarea.fi{resize:vertical;min-height:72px;}
 'use strict';
 
 // ============================================================
-// AUTH — Bureau login (v1.27 : comptes multiples avec rôles)
+// v1.33 — AUTH bureau backée par Supabase (bureau_accounts)
+// - Hash SHA-256 + salt côté client (Web Crypto)
+// - Session token en cookie, table bureau_sessions côté serveur
+// - Timeout d'inactivité 2h, brute-force lock 5x/30min
+// - Rôle super_admin = accès complet à tout, gestion comptes
+// - Autres rôles = allowed_views configuré par compte
 // ============================================================
-// AdminLCA  : accès complet à tous les onglets
-// OperationsLCA : accès Temps réel, Messages, Rapports, Véhicules
-//                 (PAS d'accès Comptes ni Sauvegardes)
-const BUREAU_ACCOUNTS = [
-  {
-    username:     'AdminLCA',
-    password:     'AdminQuality-LCAlgg2704!',
-    full_name:    'Admin LCA',
-    role:         'admin',
-    allowedViews: ['dashboard','messages','reports','accounts','vehicles','backups']
-  },
-  {
-    username:     'OperationsLCA',
-    password:     'LCAlgg2704!',
-    full_name:    'Operations LCA',
-    role:         'operations',
-    allowedViews: ['dashboard','messages','reports','vehicles']
-  }
-];
-let currentUser = null;
+let currentUser = null;   // objet bureau_accounts complet + normalise allowedViews
+
+function normalizeAccount(acc) {
+  if (!acc) return null;
+  const raw = acc.allowed_views;
+  let views = [];
+  if (Array.isArray(raw)) views = raw;
+  else if (typeof raw === 'string') { try { views = JSON.parse(raw); } catch(_) { views = []; } }
+  return {
+    id:             acc.id,
+    username:       acc.username,
+    fullname:       acc.fullname || acc.full_name || acc.username,
+    role:           acc.role || 'operations',
+    allowedViews:   views,
+    is_active:      acc.is_active !== false,
+    last_login:     acc.last_login || null
+  };
+}
 
 function isViewAllowed(viewId) {
   if (!currentUser) return false;
+  // super_admin voit TOUT, quoi qu'il arrive
+  if (currentUser.role === 'super_admin') return true;
   const allowed = currentUser.allowedViews || [];
   return allowed.indexOf(viewId) !== -1;
 }
+function isSuperAdmin() { return !!(currentUser && currentUser.role === 'super_admin'); }
 
 // v1.23 : Détection environnement DEV (même logique que index.html)
 // Résilient : réessaie jusqu'à ce que window.SUPABASE_URL soit disponible.
@@ -599,22 +675,84 @@ function applyDevBanner(retries) {
 }
 applyDevBanner();
 
-function doLogin() {
+async function doLogin() {
   const u = document.getElementById('l-user').value.trim();
   const p = document.getElementById('l-pass').value;
   const errEl = document.getElementById('login-err');
+  const btn   = document.querySelector('.login-btn');
   errEl.style.display = 'none';
-  // v1.27 : recherche dans la liste BUREAU_ACCOUNTS
-  const acct = BUREAU_ACCOUNTS.find(a => a.username === u && a.password === p);
-  if (acct) {
-    currentUser = { ...acct };
-    try {
-      sessionStorage.setItem('lca_bureau_session', JSON.stringify({ u: acct.username }));
-    } catch(e) {}
-    showApp();
-  } else {
+  if (!u || !p) { errEl.textContent = 'Veuillez remplir tous les champs.'; errEl.style.display = ''; return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Connexion…'; }
+  // v1.33 : attendre que Supabase soit prêt (sinon on renvoie un faux échec)
+  let w = 0;
+  while (w < 8000 && !window._supabaseReady) { await new Promise(r => setTimeout(r, 100)); w += 100; }
+  if (!window.attemptBureauLogin) {
+    errEl.textContent = 'Serveur non disponible. Réessayez dans quelques secondes.';
     errEl.style.display = '';
+    if (btn) { btn.disabled = false; btn.textContent = 'Se connecter'; }
+    return;
   }
+  const res = await window.attemptBureauLogin(u, p);
+  if (btn) { btn.disabled = false; btn.textContent = 'Se connecter'; }
+  if (res.ok) {
+    currentUser = normalizeAccount(res.account);
+    showApp();
+    startInactivityWatcher(); // v1.33 : lance le timer d'auto-logout
+    return;
+  }
+  // Message d'erreur selon la raison
+  let msg;
+  switch (res.reason) {
+    case 'unknown_user':
+    case 'bad_password':
+      msg = 'Identifiants incorrects.';
+      if (typeof res.attempts_left === 'number' && res.attempts_left <= 3 && res.attempts_left > 0) {
+        msg += ' ' + res.attempts_left + ' tentative(s) restante(s) avant verrouillage.';
+      }
+      break;
+    case 'account_locked':
+      msg = 'Compte temporairement verrouillé (trop de tentatives). Réessayez dans 30 minutes.';
+      break;
+    case 'account_disabled':
+      msg = 'Compte désactivé. Contactez un administrateur.';
+      break;
+    case 'server_error':
+      msg = 'Erreur serveur. Réessayez dans un instant.';
+      break;
+    default:
+      msg = 'Impossible de se connecter (' + (res.reason || 'inconnu') + ').';
+  }
+  errEl.textContent = msg;
+  errEl.style.display = '';
+}
+
+// v1.33 : timer d'auto-logout après inactivité (2h par défaut)
+let _inactivityTimer = null;
+let _lastActivity    = Date.now();
+let _touchThrottle   = 0;
+function bumpActivity() {
+  _lastActivity = Date.now();
+  // Throttle : envoie un touch au serveur au max toutes les 60s
+  if (Date.now() - _touchThrottle > 60000) {
+    _touchThrottle = Date.now();
+    if (window.touchBureauSession) window.touchBureauSession();
+  }
+}
+function startInactivityWatcher() {
+  ['mousemove','keydown','touchstart','click','scroll'].forEach(evt => {
+    window.addEventListener(evt, bumpActivity, { passive: true });
+  });
+  if (_inactivityTimer) clearInterval(_inactivityTimer);
+  _inactivityTimer = setInterval(() => {
+    const idleMs = Date.now() - _lastActivity;
+    const maxIdle = (window.BUREAU_INACTIVITY_MINUTES || 120) * 60 * 1000;
+    if (idleMs >= maxIdle) {
+      clearInterval(_inactivityTimer);
+      _inactivityTimer = null;
+      showToast('Session expirée (2h d\'inactivité). Reconnexion nécessaire.');
+      setTimeout(() => doLogout(), 1500);
+    }
+  }, 30000); // check chaque 30s
 }
 
 function showApp() {
@@ -655,38 +793,33 @@ function hasCmr(stop) {
   return !!(stop && (stop.cmrUrl || stop.cmrData));
 }
 
-function doLogout() {
-  try { sessionStorage.removeItem('lca_bureau_session'); } catch(e) {}
+async function doLogout() {
+  if (window.endBureauSession) await window.endBureauSession();
   showToast('Déconnexion…');
   setTimeout(() => location.reload(), 500);
 }
 
-// Auto-restore session on page reload (Cmd+Shift+R stays logged in)
-// v1.27 : on stocke maintenant le username pour pouvoir retrouver le rôle.
-(function tryRestoreSession() {
+// v1.33 : Auto-restore session — valide le token cookie côté Supabase
+(async function tryRestoreSession() {
   try {
-    const raw = sessionStorage.getItem('lca_bureau_session');
-    if (!raw) return;
-    let savedUsername = null;
-    // Rétrocompat : ancien format "1" → on bascule sur AdminLCA par défaut
-    if (raw === '1') {
-      savedUsername = 'AdminLCA';
-    } else {
-      try {
-        const parsed = JSON.parse(raw);
-        savedUsername = parsed.u || null;
-      } catch(_) { savedUsername = null; }
+    // Attendre Supabase prêt
+    let w = 0;
+    while (w < 8000 && !window._supabaseReady) { await new Promise(r => setTimeout(r, 100)); w += 100; }
+    if (!window.validateBureauSession) return;
+    const res = await window.validateBureauSession();
+    if (res.valid) {
+      currentUser = normalizeAccount(res.account);
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => { showApp(); startInactivityWatcher(); });
+      } else {
+        showApp();
+        startInactivityWatcher();
+      }
+    } else if (res.reason === 'inactivity_timeout') {
+      // Info discrète : la dernière session a expiré par inactivité
+      setTimeout(() => showToast('Session précédente expirée (inactivité)'), 500);
     }
-    if (!savedUsername) return;
-    const acct = BUREAU_ACCOUNTS.find(a => a.username === savedUsername);
-    if (!acct) return;
-    currentUser = { ...acct };
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', showApp);
-    } else {
-      showApp();
-    }
-  } catch(e) {}
+  } catch(e) { console.warn('[Auth] tryRestoreSession:', e.message); }
 })();
 
 function togglePw(inputId, btn) {
@@ -701,6 +834,11 @@ function togglePw(inputId, btn) {
 document.addEventListener('DOMContentLoaded', () => {
   const passInput = document.getElementById('l-pass');
   if (passInput) passInput.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+  // v1.33 : filtres historique de connexion
+  const histUser = document.getElementById('hist-filter-user');
+  const histOut  = document.getElementById('hist-filter-outcome');
+  if (histUser) histUser.addEventListener('input',  () => { if (typeof loadLoginHistory==='function') loadLoginHistory(); });
+  if (histOut)  histOut .addEventListener('change', () => { if (typeof loadLoginHistory==='function') loadLoginHistory(); });
 });
 
 // ============================================================
@@ -2450,22 +2588,279 @@ function dlCSV(content, filename) {
 }
 
 // ============================================================
+// v1.33 : SUB-TABS de la page Comptes + gestion Bureau + Historique
+// ============================================================
+function switchAccountsSub(sub) {
+  ['drivers','bureau','history'].forEach(s => {
+    const div = document.getElementById('acc-sub-'+s);
+    const btn = document.querySelector('.acc-subtab[data-sub="'+s+'"]');
+    if (div) div.style.display = (s === sub) ? '' : 'none';
+    if (btn) {
+      if (s === sub) { btn.style.color = 'var(--blue)'; btn.style.borderBottomColor = 'var(--blue)'; }
+      else           { btn.style.color = 'var(--t2)';    btn.style.borderBottomColor = 'transparent'; }
+    }
+  });
+  if (sub === 'bureau')  loadBureauAccounts();
+  if (sub === 'history') loadLoginHistory();
+}
+
+// ============================================================
 // DRIVER ACCOUNTS
 // ============================================================
 async function loadAccounts() {
+  // v1.33 : selon le rôle du user courant, afficher/masquer les sub-tabs bureau/historique
+  const subBureau  = document.getElementById('acc-subtab-bureau');
+  const subHistory = document.getElementById('acc-subtab-history');
+  if (subBureau)  subBureau.style.display  = isSuperAdmin() ? '' : 'none';
+  if (subHistory) subHistory.style.display = isSuperAdmin() ? '' : 'none';
+
   const container = document.getElementById('accounts-list');
   if (!container) return;
   let accounts = await getDriverAccounts();
   if (!accounts.length) { container.innerHTML='<div class="empty"><p>Aucun compte chauffeur créé.</p></div>'; return; }
-  // v1.08 : colonne "PDF feuille" retirée (gérée depuis Rapports par le bureau)
-  container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Nom</th><th>Action</th></tr></thead><tbody>'
+  container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Nom</th><th style="text-align:right;">Actions</th></tr></thead><tbody>'
     + accounts.map(a => {
+      const uname = a.username.replace(/'/g,"\\'");
       return `<tr>
         <td><code>${a.username}</code></td>
         <td>${a.fullname||a.username}</td>
-        <td><button class="del-btn" onclick="deleteAccount('${a.username}')">✕ Supprimer</button></td>
+        <td style="text-align:right;">
+          <button class="btn bo bsm" style="margin:0 4px 0 0;padding:4px 10px;font-size:12px;" onclick="editDriverAccount('${uname}')">✏️ Modifier</button>
+          <button class="del-btn" onclick="deleteAccount('${uname}')">✕ Supprimer</button>
+        </td>
       </tr>`;
     }).join('') + '</tbody></table>';
+}
+
+// v1.33 : modal d'édition compte chauffeur — utilise un prompt simple mais efficace
+async function editDriverAccount(username) {
+  if (!window.supabaseClient) { showToast('Supabase indisponible.'); return; }
+  const { data } = await window.supabaseClient.from('driver_accounts').select('*').eq('username', username).limit(1);
+  if (!data || !data.length) { showToast('Compte introuvable.'); return; }
+  const acc = data[0];
+  const newFullname = prompt('Nom complet :', acc.fullname || '');
+  if (newFullname === null) return;
+  const newPass = prompt('Nouveau mot de passe (laisser vide = ne pas changer) :', '');
+  if (newPass === null) return;
+  const pdfAllowed = confirm('Autoriser ce chauffeur à exporter des PDFs ? (OK = oui, Annuler = non)');
+  const update = { fullname: newFullname.trim(), pdf_allowed: pdfAllowed };
+  if (newPass.trim().length) update.password = newPass;
+  try {
+    const { error } = await window.supabaseClient.from('driver_accounts').update(update).eq('username', username);
+    if (error) { showToast('Erreur : ' + error.message); return; }
+    showToast('Compte ' + username + ' mis à jour ✓');
+    loadAccounts();
+  } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+// ============================================================
+// v1.33 : BUREAU ACCOUNTS (super_admin uniquement)
+// ============================================================
+function generateBureauPassword() {
+  if (!window.generateStrongPassword) { showToast('Helper non chargé.'); return; }
+  const p = window.generateStrongPassword(16);
+  const input = document.getElementById('bacc-pass');
+  if (input) {
+    input.value = p;
+    input.type = 'text'; // révèle pour que l'admin le note
+    setTimeout(() => { input.type = 'password'; }, 8000);
+  }
+}
+function copyBureauPassword() {
+  const input = document.getElementById('bacc-pass');
+  if (!input || !input.value) { showToast('Aucun mot de passe à copier.'); return; }
+  try {
+    navigator.clipboard.writeText(input.value)
+      .then(() => showToast('Mot de passe copié dans le presse-papier ✓'))
+      .catch(() => showToast('Copie impossible — sélectionnez manuellement.'));
+  } catch(e) { showToast('Copie impossible.'); }
+}
+
+async function createBureauAccount() {
+  if (!isSuperAdmin()) { showToast('Réservé aux super administrateurs.'); return; }
+  const fullname = document.getElementById('bacc-name').value.trim();
+  const username = document.getElementById('bacc-login').value.trim();
+  const role     = document.getElementById('bacc-role').value.trim() || 'operations';
+  const pass     = document.getElementById('bacc-pass').value;
+  const isSuper  = document.getElementById('bacc-superadmin').checked;
+  const views = Array.from(document.querySelectorAll('#bacc-views input[type=checkbox]:checked')).map(cb => cb.value);
+  if (!username || !pass) { showToast('Login et mot de passe requis.'); return; }
+  if (pass.length < 10) { showToast('Mot de passe trop court (10 caractères minimum).'); return; }
+  if (!isSuper && views.length === 0) { showToast('Sélectionnez au moins une vue autorisée.'); return; }
+  if (!window.hashPassword) { showToast('Helper hash non chargé.'); return; }
+  const hash = await window.hashPassword(pass);
+  const payload = {
+    username, fullname,
+    password_hash: hash,
+    role: isSuper ? 'super_admin' : role,
+    allowed_views: views,
+    is_active: true,
+    failed_attempts: 0, locked_until: null,
+    updated_at: new Date().toISOString()
+  };
+  try {
+    const { error } = await window.supabaseClient.from('bureau_accounts').upsert([payload], { onConflict: 'username' });
+    if (error) { showToast('Erreur : ' + error.message); return; }
+    showToast('Compte bureau ' + username + ' créé ✓');
+    // Reset form
+    document.getElementById('bacc-name').value = '';
+    document.getElementById('bacc-login').value = '';
+    document.getElementById('bacc-role').value = '';
+    document.getElementById('bacc-pass').value = '';
+    document.getElementById('bacc-superadmin').checked = false;
+    document.querySelectorAll('#bacc-views input[type=checkbox]').forEach(cb => cb.checked = false);
+    loadBureauAccounts();
+  } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+async function loadBureauAccounts() {
+  const container = document.getElementById('bureau-list');
+  if (!container || !window.supabaseClient) return;
+  try {
+    const { data, error } = await window.supabaseClient.from('bureau_accounts').select('*').order('created_at', { ascending: true });
+    if (error) { container.innerHTML = '<div class="empty"><p>Erreur : '+error.message+'</p></div>'; return; }
+    if (!data || !data.length) { container.innerHTML = '<div class="empty"><p>Aucun compte bureau.</p></div>'; return; }
+    container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Rôle</th><th>Vues</th><th>Actif</th><th style="text-align:right;">Actions</th></tr></thead><tbody>'
+      + data.map(a => {
+        const uname = (a.username || '').replace(/'/g,"\\'");
+        let views = a.allowed_views;
+        if (typeof views === 'string') { try { views = JSON.parse(views); } catch(_) { views = []; } }
+        const isSuper = a.role === 'super_admin';
+        const badges = isSuper
+          ? '<span style="background:var(--amber);color:#fff;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;">SUPER ADMIN</span>'
+          : (Array.isArray(views) ? views.map(v => '<span style="background:var(--subcard);border:1px solid var(--b1);padding:1px 5px;border-radius:3px;font-size:10px;margin-right:3px;">'+v+'</span>').join('') : '');
+        const status = a.is_active ? '<span style="color:var(--green);">● Actif</span>' : '<span style="color:var(--red);">● Désactivé</span>';
+        return `<tr>
+          <td><code>${a.username}</code><div style="font-size:11px;color:var(--t3);">${a.fullname||''}</div></td>
+          <td><span style="font-size:12px;">${a.role||'operations'}</span></td>
+          <td>${badges}</td>
+          <td>${status}</td>
+          <td style="text-align:right;">
+            <button class="btn bo bsm" style="margin:0 4px 0 0;padding:4px 10px;font-size:12px;" onclick="editBureauAccount('${uname}')">✏️</button>
+            <button class="btn bo bsm" style="margin:0 4px 0 0;padding:4px 10px;font-size:12px;" onclick="resetBureauPassword('${uname}')">🔑</button>
+            <button class="del-btn" onclick="deleteBureauAccount('${uname}')">✕</button>
+          </td>
+        </tr>`;
+      }).join('') + '</tbody></table>';
+  } catch(e) { container.innerHTML = '<div class="empty"><p>Erreur : '+e.message+'</p></div>'; }
+}
+
+async function editBureauAccount(username) {
+  if (!isSuperAdmin()) { showToast('Réservé aux super admins.'); return; }
+  const { data } = await window.supabaseClient.from('bureau_accounts').select('*').eq('username', username).limit(1);
+  if (!data || !data.length) { showToast('Compte introuvable.'); return; }
+  const acc = data[0];
+  const newFullname = prompt('Nom complet :', acc.fullname || '');
+  if (newFullname === null) return;
+  const newRole = prompt('Rôle / étiquette (ex: Comptable, Dispatcher, Operations) :\nTaper "super_admin" pour donner accès total.', acc.role || 'operations');
+  if (newRole === null) return;
+  let views = acc.allowed_views;
+  if (typeof views === 'string') { try { views = JSON.parse(views); } catch(_) { views = []; } }
+  if (newRole !== 'super_admin') {
+    const viewsList = ['dashboard','messages','reports','accounts','vehicles','backups'];
+    const currentStr = Array.isArray(views) ? views.join(',') : '';
+    const answer = prompt('Vues autorisées séparées par virgules ('+viewsList.join('/')+') :', currentStr);
+    if (answer === null) return;
+    views = answer.split(',').map(v => v.trim()).filter(v => viewsList.indexOf(v) !== -1);
+  }
+  const activate = confirm('Compte actif ? (OK = oui, Annuler = désactivé)');
+  const update = {
+    fullname: newFullname.trim(),
+    role:     newRole.trim(),
+    allowed_views: newRole.trim() === 'super_admin' ? ['dashboard','messages','reports','accounts','vehicles','backups'] : views,
+    is_active: activate,
+    updated_at: new Date().toISOString()
+  };
+  try {
+    const { error } = await window.supabaseClient.from('bureau_accounts').update(update).eq('username', username);
+    if (error) { showToast('Erreur : '+error.message); return; }
+    showToast('Compte bureau '+username+' mis à jour ✓');
+    loadBureauAccounts();
+  } catch(e) { showToast('Erreur : '+e.message); }
+}
+
+async function resetBureauPassword(username) {
+  if (!isSuperAdmin()) { showToast('Réservé aux super admins.'); return; }
+  const newPass = prompt('Nouveau mot de passe pour '+username+' :\n(laissez vide pour générer aléatoirement)', '');
+  if (newPass === null) return;
+  const pwd = newPass.trim().length ? newPass : window.generateStrongPassword(16);
+  if (pwd.length < 10) { showToast('Mot de passe trop court (10 min).'); return; }
+  const hash = await window.hashPassword(pwd);
+  try {
+    const { error } = await window.supabaseClient.from('bureau_accounts')
+      .update({ password_hash: hash, failed_attempts: 0, locked_until: null, updated_at: new Date().toISOString() })
+      .eq('username', username);
+    if (error) { showToast('Erreur : '+error.message); return; }
+    prompt('Nouveau mot de passe pour '+username+' (copiez-le maintenant !) :', pwd);
+    showToast('Mot de passe mis à jour ✓');
+  } catch(e) { showToast('Erreur : '+e.message); }
+}
+
+async function deleteBureauAccount(username) {
+  if (!isSuperAdmin()) { showToast('Réservé aux super admins.'); return; }
+  if (currentUser && currentUser.username === username) { showToast('Impossible de vous supprimer vous-même.'); return; }
+  // Garde-fou : refus si c'est le dernier super_admin
+  try {
+    const { data: admins } = await window.supabaseClient.from('bureau_accounts').select('username,role').eq('role','super_admin');
+    if (admins && admins.length === 1 && admins[0].username === username) {
+      showToast('Impossible de supprimer le dernier super administrateur.');
+      return;
+    }
+  } catch(e) {}
+  if (!confirm('Supprimer le compte bureau '+username+' ? Cette action est irréversible.')) return;
+  try {
+    await window.supabaseClient.from('bureau_accounts').delete().eq('username', username);
+    // Nettoyer aussi les sessions actives de ce user
+    await window.supabaseClient.from('bureau_sessions').delete().eq('username', username);
+    showToast('Compte '+username+' supprimé ✓');
+    loadBureauAccounts();
+  } catch(e) { showToast('Erreur : '+e.message); }
+}
+
+// ============================================================
+// v1.33 : LOGIN HISTORY (super_admin uniquement)
+// ============================================================
+async function loadLoginHistory() {
+  const container = document.getElementById('history-list');
+  if (!container || !window.supabaseClient) return;
+  container.innerHTML = '<div class="empty"><p>Chargement…</p></div>';
+  const filterUser    = (document.getElementById('hist-filter-user')?.value || '').trim();
+  const filterOutcome = document.getElementById('hist-filter-outcome')?.value || 'all';
+  try {
+    let q = window.supabaseClient.from('login_history').select('*').order('ts', { ascending: false }).limit(200);
+    if (filterUser) q = q.ilike('username', '%'+filterUser+'%');
+    if (filterOutcome === 'success') q = q.eq('success', true);
+    if (filterOutcome === 'fail')    q = q.eq('success', false);
+    const { data, error } = await q;
+    if (error) { container.innerHTML = '<div class="empty"><p>Erreur : '+error.message+'</p></div>'; return; }
+    if (!data || !data.length) { container.innerHTML = '<div class="empty"><p>Aucune connexion enregistrée.</p></div>'; return; }
+    const fmtTs = ts => new Date(ts).toLocaleString('fr-BE', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const shortUA = ua => {
+      if (!ua) return '—';
+      if (/iPhone/.test(ua)) return '📱 iPhone';
+      if (/iPad/.test(ua))   return '📱 iPad';
+      if (/Android/.test(ua)) return '📱 Android';
+      if (/Firefox/.test(ua)) return '🦊 Firefox';
+      if (/Edg/.test(ua))     return '🔷 Edge';
+      if (/Chrome/.test(ua))  return '🔵 Chrome';
+      if (/Safari/.test(ua))  return '🧭 Safari';
+      return ua.slice(0, 30);
+    };
+    container.innerHTML = '<table class="acc-table"><thead><tr><th>Date</th><th>Login</th><th>Résultat</th><th>Raison</th><th>Navigateur</th></tr></thead><tbody>'
+      + data.map(e => {
+        const badge = e.success
+          ? '<span style="color:var(--green);font-weight:600;">✓ Succès</span>'
+          : '<span style="color:var(--red);font-weight:600;">✕ Échec</span>';
+        return `<tr style="font-size:12px;">
+          <td>${fmtTs(e.ts)}</td>
+          <td><code>${e.username||'?'}</code></td>
+          <td>${badge}</td>
+          <td>${e.reason||'—'}</td>
+          <td>${shortUA(e.user_agent)}</td>
+        </tr>`;
+      }).join('') + '</tbody></table>'
+      + '<p style="font-size:11px;color:var(--t3);margin-top:8px;">Affichage limité aux 200 dernières entrées.</p>';
+  } catch(e) { container.innerHTML = '<div class="empty"><p>Erreur : '+e.message+'</p></div>'; }
 }
 
 async function getDriverAccounts() {

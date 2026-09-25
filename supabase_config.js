@@ -318,6 +318,223 @@ async function loadDriverAccountsFromSupabase() {
 }
 
 // ============================================================
+// v1.33 — BUREAU AUTH : hashage, sessions, brute-force protection
+// ============================================================
+
+const BUREAU_SALT = 'LCA-TRANSFERT-v1.33-SALT';   // salt fixe côté client
+const BUREAU_SESSION_HOURS       = 2;              // durée session par défaut
+const BUREAU_INACTIVITY_MINUTES  = 120;            // timeout inactivité
+const BUREAU_MAX_FAILED_ATTEMPTS = 5;              // avant lock
+const BUREAU_LOCK_MINUTES        = 30;             // durée du lock
+const BUREAU_FAIL_WINDOW_MINUTES = 15;             // fenêtre de comptage des échecs
+const BUREAU_COOKIE_NAME         = 'lca_bureau_session';
+
+// Hash SHA-256 hex de (BUREAU_SALT + password) via Web Crypto natif.
+// Aucune lib externe, marche sur tous les navigateurs modernes (dashboard = desktop).
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(BUREAU_SALT + String(password || ''));
+  const hashBuf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// Génère un token de session aléatoire cryptographiquement sûr (32 bytes → 64 hex chars)
+function generateSessionToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Génère un mot de passe aléatoire fort (16 chars, alphanumérique + symboles)
+function generateStrongPassword(length = 16) {
+  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!#$%&*+?';
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (let i = 0; i < length; i++) out += charset[bytes[i] % charset.length];
+  return out;
+}
+
+// Cookie helpers (utilisés pour le token de session bureau)
+function setBureauCookie(token, hours = BUREAU_SESSION_HOURS) {
+  const maxAge = Math.floor(hours * 3600);
+  document.cookie = BUREAU_COOKIE_NAME + '=' + encodeURIComponent(token) +
+    '; path=/; max-age=' + maxAge + '; SameSite=Lax';
+}
+function getBureauCookie() {
+  const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + BUREAU_COOKIE_NAME + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function clearBureauCookie() {
+  document.cookie = BUREAU_COOKIE_NAME + '=; path=/; max-age=0; SameSite=Lax';
+}
+
+// Récupère l'user-agent + best-effort IP (l'IP réelle n'est pas dispo côté client,
+// on log ce qu'on a — Supabase peut avoir accès au header X-Forwarded-For si besoin
+// via une Edge Function, mais pour v1.33 on garde simple : IP = null).
+function getClientContext() {
+  return {
+    ip: null,
+    user_agent: (navigator && navigator.userAgent) ? navigator.userAgent.slice(0, 500) : ''
+  };
+}
+
+// Log une tentative de connexion (succès ou échec) dans login_history
+async function logLoginAttempt(username, success, reason) {
+  if (!supabaseClient) return;
+  try {
+    const ctx = getClientContext();
+    await supabaseClient.from('login_history').insert({
+      username: username || '',
+      success:  !!success,
+      reason:   reason || (success ? 'ok' : 'unknown'),
+      ip:       ctx.ip,
+      user_agent: ctx.user_agent
+    });
+  } catch(e) { console.warn('[Auth] log attempt failed:', e.message); }
+}
+
+// Fetch le compte bureau — retourne null si inconnu ou verrouillé/inactif
+async function getBureauAccountByUsername(username) {
+  if (!supabaseClient || !username) return null;
+  try {
+    const { data, error } = await supabaseClient
+      .from('bureau_accounts')
+      .select('*')
+      .eq('username', username)
+      .limit(1);
+    if (error) { console.warn('[Auth] fetch account:', error.message); return null; }
+    return (data && data[0]) ? data[0] : null;
+  } catch(e) { return null; }
+}
+
+// Tentative de login — retourne { ok: bool, reason: string, session: object|null }
+async function attemptBureauLogin(username, password) {
+  const acc = await getBureauAccountByUsername(username);
+  if (!acc) {
+    await logLoginAttempt(username, false, 'unknown_user');
+    return { ok: false, reason: 'unknown_user' };
+  }
+  if (!acc.is_active) {
+    await logLoginAttempt(username, false, 'account_disabled');
+    return { ok: false, reason: 'account_disabled' };
+  }
+  // Compte verrouillé encore ?
+  if (acc.locked_until && new Date(acc.locked_until).getTime() > Date.now()) {
+    await logLoginAttempt(username, false, 'account_locked');
+    return { ok: false, reason: 'account_locked', locked_until: acc.locked_until };
+  }
+  const hash = await hashPassword(password);
+  if (hash !== acc.password_hash) {
+    // Incrément compteur d'échec + éventuel lock
+    const newAttempts = (acc.failed_attempts || 0) + 1;
+    const update = { failed_attempts: newAttempts, updated_at: new Date().toISOString() };
+    if (newAttempts >= BUREAU_MAX_FAILED_ATTEMPTS) {
+      update.locked_until = new Date(Date.now() + BUREAU_LOCK_MINUTES * 60000).toISOString();
+      update.failed_attempts = 0; // reset compteur pendant le lock
+    }
+    await supabaseClient.from('bureau_accounts').update(update).eq('id', acc.id);
+    await logLoginAttempt(username, false, 'bad_password');
+    return {
+      ok: false,
+      reason: newAttempts >= BUREAU_MAX_FAILED_ATTEMPTS ? 'account_locked' : 'bad_password',
+      attempts_left: Math.max(0, BUREAU_MAX_FAILED_ATTEMPTS - newAttempts)
+    };
+  }
+  // Auth OK → créer session
+  const token = generateSessionToken();
+  const now   = new Date();
+  const exp   = new Date(now.getTime() + BUREAU_SESSION_HOURS * 3600 * 1000);
+  const ctx   = getClientContext();
+  try {
+    await supabaseClient.from('bureau_sessions').insert({
+      token,
+      username: acc.username,
+      created_at: now.toISOString(),
+      expires_at: exp.toISOString(),
+      last_activity: now.toISOString(),
+      ip: ctx.ip,
+      user_agent: ctx.user_agent
+    });
+    await supabaseClient.from('bureau_accounts').update({
+      failed_attempts: 0, locked_until: null,
+      last_login: now.toISOString(),
+      updated_at: now.toISOString()
+    }).eq('id', acc.id);
+    await logLoginAttempt(username, true, 'ok');
+    setBureauCookie(token);
+    return { ok: true, session: { token, username: acc.username, expires_at: exp.toISOString() }, account: acc };
+  } catch(e) {
+    console.warn('[Auth] session create failed:', e.message);
+    return { ok: false, reason: 'server_error' };
+  }
+}
+
+// Valide une session (via cookie). Retourne { valid, account } ou { valid: false, reason }.
+async function validateBureauSession() {
+  const token = getBureauCookie();
+  if (!token) return { valid: false, reason: 'no_cookie' };
+  if (!supabaseClient) return { valid: false, reason: 'supabase_not_ready' };
+  try {
+    const { data: sessions } = await supabaseClient
+      .from('bureau_sessions')
+      .select('*')
+      .eq('token', token)
+      .limit(1);
+    if (!sessions || !sessions.length) { clearBureauCookie(); return { valid: false, reason: 'unknown_token' }; }
+    const s = sessions[0];
+    const now = Date.now();
+    const expiresAt = new Date(s.expires_at).getTime();
+    if (expiresAt < now) {
+      await supabaseClient.from('bureau_sessions').delete().eq('token', token);
+      clearBureauCookie();
+      return { valid: false, reason: 'expired' };
+    }
+    // Timeout d'inactivité
+    const lastActivity = new Date(s.last_activity || s.created_at).getTime();
+    const inactivityMs = BUREAU_INACTIVITY_MINUTES * 60 * 1000;
+    if ((now - lastActivity) > inactivityMs) {
+      await supabaseClient.from('bureau_sessions').delete().eq('token', token);
+      clearBureauCookie();
+      return { valid: false, reason: 'inactivity_timeout' };
+    }
+    // Session OK — récup account
+    const acc = await getBureauAccountByUsername(s.username);
+    if (!acc || !acc.is_active) {
+      await supabaseClient.from('bureau_sessions').delete().eq('token', token);
+      clearBureauCookie();
+      return { valid: false, reason: 'account_disabled' };
+    }
+    return { valid: true, session: s, account: acc };
+  } catch(e) {
+    console.warn('[Auth] validate session:', e.message);
+    return { valid: false, reason: 'server_error' };
+  }
+}
+
+// Refresh last_activity de la session courante (throttled côté appelant)
+async function touchBureauSession() {
+  const token = getBureauCookie();
+  if (!token || !supabaseClient) return;
+  try {
+    await supabaseClient.from('bureau_sessions')
+      .update({ last_activity: new Date().toISOString() })
+      .eq('token', token);
+  } catch(e) {}
+}
+
+// Déconnexion : delete session + clear cookie
+async function endBureauSession() {
+  const token = getBureauCookie();
+  if (token && supabaseClient) {
+    try { await supabaseClient.from('bureau_sessions').delete().eq('token', token); } catch(e) {}
+  }
+  clearBureauCookie();
+}
+
+// ============================================================
 // Initialization
 // ============================================================
 
@@ -351,6 +568,19 @@ window.deleteLocationFromSupabase      = deleteLocationFromSupabase;
 window.toggleLocationActiveStatus      = toggleLocationActiveStatus;
 window.initSupabase                   = initSupabase;
 window.supabaseClient                 = supabaseClient;
+// v1.33 : bureau auth helpers
+window.hashPassword                   = hashPassword;
+window.generateSessionToken           = generateSessionToken;
+window.generateStrongPassword         = generateStrongPassword;
+window.attemptBureauLogin             = attemptBureauLogin;
+window.validateBureauSession          = validateBureauSession;
+window.touchBureauSession             = touchBureauSession;
+window.endBureauSession               = endBureauSession;
+window.getBureauAccountByUsername     = getBureauAccountByUsername;
+window.logLoginAttempt                = logLoginAttempt;
+window.BUREAU_SALT                    = BUREAU_SALT;
+window.BUREAU_INACTIVITY_MINUTES      = BUREAU_INACTIVITY_MINUTES;
+window.BUREAU_MAX_FAILED_ATTEMPTS     = BUREAU_MAX_FAILED_ATTEMPTS;
 // v1.13 : helpers de conversion timestamp pour la restauration de session
 window.fromISO                        = fromISO;
 window.stopFromStorage                = stopFromStorage;

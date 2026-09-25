@@ -3,13 +3,18 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"/>
-<!-- v1.29 : PWA — manifest + meta tags pour installation sur écran d'accueil -->
+<!-- v1.33 : PWA — manifest + meta tags avec icônes locales paddées -->
 <meta name="theme-color" content="#4da9be"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="LCA Transfert"/>
 <link rel="manifest" href="./manifest.json"/>
-<link rel="apple-touch-icon" href="https://lca.hevra.app/assets/img/logo.png"/>
+<!-- iOS : apple-touch-icon avec padding intégré, iOS applique lui-même les coins arrondis -->
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png"/>
+<!-- Favicon browser desktop -->
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png"/>
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png"/>
 <title>LCA · Transfert</title>
 <style>
 :root{
@@ -570,7 +575,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <div class="toast" id="toast"></div>
 
 <!-- VERSION FOOTER -->
-<div class="version-footer">Version 1.32g (dev: scroll sur #main-app pour fix scroll bloqué étape 7) — © Kalsj121</div>
+<div class="version-footer">Version 1.33 (dev: sync avec dashboard — pas de changement fonctionnel chauffeur) — © Kalsj121</div>
 
 </div><!-- /main-app -->
 
