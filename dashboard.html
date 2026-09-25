@@ -604,10 +604,31 @@ textarea.fi{resize:vertical;min-height:72px;}
 </div>
 </div>
 
+<!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
+<div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
+  <div style="max-width:640px;margin:0 auto;">
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.33.2</div>
+    <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
+    <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
+  </div>
+</div>
+
 </div><!-- /main-app -->
 
-<!-- VERSION -->
-<div class="version-footer" id="ver-footer" style="display:none;">Version 1.33 (dev: auth bureau DB + sessions 2h + brute-force + comptes CRUD + historique) — © Kalsj121</div>
+<!-- v1.33.1 : MODALES ÉDITION COMPTES -->
+<div id="edit-modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9998;align-items:center;justify-content:center;padding:20px;">
+  <div id="edit-modal-box" style="background:var(--card);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 12px 48px rgba(0,0,0,0.4);">
+    <div style="padding:18px 22px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;">
+      <h3 id="edit-modal-title" style="margin:0;font-size:17px;font-weight:700;">Modifier</h3>
+      <button onclick="closeEditModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--t2);padding:0;line-height:1;">×</button>
+    </div>
+    <div id="edit-modal-body" style="padding:20px 22px;"></div>
+    <div style="padding:14px 22px;border-top:1px solid var(--b1);display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn bo bsm" style="margin:0;" onclick="closeEditModal()">Annuler</button>
+      <button class="btn bp bsm" style="margin:0;" id="edit-modal-save" onclick="saveEditModal()">Enregistrer</button>
+    </div>
+  </div>
+</div>
 
 <!-- Supabase Library -->
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2632,25 +2653,200 @@ async function loadAccounts() {
     }).join('') + '</tbody></table>';
 }
 
-// v1.33 : modal d'édition compte chauffeur — utilise un prompt simple mais efficace
+// ============================================================
+// v1.33.1 — MODALES ÉDITION propres (chauffeur + bureau)
+// ============================================================
+let _editContext = null;  // { type: 'driver'|'bureau', username, originalData }
+
+function openEditModal(title, htmlBody) {
+  document.getElementById('edit-modal-title').textContent = title;
+  document.getElementById('edit-modal-body').innerHTML = htmlBody;
+  document.getElementById('edit-modal-backdrop').style.display = 'flex';
+}
+function closeEditModal() {
+  document.getElementById('edit-modal-backdrop').style.display = 'none';
+  _editContext = null;
+}
+
 async function editDriverAccount(username) {
   if (!window.supabaseClient) { showToast('Supabase indisponible.'); return; }
   const { data } = await window.supabaseClient.from('driver_accounts').select('*').eq('username', username).limit(1);
   if (!data || !data.length) { showToast('Compte introuvable.'); return; }
   const acc = data[0];
-  const newFullname = prompt('Nom complet :', acc.fullname || '');
-  if (newFullname === null) return;
-  const newPass = prompt('Nouveau mot de passe (laisser vide = ne pas changer) :', '');
-  if (newPass === null) return;
-  const pdfAllowed = confirm('Autoriser ce chauffeur à exporter des PDFs ? (OK = oui, Annuler = non)');
-  const update = { fullname: newFullname.trim(), pdf_allowed: pdfAllowed };
+  _editContext = { type: 'driver', username, originalData: acc };
+  const html = `
+    <div class="fg"><label class="fl">Login (non modifiable)</label><input class="fi" type="text" value="${escapeHtml(acc.username)}" disabled style="background:var(--subcard);"/></div>
+    <div class="fg"><label class="fl">Nom complet</label><input class="fi" type="text" id="edit-driver-fullname" value="${escapeHtml(acc.fullname||'')}"/></div>
+    <div class="fg">
+      <label class="fl">Nouveau mot de passe <span style="color:var(--t3);font-weight:normal;">(vide = ne pas changer)</span></label>
+      <div class="pw-wrap">
+        <input class="fi" type="password" id="edit-driver-password" placeholder="••••••••"/>
+        <button type="button" class="pw-eye" onclick="togglePw('edit-driver-password',this)" tabindex="-1">👁</button>
+      </div>
+    </div>
+    <div class="fg" style="margin-bottom:0;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
+        <input type="checkbox" id="edit-driver-pdf" ${acc.pdf_allowed ? 'checked' : ''}/>
+        Autoriser l'export PDF depuis l'app chauffeur
+      </label>
+    </div>`;
+  openEditModal('✏️ Modifier compte chauffeur — ' + acc.username, html);
+}
+
+async function editBureauAccount(username) {
+  if (!isSuperAdmin()) { showToast('Réservé aux super admins.'); return; }
+  const { data } = await window.supabaseClient.from('bureau_accounts').select('*').eq('username', username).limit(1);
+  if (!data || !data.length) { showToast('Compte introuvable.'); return; }
+  const acc = data[0];
+  _editContext = { type: 'bureau', username, originalData: acc };
+  let views = acc.allowed_views;
+  if (typeof views === 'string') { try { views = JSON.parse(views); } catch(_) { views = []; } }
+  if (!Array.isArray(views)) views = [];
+  const isSuper = acc.role === 'super_admin';
+  const cb = (v, label) => `
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:4px 6px;">
+      <input type="checkbox" class="edit-bureau-view" value="${v}" ${views.indexOf(v)!==-1?'checked':''}/> ${label}
+    </label>`;
+  const html = `
+    <div class="fg"><label class="fl">Login (non modifiable)</label><input class="fi" type="text" value="${escapeHtml(acc.username)}" disabled style="background:var(--subcard);"/></div>
+    <div class="fg"><label class="fl">Nom complet</label><input class="fi" type="text" id="edit-bureau-fullname" value="${escapeHtml(acc.fullname||'')}"/></div>
+    <div class="fg"><label class="fl">Rôle / étiquette (Comptable, Dispatcher, Operations, etc.)</label>
+      <input class="fi" type="text" id="edit-bureau-role" value="${escapeHtml(acc.role||'operations')}"/>
+    </div>
+    <div class="fg">
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:8px;background:${isSuper?'#fff4e0':'var(--subcard)'};border-radius:6px;border:1px solid ${isSuper?'var(--amber)':'var(--b1)'};">
+        <input type="checkbox" id="edit-bureau-superadmin" ${isSuper?'checked':''}/>
+        <strong>Super Administrateur</strong> — accès total + gestion des comptes
+      </label>
+    </div>
+    <div class="fg">
+      <label class="fl">Vues autorisées</label>
+      <div id="edit-bureau-views-wrap" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:8px;background:var(--subcard);border-radius:6px;" ${isSuper?'style="opacity:0.5;pointer-events:none;"':''}>
+        ${cb('dashboard','Temps réel')}
+        ${cb('messages','Messages')}
+        ${cb('reports','Rapports')}
+        ${cb('accounts','Comptes')}
+        ${cb('vehicles','Véhicules')}
+        ${cb('backups','Sauvegardes')}
+      </div>
+      <p style="font-size:11px;color:var(--t3);margin-top:4px;">Si Super Admin coché, toutes les vues sont automatiquement accordées.</p>
+    </div>
+    <div class="fg">
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
+        <input type="checkbox" id="edit-bureau-active" ${acc.is_active?'checked':''}/>
+        Compte actif (décocher pour désactiver sans supprimer)
+      </label>
+    </div>
+    <div class="fg" style="margin-bottom:0;padding:10px;background:var(--blt);border-radius:6px;">
+      <label class="fl" style="color:var(--blue);">🔑 Réinitialiser le mot de passe</label>
+      <div class="pw-wrap">
+        <input class="fi" type="text" id="edit-bureau-newpass" placeholder="Laisser vide pour ne pas changer" style="padding-right:80px;font-family:monospace;"/>
+        <button type="button" class="pw-eye" onclick="togglePw('edit-bureau-newpass',this)" tabindex="-1">👁</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button type="button" class="btn bo bsm" style="flex:1;margin:0;" onclick="editBureauGenPass()">⚙️ Générer</button>
+        <button type="button" class="btn bo bsm" style="flex:1;margin:0;" onclick="editBureauCopyPass()">📋 Copier</button>
+      </div>
+    </div>`;
+  openEditModal('✏️ Modifier compte bureau — ' + acc.username, html);
+  // Toggle des vues selon le check super_admin
+  const superCb = document.getElementById('edit-bureau-superadmin');
+  if (superCb) {
+    superCb.addEventListener('change', () => {
+      const wrap = document.getElementById('edit-bureau-views-wrap');
+      if (wrap) {
+        wrap.style.opacity  = superCb.checked ? '0.5' : '1';
+        wrap.style.pointerEvents = superCb.checked ? 'none' : 'auto';
+      }
+    });
+  }
+}
+
+function editBureauGenPass() {
+  if (!window.generateStrongPassword) return;
+  const p = window.generateStrongPassword(16);
+  const inp = document.getElementById('edit-bureau-newpass');
+  if (inp) { inp.value = p; inp.type = 'text'; }
+}
+function editBureauCopyPass() {
+  const inp = document.getElementById('edit-bureau-newpass');
+  if (!inp || !inp.value) { showToast('Aucun mot de passe à copier.'); return; }
+  try {
+    navigator.clipboard.writeText(inp.value).then(() => showToast('Mot de passe copié ✓'));
+  } catch(e) { showToast('Copie impossible.'); }
+}
+
+async function saveEditModal() {
+  if (!_editContext) { closeEditModal(); return; }
+  const btn = document.getElementById('edit-modal-save');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+  try {
+    if (_editContext.type === 'driver') {
+      await saveDriverEdit(_editContext.username);
+    } else if (_editContext.type === 'bureau') {
+      await saveBureauEdit(_editContext.username);
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; }
+  }
+}
+
+async function saveDriverEdit(username) {
+  const fullname   = document.getElementById('edit-driver-fullname').value.trim();
+  const newPass    = document.getElementById('edit-driver-password').value;
+  const pdfAllowed = document.getElementById('edit-driver-pdf').checked;
+  const update = { fullname, pdf_allowed: pdfAllowed };
   if (newPass.trim().length) update.password = newPass;
   try {
     const { error } = await window.supabaseClient.from('driver_accounts').update(update).eq('username', username);
     if (error) { showToast('Erreur : ' + error.message); return; }
-    showToast('Compte ' + username + ' mis à jour ✓');
+    showToast('Compte chauffeur ' + username + ' mis à jour ✓');
+    closeEditModal();
     loadAccounts();
   } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+async function saveBureauEdit(username) {
+  const fullname = document.getElementById('edit-bureau-fullname').value.trim();
+  let   role     = document.getElementById('edit-bureau-role').value.trim() || 'operations';
+  const isSuper  = document.getElementById('edit-bureau-superadmin').checked;
+  const isActive = document.getElementById('edit-bureau-active').checked;
+  const newPass  = document.getElementById('edit-bureau-newpass').value;
+  let views = Array.from(document.querySelectorAll('.edit-bureau-view:checked')).map(cb => cb.value);
+  if (isSuper) {
+    role  = 'super_admin';
+    views = ['dashboard','messages','reports','accounts','vehicles','backups'];
+  } else if (views.length === 0) {
+    showToast('Sélectionnez au moins une vue autorisée.'); return;
+  }
+  const update = {
+    fullname,
+    role,
+    allowed_views: views,
+    is_active:     isActive,
+    updated_at:    new Date().toISOString()
+  };
+  if (newPass.trim().length) {
+    if (newPass.length < 10) { showToast('Mot de passe trop court (10 min).'); return; }
+    if (!window.hashPassword) { showToast('Helper hash non chargé.'); return; }
+    update.password_hash   = await window.hashPassword(newPass);
+    update.failed_attempts = 0;
+    update.locked_until    = null;
+  }
+  try {
+    const { error } = await window.supabaseClient.from('bureau_accounts').update(update).eq('username', username);
+    if (error) { showToast('Erreur : ' + error.message); return; }
+    showToast('Compte bureau ' + username + ' mis à jour ✓');
+    closeEditModal();
+    loadBureauAccounts();
+  } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+// helper HTML escape (utilisé dans les modales)
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // ============================================================
