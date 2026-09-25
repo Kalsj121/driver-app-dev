@@ -1,0 +1,42 @@
+# Fichiers sensibles à ne JAMAIS pousser
+MDP.xlsx
+Tocken.md
+Token.md
+*.tocken
+*.token
+.env
+.env.local
+credentials.json
+*.pem
+*.key
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Backup / logs
+*.bak
+*.log
+
+# Notes internes
+CHECK-AVANT-PUSH.md
+PWA-SETUP.md
+SUPABASE_SETUP.md
+GUIDE-MIGRATION-v1.33.md
+bureau_accounts_migration.sql
+messages_setup.sql
+push_subscriptions_setup.sql
+storage_setup.sql
+dev_setup.sql
+supabase_migration.sql
+supabase_schema.sql
+edge_function_send-driver-push.ts
+
+# Source assets locaux
+logo.png
