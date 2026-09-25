@@ -407,6 +407,7 @@ textarea.fi{resize:vertical;min-height:72px;}
   <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--b1);">
     <button class="acc-subtab on" data-sub="drivers" onclick="switchAccountsSub('drivers')" style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;">🚛 Chauffeurs</button>
     <button class="acc-subtab" data-sub="bureau"  onclick="switchAccountsSub('bureau')"  style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;display:none;" id="acc-subtab-bureau">👥 Bureau</button>
+    <button class="acc-subtab" data-sub="entities" onclick="switchAccountsSub('entities')" style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;display:none;" id="acc-subtab-entities">🏢 Entités</button>
     <button class="acc-subtab" data-sub="history" onclick="switchAccountsSub('history')" style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;display:none;" id="acc-subtab-history">📋 Historique</button>
   </div>
 
@@ -416,6 +417,9 @@ textarea.fi{resize:vertical;min-height:72px;}
       <div class="ctit">Créer un compte chauffeur</div>
       <div class="fg"><label class="fl">Nom complet</label><input class="fi" type="text" id="acc-name" placeholder="Ex: Marc Dupont"/></div>
       <div class="fg"><label class="fl">Login (identifiant)</label><input class="fi" type="text" id="acc-login" placeholder="Ex: marc.d"/></div>
+      <div class="fg"><label class="fl">Entité</label>
+        <select class="fi" id="acc-entity"><option value="">— Aucune —</option></select>
+      </div>
       <div class="fg" style="margin-bottom:0;"><label class="fl">Mot de passe</label>
         <div class="pw-wrap"><input class="fi" type="password" id="acc-pass" placeholder="••••••••"/><button type="button" class="pw-eye" onclick="togglePw('acc-pass',this)" tabindex="-1">👁</button></div>
       </div>
@@ -456,6 +460,12 @@ textarea.fi{resize:vertical;min-height:72px;}
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="backups"/> Sauvegardes</label>
         </div>
       </div>
+      <div class="fg">
+        <label class="fl">Entités visibles (vide = toutes les entités)</label>
+        <div id="bacc-entities" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;padding:8px;background:var(--subcard);border-radius:6px;max-height:140px;overflow-y:auto;">
+          <em style="color:var(--t3);">Chargement…</em>
+        </div>
+      </div>
       <div class="fg" style="margin-bottom:0;">
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
           <input type="checkbox" id="bacc-superadmin"/> Super Administrateur (accès total + gestion des comptes)
@@ -466,6 +476,22 @@ textarea.fi{resize:vertical;min-height:72px;}
     <div class="card">
       <div class="ctit">Comptes bureau existants</div>
       <div id="bureau-list"><div class="empty"><p>Chargement…</p></div></div>
+    </div>
+  </div>
+
+  <!-- SUB ENTITÉS (visible seulement pour super_admin) -->
+  <div id="acc-sub-entities" style="display:none;">
+    <div class="card">
+      <div class="ctit">Ajouter une entité</div>
+      <div style="display:flex;gap:8px;">
+        <input class="fi" type="text" id="new-entity-name" placeholder="Ex: Liege Cargo Agency SA, Transports Dupont, Sous-traitant X…" style="flex:1;"/>
+        <button class="btn bp bsm" style="margin:0;flex:0 0 auto;" onclick="createEntity()">➕ Ajouter</button>
+      </div>
+      <p style="font-size:12px;color:var(--t3);margin-top:8px;margin-bottom:0;">💡 Utilise des noms clairs et cohérents — ils apparaîtront dans les listes déroulantes de création de chauffeur.</p>
+    </div>
+    <div class="card">
+      <div class="ctit">Entités existantes</div>
+      <div id="entities-list"><div class="empty"><p>Chargement…</p></div></div>
     </div>
   </div>
 
@@ -607,7 +633,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.33.3</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.34</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -655,14 +681,20 @@ function normalizeAccount(acc) {
   let views = [];
   if (Array.isArray(raw)) views = raw;
   else if (typeof raw === 'string') { try { views = JSON.parse(raw); } catch(_) { views = []; } }
+  // v1.34 : allowed_entities
+  const rawEnt = acc.allowed_entities;
+  let entities = [];
+  if (Array.isArray(rawEnt)) entities = rawEnt;
+  else if (typeof rawEnt === 'string') { try { entities = JSON.parse(rawEnt); } catch(_) { entities = []; } }
   return {
-    id:             acc.id,
-    username:       acc.username,
-    fullname:       acc.fullname || acc.full_name || acc.username,
-    role:           acc.role || 'operations',
-    allowedViews:   views,
-    is_active:      acc.is_active !== false,
-    last_login:     acc.last_login || null
+    id:               acc.id,
+    username:         acc.username,
+    fullname:         acc.fullname || acc.full_name || acc.username,
+    role:             acc.role || 'operations',
+    allowedViews:     views,
+    allowedEntities:  entities,
+    is_active:        acc.is_active !== false,
+    last_login:       acc.last_login || null
   };
 }
 
@@ -674,6 +706,59 @@ function isViewAllowed(viewId) {
   return allowed.indexOf(viewId) !== -1;
 }
 function isSuperAdmin() { return !!(currentUser && currentUser.role === 'super_admin'); }
+
+// ============================================================
+// v1.34 : ENTITIES — multi-tenancy filtrage
+// ============================================================
+let _driverEntityCache = {};   // { "Jan KALSCHEUER (TEST)": "Liege Cargo Agency SA", ... }
+let _entitiesList = [];        // liste des entités actives depuis DB
+
+async function refreshEntitiesList() {
+  if (!window.supabaseClient) return;
+  try {
+    const { data } = await window.supabaseClient.from('entities').select('*').order('name');
+    _entitiesList = data || [];
+  } catch(e) { _entitiesList = []; }
+}
+
+async function refreshDriverEntityCache() {
+  if (!window.supabaseClient) return;
+  try {
+    const { data } = await window.supabaseClient.from('driver_accounts').select('username, fullname, entity');
+    _driverEntityCache = {};
+    (data || []).forEach(d => {
+      const ent = d.entity || '';
+      if (d.fullname) _driverEntityCache[d.fullname] = ent;
+      if (d.username) _driverEntityCache[d.username] = ent;
+    });
+  } catch(e) { _driverEntityCache = {}; }
+}
+
+// Retourne l'entité d'un chauffeur (par fullname OU username), ou '' si inconnu
+function getDriverEntity(driverName) {
+  if (!driverName) return '';
+  return _driverEntityCache[driverName] || '';
+}
+
+// Retourne la liste des entités visibles pour le user courant
+function getCurrentUserAllowedEntities() {
+  if (!currentUser) return [];
+  let raw = currentUser.allowedEntities;
+  if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(_) { raw = []; } }
+  return Array.isArray(raw) ? raw : [];
+}
+
+// Le user courant peut-il voir ce chauffeur ?
+// - super_admin → toujours oui
+// - allowedEntities vide → oui (comportement admin sans restriction)
+// - sinon → oui uniquement si l'entité du chauffeur est dans la liste
+function canCurrentUserSeeDriver(driverName) {
+  if (isSuperAdmin()) return true;
+  const allowed = getCurrentUserAllowedEntities();
+  if (!allowed.length) return true;
+  const ent = getDriverEntity(driverName);
+  return allowed.indexOf(ent) !== -1;
+}
 
 // v1.23 : Détection environnement DEV (même logique que index.html)
 // Résilient : réessaie jusqu'à ce que window.SUPABASE_URL soit disponible.
@@ -1044,8 +1129,10 @@ async function fetchDrivers() {
       const allMissions = await window.loadMissionsFromSupabase();
       const todayStr = new Date().toLocaleDateString('fr-BE');
       const activeMissions = allMissions.filter(m => !m.completed && m.date === todayStr);
-      drivers = activeMissions.map(missionToDriverStatus).filter(d => d !== null);
-      // v1.16 : cache dayStart par chauffeur (première mission du jour) pour le tableau "Connectés aujourd'hui"
+      let mapped = activeMissions.map(missionToDriverStatus).filter(d => d !== null);
+      // v1.34 : filtrer selon allowed_entities du user courant
+      drivers = mapped.filter(d => canCurrentUserSeeDriver(d.driver_name));
+      // v1.16 : cache dayStart par chauffeur (première mission du jour)
       const dayStartMap = {};
       allMissions.filter(m => m.date === todayStr).forEach(m => {
         const name = m.driver;
@@ -1081,7 +1168,9 @@ async function renderActiveDriversTable() {
         activeDrivers = data.filter(d => {
           if (!d.lastseen) return false;
           const seen = new Date(d.lastseen).toLocaleDateString('fr-BE');
-          return seen === todayDate;
+          if (seen !== todayDate) return false;
+          // v1.34 : filtrer par entités visibles pour le user courant
+          return canCurrentUserSeeDriver(d.fullname || d.username);
         });
         // v1.08 : cache pour buildDriverDropdown (messagerie chauffeurs en pause/attente)
         window._activeDriversCache = activeDrivers;
@@ -1693,6 +1782,19 @@ function renderMessages() {
       (m.from==='driver'&&m.fromName===filter)
     );
   }
+  // v1.34 : filtrer par entités visibles (le user bureau ne voit que les messages
+  // avec les chauffeurs de ses entités autorisées). Les messages "to=all" sont
+  // conservés uniquement si au moins un chauffeur visible existe pour cet user.
+  shown = shown.filter(m => {
+    if (m.from === 'bureau') {
+      if (m.to === 'all') return true;  // broadcast visible pour tous les bureaux
+      return canCurrentUserSeeDriver(m.to);
+    }
+    if (m.from === 'driver') {
+      return canCurrentUserSeeDriver(m.fromName);
+    }
+    return true;
+  });
   const fmtTime = ts => new Date(ts).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'})
     + ' · ' + new Date(ts).toLocaleDateString('fr-BE',{day:'2-digit',month:'2-digit'});
   const unread = messages.filter(m=>m.from==='driver'&&!m.read).length;
@@ -1855,15 +1957,18 @@ function applyArchiveFilterAndRender() {
 
   if (clearBtn) clearBtn.style.display = raw ? '' : 'none';
 
+  // v1.34 : filtrer d'abord par entités visibles pour le user courant
+  const entityFiltered = (_archiveCache||[]).filter(m => canCurrentUserSeeDriver(m.driver));
+
   if (!raw) {
-    if (status) status.textContent = _archiveCache.length ? (_archiveCache.length + ' mission(s) au total') : '';
-    renderArchiveTable(container, _archiveCache, null);
+    if (status) status.textContent = entityFiltered.length ? (entityFiltered.length + ' mission(s) au total') : '';
+    renderArchiveTable(container, entityFiltered, null);
     return;
   }
 
   // Filtrer les missions contenant au moins un cargo qui matche
   const matchMap = new Map(); // missionId -> [matches]
-  const matched = (_archiveCache||[]).filter(m => {
+  const matched = entityFiltered.filter(m => {
     const ms = missionCargoMatches(m, norm);
     if (ms.length) { matchMap.set(String(m.id), ms); return true; }
     return false;
@@ -2612,7 +2717,7 @@ function dlCSV(content, filename) {
 // v1.33 : SUB-TABS de la page Comptes + gestion Bureau + Historique
 // ============================================================
 function switchAccountsSub(sub) {
-  ['drivers','bureau','history'].forEach(s => {
+  ['drivers','bureau','entities','history'].forEach(s => {
     const div = document.getElementById('acc-sub-'+s);
     const btn = document.querySelector('.acc-subtab[data-sub="'+s+'"]');
     if (div) div.style.display = (s === sub) ? '' : 'none';
@@ -2621,30 +2726,44 @@ function switchAccountsSub(sub) {
       else           { btn.style.color = 'var(--t2)';    btn.style.borderBottomColor = 'transparent'; }
     }
   });
-  if (sub === 'bureau')  loadBureauAccounts();
-  if (sub === 'history') loadLoginHistory();
+  if (sub === 'bureau')   loadBureauAccounts();
+  if (sub === 'entities') loadEntitiesList();
+  if (sub === 'history')  loadLoginHistory();
 }
 
 // ============================================================
 // DRIVER ACCOUNTS
 // ============================================================
 async function loadAccounts() {
-  // v1.33 : selon le rôle du user courant, afficher/masquer les sub-tabs bureau/historique
-  const subBureau  = document.getElementById('acc-subtab-bureau');
-  const subHistory = document.getElementById('acc-subtab-history');
-  if (subBureau)  subBureau.style.display  = isSuperAdmin() ? '' : 'none';
-  if (subHistory) subHistory.style.display = isSuperAdmin() ? '' : 'none';
+  // v1.33 : selon le rôle du user courant, afficher/masquer les sub-tabs bureau/entités/historique
+  const subBureau   = document.getElementById('acc-subtab-bureau');
+  const subEntities = document.getElementById('acc-subtab-entities');
+  const subHistory  = document.getElementById('acc-subtab-history');
+  if (subBureau)   subBureau.style.display   = isSuperAdmin() ? '' : 'none';
+  if (subEntities) subEntities.style.display = isSuperAdmin() ? '' : 'none';
+  if (subHistory)  subHistory.style.display  = isSuperAdmin() ? '' : 'none';
+  // v1.34 : rafraîchir la liste d'entités pour le dropdown de création chauffeur
+  await refreshEntitiesList();
+  const sel = document.getElementById('acc-entity');
+  if (sel) {
+    sel.innerHTML = '<option value="">— Aucune —</option>' +
+      _entitiesList.filter(e => e.is_active).map(e => `<option value="${escapeHtml(e.name)}">${escapeHtml(e.name)}</option>`).join('');
+  }
 
   const container = document.getElementById('accounts-list');
   if (!container) return;
   let accounts = await getDriverAccounts();
   if (!accounts.length) { container.innerHTML='<div class="empty"><p>Aucun compte chauffeur créé.</p></div>'; return; }
-  container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Nom</th><th style="text-align:right;">Actions</th></tr></thead><tbody>'
+  container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Nom</th><th>Entité</th><th style="text-align:right;">Actions</th></tr></thead><tbody>'
     + accounts.map(a => {
       const uname = a.username.replace(/'/g,"\\'");
+      const ent = a.entity
+        ? '<span style="background:var(--blt);border:1px solid var(--blue);color:var(--bdk);padding:2px 6px;border-radius:4px;font-size:11px;">'+escapeHtml(a.entity)+'</span>'
+        : '<span style="color:var(--t3);font-size:11px;">— aucune —</span>';
       return `<tr>
         <td><code>${a.username}</code></td>
         <td>${a.fullname||a.username}</td>
+        <td>${ent}</td>
         <td style="text-align:right;">
           <button class="btn bo bsm" style="margin:0 4px 0 0;padding:4px 10px;font-size:12px;" onclick="editDriverAccount('${uname}')">✏️ Modifier</button>
           <button class="del-btn" onclick="deleteAccount('${uname}')">✕ Supprimer</button>
@@ -2674,9 +2793,16 @@ async function editDriverAccount(username) {
   if (!data || !data.length) { showToast('Compte introuvable.'); return; }
   const acc = data[0];
   _editContext = { type: 'driver', username, originalData: acc };
+  await refreshEntitiesList();
+  const currentEntity = acc.entity || '';
+  const entityOpts = '<option value="">— Aucune —</option>' +
+    _entitiesList.filter(e => e.is_active || e.name === currentEntity).map(e =>
+      `<option value="${escapeHtml(e.name)}" ${e.name === currentEntity ? 'selected' : ''}>${escapeHtml(e.name)}</option>`
+    ).join('');
   const html = `
     <div class="fg"><label class="fl">Login (non modifiable)</label><input class="fi" type="text" value="${escapeHtml(acc.username)}" disabled style="background:var(--subcard);"/></div>
     <div class="fg"><label class="fl">Nom complet</label><input class="fi" type="text" id="edit-driver-fullname" value="${escapeHtml(acc.fullname||'')}"/></div>
+    <div class="fg"><label class="fl">Entité</label><select class="fi" id="edit-driver-entity">${entityOpts}</select></div>
     <div class="fg">
       <label class="fl">Nouveau mot de passe <span style="color:var(--t3);font-weight:normal;">(vide = ne pas changer)</span></label>
       <div class="pw-wrap">
@@ -2702,7 +2828,19 @@ async function editBureauAccount(username) {
   let views = acc.allowed_views;
   if (typeof views === 'string') { try { views = JSON.parse(views); } catch(_) { views = []; } }
   if (!Array.isArray(views)) views = [];
+  // v1.34 : allowed_entities
+  let entities = acc.allowed_entities;
+  if (typeof entities === 'string') { try { entities = JSON.parse(entities); } catch(_) { entities = []; } }
+  if (!Array.isArray(entities)) entities = [];
   const isSuper = acc.role === 'super_admin';
+  await refreshEntitiesList();
+  const entityCheckboxes = _entitiesList.map(e => {
+    const isChecked = entities.indexOf(e.name) !== -1;
+    const disabled = !e.is_active && !isChecked;
+    return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:4px 6px;${disabled?'opacity:0.5;':''}">
+      <input type="checkbox" class="edit-bureau-entity" value="${escapeHtml(e.name)}" ${isChecked?'checked':''} ${disabled?'disabled':''}/> ${escapeHtml(e.name)}${e.is_active?'':' <span style="font-size:10px;color:var(--t3);">(inactive)</span>'}
+    </label>`;
+  }).join('');
   const cb = (v, label) => `
     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:4px 6px;">
       <input type="checkbox" class="edit-bureau-view" value="${v}" ${views.indexOf(v)!==-1?'checked':''}/> ${label}
@@ -2730,6 +2868,13 @@ async function editBureauAccount(username) {
         ${cb('backups','Sauvegardes')}
       </div>
       <p style="font-size:11px;color:var(--t3);margin-top:4px;">Si Super Admin coché, toutes les vues sont automatiquement accordées.</p>
+    </div>
+    <div class="fg">
+      <label class="fl">Entités visibles (multi-tenancy)</label>
+      <div id="edit-bureau-entities-wrap" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:8px;background:var(--subcard);border-radius:6px;max-height:180px;overflow-y:auto;">
+        ${entityCheckboxes || '<em style="color:var(--t3);font-size:12px;">Aucune entité disponible. Créez-en dans le sub-tab Entités.</em>'}
+      </div>
+      <p style="font-size:11px;color:var(--t3);margin-top:4px;">Si aucune entité cochée, ce compte voit <strong>tous</strong> les chauffeurs (comportement admin classique). Coche des entités pour restreindre.</p>
     </div>
     <div class="fg">
       <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
@@ -2795,13 +2940,15 @@ async function saveDriverEdit(username) {
   const fullname   = document.getElementById('edit-driver-fullname').value.trim();
   const newPass    = document.getElementById('edit-driver-password').value;
   const pdfAllowed = document.getElementById('edit-driver-pdf').checked;
-  const update = { fullname, pdf_allowed: pdfAllowed };
+  const entity     = document.getElementById('edit-driver-entity')?.value || '';
+  const update = { fullname, pdf_allowed: pdfAllowed, entity };
   if (newPass.trim().length) update.password = newPass;
   try {
     const { error } = await window.supabaseClient.from('driver_accounts').update(update).eq('username', username);
     if (error) { showToast('Erreur : ' + error.message); return; }
     showToast('Compte chauffeur ' + username + ' mis à jour ✓');
     closeEditModal();
+    await refreshDriverEntityCache();
     loadAccounts();
   } catch(e) { showToast('Erreur : ' + e.message); }
 }
@@ -2813,6 +2960,7 @@ async function saveBureauEdit(username) {
   const isActive = document.getElementById('edit-bureau-active').checked;
   const newPass  = document.getElementById('edit-bureau-newpass').value;
   let views = Array.from(document.querySelectorAll('.edit-bureau-view:checked')).map(cb => cb.value);
+  const entitiesSel = Array.from(document.querySelectorAll('.edit-bureau-entity:checked')).map(cb => cb.value);
   if (isSuper) {
     role  = 'super_admin';
     views = ['dashboard','messages','reports','accounts','vehicles','backups'];
@@ -2822,9 +2970,10 @@ async function saveBureauEdit(username) {
   const update = {
     fullname,
     role,
-    allowed_views: views,
-    is_active:     isActive,
-    updated_at:    new Date().toISOString()
+    allowed_views:    views,
+    allowed_entities: entitiesSel,  // v1.34
+    is_active:        isActive,
+    updated_at:       new Date().toISOString()
   };
   if (newPass.trim().length) {
     if (newPass.length < 10) { showToast('Mot de passe trop court (10 min).'); return; }
@@ -2879,7 +3028,8 @@ async function createBureauAccount() {
   const role     = document.getElementById('bacc-role').value.trim() || 'operations';
   const pass     = document.getElementById('bacc-pass').value;
   const isSuper  = document.getElementById('bacc-superadmin').checked;
-  const views = Array.from(document.querySelectorAll('#bacc-views input[type=checkbox]:checked')).map(cb => cb.value);
+  const views    = Array.from(document.querySelectorAll('#bacc-views input[type=checkbox]:checked')).map(cb => cb.value);
+  const ents     = Array.from(document.querySelectorAll('#bacc-entities input[type=checkbox]:checked')).map(cb => cb.value);
   if (!username || !pass) { showToast('Login et mot de passe requis.'); return; }
   if (pass.length < 10) { showToast('Mot de passe trop court (10 caractères minimum).'); return; }
   if (!isSuper && views.length === 0) { showToast('Sélectionnez au moins une vue autorisée.'); return; }
@@ -2889,7 +3039,8 @@ async function createBureauAccount() {
     username, fullname,
     password_hash: hash,
     role: isSuper ? 'super_admin' : role,
-    allowed_views: views,
+    allowed_views:    views,
+    allowed_entities: ents,  // v1.34
     is_active: true,
     failed_attempts: 0, locked_until: null,
     updated_at: new Date().toISOString()
@@ -2905,6 +3056,7 @@ async function createBureauAccount() {
     document.getElementById('bacc-pass').value = '';
     document.getElementById('bacc-superadmin').checked = false;
     document.querySelectorAll('#bacc-views input[type=checkbox]').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#bacc-entities input[type=checkbox]').forEach(cb => cb.checked = false);
     loadBureauAccounts();
   } catch(e) { showToast('Erreur : ' + e.message); }
 }
@@ -2912,24 +3064,45 @@ async function createBureauAccount() {
 async function loadBureauAccounts() {
   const container = document.getElementById('bureau-list');
   if (!container || !window.supabaseClient) return;
+  // v1.34 : peupler la liste des checkboxes entités dans le formulaire création bureau
+  await refreshEntitiesList();
+  const wrap = document.getElementById('bacc-entities');
+  if (wrap) {
+    if (!_entitiesList.length) {
+      wrap.innerHTML = '<em style="color:var(--t3);">Aucune entité. Créez-en dans le sub-tab Entités.</em>';
+    } else {
+      wrap.innerHTML = _entitiesList.filter(e => e.is_active).map(e =>
+        `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" value="${escapeHtml(e.name)}"/> ${escapeHtml(e.name)}</label>`
+      ).join('');
+    }
+  }
   try {
     const { data, error } = await window.supabaseClient.from('bureau_accounts').select('*').order('created_at', { ascending: true });
     if (error) { container.innerHTML = '<div class="empty"><p>Erreur : '+error.message+'</p></div>'; return; }
     if (!data || !data.length) { container.innerHTML = '<div class="empty"><p>Aucun compte bureau.</p></div>'; return; }
-    container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Rôle</th><th>Vues</th><th>Actif</th><th style="text-align:right;">Actions</th></tr></thead><tbody>'
+    container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Rôle</th><th>Vues</th><th>Entités</th><th>Actif</th><th style="text-align:right;">Actions</th></tr></thead><tbody>'
       + data.map(a => {
         const uname = (a.username || '').replace(/'/g,"\\'");
         let views = a.allowed_views;
         if (typeof views === 'string') { try { views = JSON.parse(views); } catch(_) { views = []; } }
+        let ents = a.allowed_entities;
+        if (typeof ents === 'string') { try { ents = JSON.parse(ents); } catch(_) { ents = []; } }
+        if (!Array.isArray(ents)) ents = [];
         const isSuper = a.role === 'super_admin';
         const badges = isSuper
           ? '<span style="background:var(--amber);color:#fff;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;">SUPER ADMIN</span>'
           : (Array.isArray(views) ? views.map(v => '<span style="background:var(--subcard);border:1px solid var(--b1);padding:1px 5px;border-radius:3px;font-size:10px;margin-right:3px;">'+v+'</span>').join('') : '');
+        const entBadges = isSuper
+          ? '<span style="font-size:11px;color:var(--t3);">— toutes —</span>'
+          : (ents.length === 0
+              ? '<span style="font-size:11px;color:var(--t3);">— toutes —</span>'
+              : ents.map(e => '<span style="background:var(--blt);border:1px solid var(--blue);color:var(--bdk);padding:1px 5px;border-radius:3px;font-size:10px;margin-right:3px;">'+escapeHtml(e)+'</span>').join(''));
         const status = a.is_active ? '<span style="color:var(--green);">● Actif</span>' : '<span style="color:var(--red);">● Désactivé</span>';
         return `<tr>
           <td><code>${a.username}</code><div style="font-size:11px;color:var(--t3);">${a.fullname||''}</div></td>
           <td><span style="font-size:12px;">${a.role||'operations'}</span></td>
           <td>${badges}</td>
+          <td>${entBadges}</td>
           <td>${status}</td>
           <td style="text-align:right;">
             <button class="btn bo bsm" style="margin:0 4px 0 0;padding:4px 10px;font-size:12px;" onclick="editBureauAccount('${uname}')">✏️</button>
@@ -3039,21 +3212,24 @@ async function getDriverAccounts() {
 }
 
 async function createAccount() {
-  const name  = document.getElementById('acc-name').value.trim();
-  const login = document.getElementById('acc-login').value.trim();
-  const pass  = document.getElementById('acc-pass').value;
+  const name   = document.getElementById('acc-name').value.trim();
+  const login  = document.getElementById('acc-login').value.trim();
+  const pass   = document.getElementById('acc-pass').value;
+  const entity = document.getElementById('acc-entity')?.value || '';
   if (!name || !login || !pass) { showToast('Tous les champs sont requis.'); return; }
   if (!window.supabaseClient) { showToast('Supabase non disponible.'); return; }
 
-  // v1.09e : retry-drop si la colonne pdf_allowed n'existe pas (schéma ancien)
-  const newAcc = { username: login, fullname: name, password: pass, pdf_allowed: false };
+  const newAcc = { username: login, fullname: name, password: pass, pdf_allowed: false, entity };
   try {
     let { error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' });
+    // Retry si colonnes manquantes (schéma pas encore migré)
     if (error && /pdf_allowed/i.test(error.message || '')) {
-      console.warn('[createAccount] colonne pdf_allowed manquante, retry sans');
       delete newAcc.pdf_allowed;
-      const r = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' });
-      error = r.error;
+      ({ error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' }));
+    }
+    if (error && /entity/i.test(error.message || '')) {
+      delete newAcc.entity;
+      ({ error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' }));
     }
     if (error) {
       console.error('[createAccount] erreur:', error);
@@ -3063,12 +3239,140 @@ async function createAccount() {
     document.getElementById('acc-name').value = '';
     document.getElementById('acc-login').value = '';
     document.getElementById('acc-pass').value = '';
+    if (document.getElementById('acc-entity')) document.getElementById('acc-entity').value = '';
     showToast('Compte créé pour ' + name + ' ✓');
+    // v1.34 : rafraîchir le cache driver→entity pour que le filtrage prenne effet
+    await refreshDriverEntityCache();
     loadAccounts();
   } catch(e) {
     console.error('[createAccount] exception:', e);
     showToast('Erreur création compte : ' + e.message);
   }
+}
+
+// ============================================================
+// v1.34 : ENTITIES CRUD (super_admin uniquement)
+// ============================================================
+async function createEntity() {
+  if (!isSuperAdmin()) { showToast('Réservé aux super admins.'); return; }
+  const input = document.getElementById('new-entity-name');
+  const name  = input ? input.value.trim() : '';
+  if (!name) { showToast('Entrez un nom d\'entité.'); return; }
+  if (!window.supabaseClient) return;
+  try {
+    const { error } = await window.supabaseClient.from('entities').insert({ name, is_active: true });
+    if (error) {
+      if (/duplicate|unique/i.test(error.message)) { showToast('Cette entité existe déjà.'); return; }
+      showToast('Erreur : ' + error.message); return;
+    }
+    if (input) input.value = '';
+    showToast('Entité "' + name + '" créée ✓');
+    await refreshEntitiesList();
+    loadEntitiesList();
+  } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+async function loadEntitiesList() {
+  const container = document.getElementById('entities-list');
+  if (!container || !window.supabaseClient) return;
+  await refreshEntitiesList();
+  if (!_entitiesList.length) { container.innerHTML = '<div class="empty"><p>Aucune entité. Ajoutez-en une au-dessus.</p></div>'; return; }
+  // Compter les chauffeurs par entité
+  let counts = {};
+  try {
+    const { data } = await window.supabaseClient.from('driver_accounts').select('entity');
+    (data || []).forEach(d => {
+      const e = d.entity || '';
+      if (!e) return;
+      counts[e] = (counts[e] || 0) + 1;
+    });
+  } catch(e) {}
+  container.innerHTML = '<table class="acc-table"><thead><tr><th>Entité</th><th>Chauffeurs</th><th>Statut</th><th style="text-align:right;">Actions</th></tr></thead><tbody>'
+    + _entitiesList.map(e => {
+      const nb = counts[e.name] || 0;
+      const badge = e.is_active
+        ? '<span style="color:var(--green);">● Active</span>'
+        : '<span style="color:var(--red);">● Inactive</span>';
+      const safeName = e.name.replace(/'/g,"\\'");
+      return `<tr>
+        <td><strong>${escapeHtml(e.name)}</strong></td>
+        <td>${nb} chauffeur(s)</td>
+        <td>${badge}</td>
+        <td style="text-align:right;">
+          <button class="btn bo bsm" style="margin:0 4px 0 0;padding:4px 10px;font-size:12px;" onclick="renameEntity('${safeName}')">✏️ Renommer</button>
+          <button class="btn bo bsm" style="margin:0 4px 0 0;padding:4px 10px;font-size:12px;" onclick="toggleEntity(${e.id}, ${!e.is_active})">${e.is_active?'⏸ Désactiver':'▶ Activer'}</button>
+          <button class="del-btn" onclick="deleteEntity(${e.id}, '${safeName}', ${nb})">✕</button>
+        </td>
+      </tr>`;
+    }).join('') + '</tbody></table>';
+}
+
+async function renameEntity(oldName) {
+  if (!isSuperAdmin()) return;
+  const newName = prompt('Nouveau nom pour "' + oldName + '" :', oldName);
+  if (newName === null) return;
+  const trimmed = newName.trim();
+  if (!trimmed || trimmed === oldName) return;
+  try {
+    const { error: e1 } = await window.supabaseClient.from('entities').update({ name: trimmed, updated_at: new Date().toISOString() }).eq('name', oldName);
+    if (e1) { showToast('Erreur : ' + e1.message); return; }
+    // Propager le renommage sur les chauffeurs concernés
+    const { error: e2 } = await window.supabaseClient.from('driver_accounts').update({ entity: trimmed }).eq('entity', oldName);
+    if (e2) console.warn('[renameEntity] propagation chauffeurs:', e2.message);
+    // Idem sur bureau_accounts.allowed_entities — nécessite un update JSONB : on regénère
+    const { data: bAccs } = await window.supabaseClient.from('bureau_accounts').select('id, allowed_entities');
+    for (const b of (bAccs || [])) {
+      let arr = b.allowed_entities;
+      if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch(_) { arr = []; } }
+      if (!Array.isArray(arr) || arr.indexOf(oldName) === -1) continue;
+      const updated = arr.map(x => x === oldName ? trimmed : x);
+      await window.supabaseClient.from('bureau_accounts').update({ allowed_entities: updated }).eq('id', b.id);
+    }
+    showToast('Entité renommée ✓');
+    await refreshEntitiesList();
+    await refreshDriverEntityCache();
+    loadEntitiesList();
+  } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+async function toggleEntity(id, newActive) {
+  if (!isSuperAdmin()) return;
+  try {
+    const { error } = await window.supabaseClient.from('entities').update({ is_active: newActive, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) { showToast('Erreur : ' + error.message); return; }
+    showToast('Entité ' + (newActive ? 'activée' : 'désactivée') + ' ✓');
+    await refreshEntitiesList();
+    loadEntitiesList();
+  } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+async function deleteEntity(id, name, nbDrivers) {
+  if (!isSuperAdmin()) return;
+  if (nbDrivers > 0) {
+    if (!confirm('L\'entité "' + name + '" a ' + nbDrivers + ' chauffeur(s) assigné(s).\nCes chauffeurs se retrouveront sans entité.\n\nContinuer ?')) return;
+  } else {
+    if (!confirm('Supprimer l\'entité "' + name + '" ?')) return;
+  }
+  try {
+    // Vider entity chez les chauffeurs concernés
+    await window.supabaseClient.from('driver_accounts').update({ entity: '' }).eq('entity', name);
+    // Retirer des allowed_entities des bureaux
+    const { data: bAccs } = await window.supabaseClient.from('bureau_accounts').select('id, allowed_entities');
+    for (const b of (bAccs || [])) {
+      let arr = b.allowed_entities;
+      if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch(_) { arr = []; } }
+      if (!Array.isArray(arr) || arr.indexOf(name) === -1) continue;
+      const updated = arr.filter(x => x !== name);
+      await window.supabaseClient.from('bureau_accounts').update({ allowed_entities: updated }).eq('id', b.id);
+    }
+    // Delete l'entité
+    const { error } = await window.supabaseClient.from('entities').delete().eq('id', id);
+    if (error) { showToast('Erreur : ' + error.message); return; }
+    showToast('Entité "' + name + '" supprimée ✓');
+    await refreshEntitiesList();
+    await refreshDriverEntityCache();
+    loadEntitiesList();
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 
 async function togglePdfPermission(username, newVal) {
@@ -3306,6 +3610,9 @@ async function waitForSupabase(maxWaitMs = 5000) {
 
 async function onAppReady() {
   await waitForSupabase();
+  // v1.34 : recharger caches entités + mapping chauffeur→entité avant tout render
+  await refreshEntitiesList();
+  await refreshDriverEntityCache();
   loadMessages();
   await fetchDrivers();
   // v1.30 : demander la permission de notifier au premier rendu du bureau
