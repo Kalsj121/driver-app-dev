@@ -816,7 +816,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.1</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -2785,12 +2785,6 @@ async function openFeuilleDeRoute(driverName, dateStr) {
     } catch(e) {}
 
     // 3. Agréger les pauses de toutes les missions de la journée (dédup par tStart)
-    // v1.09d : diagnostic console — permet de voir exactement ce qui arrive de Supabase
-    console.log('[FeuilleDeRoute] missions reçues:', allMissions.length, allMissions.map(m => ({
-      id: m.id, date: m.date, driver: m.driver,
-      pauses_count: (m.pauses || []).length,
-      pauses: m.pauses
-    })));
     const pauseMap = new Map();
     allMissions.forEach(m => {
       (m.pauses || []).forEach(p => {
@@ -2798,15 +2792,28 @@ async function openFeuilleDeRoute(driverName, dateStr) {
         pauseMap.set(key, p);
       });
     });
-    console.log('[FeuilleDeRoute] pauses agrégées (dédupliquées):', pauseMap.size);
     const allPauses = Array.from(pauseMap.values()).sort((a,b) => {
       const ta = a.tStart || a.tstart || 0;
       const tb = b.tStart || b.tstart || 0;
       return new Date(ta).getTime() - new Date(tb).getTime();
     });
 
+    // v1.36 : agréger aussi les Tâches LCA (même mécanisme que pauses)
+    const lcaTasksMap = new Map();
+    allMissions.forEach(m => {
+      (m.lca_tasks || m.lcaTasks || []).forEach(t => {
+        const key = t.tStart || t.tstart || JSON.stringify(t);
+        lcaTasksMap.set(key, t);
+      });
+    });
+    const allLcaTasks = Array.from(lcaTasksMap.values()).sort((a,b) => {
+      const ta = a.tStart || a.tstart || 0;
+      const tb = b.tStart || b.tstart || 0;
+      return new Date(ta).getTime() - new Date(tb).getTime();
+    });
+
     // 4. Construire et ouvrir la feuille de route (consultation uniquement, pas de print auto)
-    const html = buildFeuilleDeRouteHTML(allMissions, allPauses, accountInfo, dateStr);
+    const html = buildFeuilleDeRouteHTML(allMissions, allPauses, accountInfo, dateStr, allLcaTasks);
     const w = window.open('', '_blank');
     if (!w) { showToast('Autorisez les pop-ups pour afficher la feuille.'); return; }
     w.document.write(html);
@@ -2818,7 +2825,8 @@ async function openFeuilleDeRoute(driverName, dateStr) {
   }
 }
 
-function buildFeuilleDeRouteHTML(allMissions, pauses, driver, dateStr) {
+function buildFeuilleDeRouteHTML(allMissions, pauses, driver, dateStr, lcaTasks) {
+  lcaTasks = Array.isArray(lcaTasks) ? lcaTasks : [];
   const tsF = ts => {
     if (!ts) return '—';
     const d = typeof ts === 'number' ? new Date(ts) : new Date(ts);
@@ -2898,6 +2906,22 @@ function buildFeuilleDeRouteHTML(allMissions, pauses, driver, dateStr) {
     pausesHTML = '<div class="mb"><h3>Pauses de la journée</h3><p style="color:#888;font-style:italic;font-size:11px;">Aucune pause enregistrée.</p></div>';
   }
 
+  // v1.36 : bloc Tâches LCA
+  let lcaTasksHTML = '';
+  if (lcaTasks && lcaTasks.length) {
+    const tr = lcaTasks.map((t,i) => {
+      const s = t.tStart || t.tstart;
+      const e = t.tEnd   || t.tend;
+      const m = t.minTasks || t.min_tasks || (s && e ? Math.round((new Date(e).getTime() - new Date(s).getTime())/60000) : null);
+      return `<tr><td>${i+1}</td><td>${tsF(s)}</td><td>${e?tsF(e):'En cours'}</td><td>${durF(m)}</td></tr>`;
+    }).join('');
+    const totalTasks = lcaTasks.reduce((a,t) => a + (t.minTasks || t.min_tasks || 0), 0);
+    lcaTasksHTML = `<div class="mb"><h3>Tâches LCA (${lcaTasks.length} — total ${durF(totalTasks)})</h3>
+      <table class="st"><thead><tr><th>#</th><th>Début</th><th>Fin</th><th>Durée</th></tr></thead><tbody>${tr}</tbody></table></div>`;
+  } else {
+    lcaTasksHTML = '<div class="mb"><h3>Tâches LCA</h3><p style="color:#888;font-style:italic;font-size:11px;">Aucune tâche LCA enregistrée.</p></div>';
+  }
+
   const firstM = allMissions[0], lastM = allMissions[allMissions.length-1];
   const firstStart = getMs(firstM?.daystartts || firstM?.dayStartTs);
   const lastEnd    = getMs(lastM?.dayendts   || lastM?.dayEndTs);
@@ -2952,11 +2976,12 @@ h3{font-size:13px;font-weight:700;color:#1a5c6e;margin:16px 0 8px;border-bottom:
     <div style="margin-top:6px;font-size:10px;color:#999;">Généré le ${new Date().toLocaleString('fr-BE')}</div>
   </div>
 </div>
-${missionsHTML}${pausesHTML}
+${missionsHTML}${pausesHTML}${lcaTasksHTML}
 <div class="sum">
   <div><b>Missions :</b> ${allMissions.length}</div>
   <div><b>Stops total :</b> ${totalStops}</div>
   <div><b>Pauses :</b> ${pauses.length > 0 ? pauses.length + ' (' + durF(totalPausesMin) + ')' : 'Aucune'}</div>
+  <div><b>Tâches LCA :</b> ${lcaTasks.length > 0 ? lcaTasks.length + ' (' + durF(lcaTasks.reduce((a,t)=>a+(t.minTasks||t.min_tasks||0),0)) + ')' : 'Aucune'}</div>
   <div><b>Durée journée :</b> ${totalDay}</div>
 </div>
 </body></html>`;
