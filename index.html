@@ -597,7 +597,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <!-- v1.33.2 : Footer complet -->
 <div class="app-footer" style="text-align:center;padding:24px 20px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:520px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.35.5</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie :<br><a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -1944,6 +1944,7 @@ async function doDriverLogout() {
   clearCurrentDriverPersist();
   show('ph-mission', false); show('ph0', true);
   show('pause-section', false); show('pause-active-panel', false); show('end-day-section', false);
+  show('lcatasks-section', false); show('lcatasks-active-panel', false);   // v1.36
   $('dayhdr').style.display = 'none'; $('dayhdr').textContent = '00:00:00';
   $('stops-tl').innerHTML = ''; $('live-banner').innerHTML = '';
   for (let i = 0; i <= 8; i++) show('f' + i, false);
@@ -2478,7 +2479,9 @@ function endDay() {
   toast('Journée clôturée et enregistrée ✓');
   // Reset pause state
   pauseActive = false; dayPauses = [];
+  lcaTasksActive = false; dayLcaTasks = [];    // v1.36
   show('pause-section', false); show('pause-active-panel', false);
+  show('lcatasks-section', false); show('lcatasks-active-panel', false);   // v1.36
   show('end-day-section', false);
 
   if (finishedUsername) removeActiveDriver(finishedUsername);
@@ -3218,6 +3221,28 @@ async function sendDriverMessage() {
   clearMsgAttach();
   renderMessages();
   toast('Message envoyé au bureau ✓');
+  // v1.36 : déclencher push notif bureau (marche même si dashboard killé)
+  sendBureauPush(driverName, msg).catch(e => console.warn('[Push bureau] échec:', e));
+}
+
+// v1.36 : appel de l'Edge Function pour notifier tous les bureaux abonnés
+async function sendBureauPush(fromDriverName, msg) {
+  if (!window.SUPABASE_URL || !window.SUPABASE_ANON) return;
+  const url  = window.SUPABASE_URL + '/functions/v1/send-bureau-push';
+  const body = (msg.text && msg.text.trim())
+    || (msg.attachmentType === 'image' ? '📷 Photo' : (msg.attachmentType === 'audio' ? '🎤 Audio' : 'Nouveau message'));
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + window.SUPABASE_ANON },
+      body: JSON.stringify({
+        fromDriverName,
+        title: '🚛 ' + fromDriverName,
+        body:  body.slice(0, 160),
+        msgId: msg.id
+      })
+    });
+  } catch(e) { console.warn('[Push bureau] fetch failed:', e.message); }
 }
 
 function renderMessages() {
