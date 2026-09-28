@@ -86,6 +86,10 @@ async function loadMissionsFromSupabase() {
       tDispatchReceived: fromISO(m.tdispatchreceived),
       isPaused:          m.ispaused === true,
       tPauseStart:       fromISO(m.tpausestart),
+      // v1.35 : Tâches LCA
+      isLcaTasks:        m.is_lca_tasks === true,
+      tLcaTasksStart:    fromISO(m.t_lca_tasks_start),
+      lcaTasks:          Array.isArray(m.lca_tasks) ? m.lca_tasks : [],
       stops:  (m.stops  || []).map(stopFromStorage),
       pauses: Array.isArray(m.pauses) ? m.pauses : [],
     }));
@@ -120,10 +124,14 @@ async function saveMissionToSupabase(mission, opts) {
     if (mission.tDispatchReceived != null)         payload.tdispatchreceived = toISO(mission.tDispatchReceived);
     if (typeof mission.isPaused === 'boolean')     payload.ispaused          = mission.isPaused;
     if (mission.tPauseStart != null)               payload.tpausestart       = toISO(mission.tPauseStart);
+    // v1.35 : Tâches LCA — colonnes optionnelles (retry drop si absentes)
+    if (typeof mission.isLcaTasks === 'boolean')   payload.is_lca_tasks       = mission.isLcaTasks;
+    if (mission.tLcaTasksStart != null)            payload.t_lca_tasks_start  = toISO(mission.tLcaTasksStart);
+    if (Array.isArray(mission.lcaTasks))           payload.lca_tasks          = mission.lcaTasks;
 
     // Retry robuste : si une colonne optionnelle n'existe pas encore dans la DB,
     // on l'enlève et on réessaie (jusqu'à épuisement des colonnes optionnelles).
-    const OPT = ['pauses','tdispatchnotified','tdispatchreceived','ispaused','tpausestart','plate_remorque'];
+    const OPT = ['pauses','tdispatchnotified','tdispatchreceived','ispaused','tpausestart','plate_remorque','is_lca_tasks','t_lca_tasks_start','lca_tasks'];
     let attempt = 0;
     let error;
     while (attempt < OPT.length + 1) {

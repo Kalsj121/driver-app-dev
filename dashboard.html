@@ -2,11 +2,18 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<!-- v1.29 : theme + apple icon (bureau utilisable comme PWA aussi, optionnel) -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<!-- v1.35 : PWA bureau — installable sur téléphone/tablette via manifest dédié -->
 <meta name="theme-color" content="#4da9be"/>
-<link rel="apple-touch-icon" href="https://lca.hevra.app/assets/img/logo.png"/>
-<title>LCA Transfert · Bureau</title>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="LCA Bureau"/>
+<link rel="manifest" href="./dashboard-manifest.json"/>
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png"/>
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png"/>
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png"/>
+<title>LCA Bureau</title>
 <style>
 :root{
   --blue:#4da9be;--bdk:#3a8fa3;--blt:#e8f6f9;
@@ -633,7 +640,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.34</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.35</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -1000,9 +1007,10 @@ setTimeout(() => { adjustHdrHeight(); adjustMsgViewTop(); }, 100);
 // CONSTANTS
 // ============================================================
 const LCA_SITES = ['LCA Nord','LCA Selys'];
-const STEP_LABELS = ['En attente d\'instructions','Attente quai','Quai attribué','À quai','En opération','Opération terminée','CMR reçu','En transit','En pause'];
+const STEP_LABELS = ['En attente d\'instructions','Attente quai','Quai attribué','À quai','En opération','Opération terminée','CMR reçu','En transit','En pause','Tâches LCA'];
 
 function getStepLabel(d) {
+  if (d.isLcaTasks) return 'Tâches LCA en cours';   // v1.35
   if (d.isPaused) return 'En pause';
   if (d.awaitingNotify) return 'En attente de notification de disponibilité';
   if (d.instructionsReceived && !d.ts_arrival) return 'En route vers sa destination';
@@ -1025,6 +1033,23 @@ function missionToDriverStatus(mission) {
   let curStop = null, step = 0;
   for (let i = stops.length - 1; i >= 0; i--) {
     if (!stops[i].tDepart) { curStop = stops[i]; break; }
+  }
+
+  // v1.35 : Tâches LCA en cours (priorité absolue avant pause)
+  if (mission.isLcaTasks === true) {
+    const now = Date.now();
+    const minJourney = mission.dayStartTs ? Math.floor((now - mission.dayStartTs) / 60000) : null;
+    return {
+      user_id: mission.id, driver_name: mission.driver,
+      plate: mission.plateTracteur||mission.plate||'', plate_remorque: mission.plateRemorque||mission.plate_remorque||'',
+      step: 9, isLcaTasks: true,
+      location: '', operation: '', dock: '',
+      ts_arrival: null, ts_dock_assigned: null, ts_dock_ready: null,
+      ts_ops_start: null, ts_ops_end: null,
+      ts_lca_tasks_start: mission.tLcaTasksStart ? new Date(mission.tLcaTasksStart).toISOString() : null,
+      min_wait: null, min_dock: null, min_ops: null, min_journey: minJourney,
+      updated_at: mission.updatedat || new Date().toISOString()
+    };
   }
 
   // Pause en cours : priorité absolue sur le step
@@ -1194,39 +1219,46 @@ async function renderActiveDriversTable() {
   container.innerHTML = '<table class="reg-table"><thead><tr><th>Chauffeur</th><th>Tracteur</th><th>Remorque</th><th>Durée journée</th><th>Dernière activité</th><th>Statut mission</th><th></th></tr></thead><tbody>'
     + all.map(d => {
       const driver      = drivers.find(dr => dr.driver_name === d.fullname);
-      // Pause = vrai si la mission l'indique OU si active_drivers.is_paused est true (pause entre missions)
+      // v1.35 : Tâches LCA (priorité sur pause)
+      const rowLcaTasks = d.is_lca_tasks === true;
+      const isLcaTasks  = (driver?.isLcaTasks === true) || rowLcaTasks;
+      // Pause
       const rowPaused   = d.is_paused === true;
-      const isPaused    = (driver?.isPaused === true) || rowPaused;
-      // Si le chauffeur est entre deux missions (plus de mission active mais toujours connecté)
-      const betweenMiss = !driver && !rowPaused;
+      const isPaused    = !isLcaTasks && ((driver?.isPaused === true) || rowPaused);
+      const betweenMiss = !driver && !rowPaused && !rowLcaTasks;
       let rawLabel;
-      if (isPaused) rawLabel = '⏸ En pause';
+      if (isLcaTasks) rawLabel = '🏢 Tâches LCA';
+      else if (isPaused) rawLabel = '⏸ En pause';
       else if (driver) rawLabel = getStepLabel(driver);
       else if (d.between_missions === true) rawLabel = 'Disponible — entre missions';
       else rawLabel = 'Journée démarrée';
-      const loc         = (!isPaused && driver) ? (driver.location || '') : '';
+      const loc         = (!isPaused && !isLcaTasks && driver) ? (driver.location || '') : '';
       const lastSeen    = d.lastseen ? new Date(d.lastseen).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'}) : '—';
       const minsAgo     = d.lastseen ? Math.floor((now - new Date(d.lastseen).getTime())/60000) : null;
       const isOnline    = minsAgo !== null && minsAgo < 10;
       const plateRem    = d.plate_remorque || driver?.plate_remorque || '—';
       const uname       = d.username || d.fullname || '';
       const dateStr     = new Date().toLocaleDateString('fr-BE');
-      // v1.16 : durée journée — dayStart = première mission du jour du chauffeur
       const dayStartTs  = dayStartMap[d.fullname] || null;
       const journeyMin  = dayStartTs ? Math.floor((now - dayStartTs)/60000) : null;
       const journeyCell = fmtDur(journeyMin);
-      // Pause : fond jaune franc sur toute la ligne (demande v1.08)
-      const rowStyle    = isPaused ? 'background:#FFF4B8;' : '';
-      // Durée de pause (live)
+      // Fond de ligne : jaune pour pause, bleu clair pour tâches LCA
+      const rowStyle    = isLcaTasks ? 'background:#E8F6F9;' : (isPaused ? 'background:#FFF4B8;' : '');
+      // Durée pause / tâches LCA (live)
       let pauseMins = null;
-      if (rowPaused && d.pause_start) {
-        pauseMins = Math.floor((now - new Date(d.pause_start).getTime())/60000);
-      } else if (driver?.isPaused && driver?.ts_pause_start) {
-        pauseMins = Math.floor((now - new Date(driver.ts_pause_start).getTime())/60000);
-      }
-      // Statut mission : pilule jaune trÃ¨s visible quand en pause
+      if (rowPaused && d.pause_start) pauseMins = Math.floor((now - new Date(d.pause_start).getTime())/60000);
+      else if (driver?.isPaused && driver?.ts_pause_start) pauseMins = Math.floor((now - new Date(driver.ts_pause_start).getTime())/60000);
+      let lcaTasksMins = null;
+      if (rowLcaTasks && d.lca_tasks_start) lcaTasksMins = Math.floor((now - new Date(d.lca_tasks_start).getTime())/60000);
+      else if (driver?.isLcaTasks && driver?.ts_lca_tasks_start) lcaTasksMins = Math.floor((now - new Date(driver.ts_lca_tasks_start).getTime())/60000);
+      // Pilule status
       let statusCell;
-      if (isPaused) {
+      if (isLcaTasks) {
+        const durStr = lcaTasksMins!=null
+          ? (lcaTasksMins<60 ? lcaTasksMins+' min' : Math.floor(lcaTasksMins/60)+'h'+String(lcaTasksMins%60).padStart(2,'0'))
+          : '—';
+        statusCell = '<span style="background:var(--blue);color:#fff;font-weight:700;padding:3px 10px;border-radius:99px;font-size:12px;display:inline-block;">🏢 Tâches LCA — ' + durStr + '</span>';
+      } else if (isPaused) {
         const durStr = pauseMins!=null
           ? (pauseMins<60 ? pauseMins+' min' : Math.floor(pauseMins/60)+'h'+String(pauseMins%60).padStart(2,'0'))
           : '—';
@@ -2551,7 +2583,11 @@ function buildFeuilleDeRouteHTML(allMissions, pauses, driver, dateStr) {
       const docT = getMs(s.tDoc);
       const opsS = getMs(s.tOpsStart);
       const total = (arr && docT) ? Math.round((docT - arr)/60000) : null;
-      const cargoStr = (s.cargo||[]).map(c=>c.type==='uld'?(c.uld||'ULD'):((c.pieces||'')+'pc '+(c.awb||''))).join(', ')||'—';
+      const cargoStr = (s.cargo||[]).map(c=>{
+        if (c.type==='uld')   return c.uld||'ULD';
+        if (c.type==='autre') return c.description||'Autre';    // v1.35
+        return (c.pieces||'')+'pc '+(c.awb||'');
+      }).join(', ')||'—';
       // v1.12 : statut CMR — ✓ présent, ⚠️ sans PJ + raison, ou —
       let cmrStatusCell = '—';
       if (hasCmr(s)) {
@@ -3610,6 +3646,12 @@ async function waitForSupabase(maxWaitMs = 5000) {
 
 async function onAppReady() {
   await waitForSupabase();
+  // v1.35 : enregistrer le service worker bureau (PWA installable)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw-bureau.js')
+      .then(() => console.log('[SW-Bureau] enregistré'))
+      .catch(e => console.warn('[SW-Bureau] échec:', e.message));
+  }
   // v1.34 : recharger caches entités + mapping chauffeur→entité avant tout render
   await refreshEntitiesList();
   await refreshDriverEntityCache();

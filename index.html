@@ -342,6 +342,17 @@ select.fi-locked{pointer-events:none;opacity:.7;}
         <button class="btn ba" onclick="endPause()">▶ Reprendre — fin de pause</button>
       </div>
     </div>
+    <!-- v1.35 : Tâches LCA (entre missions) -->
+    <div id="lcatasks-section" style="display:none;margin-top:8px;">
+      <button class="btn bo" onclick="startLcaTasks()" style="border-color:var(--blue);color:var(--blue);">🏢 Tâches LCA</button>
+    </div>
+    <div id="lcatasks-active-panel" style="display:none;margin-top:8px;">
+      <div class="card" style="border-color:var(--blue);background:var(--blt);">
+        <div class="ctit" style="color:var(--blue);">Tâches LCA en cours</div>
+        <div style="font-size:14px;color:var(--t1);margin-bottom:12px;">🏢 Durée : <span id="t-lcatasks" style="font-weight:700;color:var(--blue);">0 min</span></div>
+        <button class="btn bp" onclick="endLcaTasks()">▶ Terminer les tâches LCA</button>
+      </div>
+    </div>
     <!-- END DAY section (visible after at least one mission is finished) -->
     <div id="end-day-section" style="display:none;margin-top:8px;">
       <button class="btn bo" onclick="document.getElementById('end-modal').classList.add('open')" style="color:var(--red);border-color:rgba(163,45,45,0.4);">⏹ Terminer la journée</button>
@@ -467,9 +478,18 @@ select.fi-locked{pointer-events:none;opacity:.7;}
         <!-- Cargo type -->
         <div class="fg">
           <label class="fl">Type de marchandise <span style="color:var(--red);font-weight:700;">*</span> <span style="font-weight:400;color:var(--t3);">(obligatoire — sélection multiple possible)</span></label>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button type="button" class="ctyp" id="btn-loose" onclick="toggleCargo('loose')">📦 Loose</button>
-            <button type="button" class="ctyp" id="btn-uld" onclick="toggleCargo('uld')">🛄 ULD</button>
+            <button type="button" class="ctyp" id="btn-uld"   onclick="toggleCargo('uld')">🛄 ULD</button>
+            <button type="button" class="ctyp" id="btn-autre" onclick="toggleCargo('autre')">📄 Autre</button>
+          </div>
+        </div>
+        <!-- v1.35 : Autre — description libre sans AWB/ULD obligatoire -->
+        <div id="cargo-autre" style="display:none;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t2);margin-bottom:8px;padding:8px 0 0;">📄 Autre — description libre</div>
+          <div class="fg" style="margin-bottom:0;">
+            <label class="fl">Description du fret (obligatoire)</label>
+            <textarea class="fi" id="autre-description" placeholder="Ex: Palettes non identifiées, courrier interne, matériel technique, vide, retour de matériel…" style="min-height:60px;"></textarea>
           </div>
         </div>
 
@@ -577,7 +597,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <!-- v1.33.2 : Footer complet -->
 <div class="app-footer" style="text-align:center;padding:24px 20px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:520px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.34</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.35</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie :<br><a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -824,6 +844,9 @@ let ticker   = null;
 let dayStart = null;
 let dayPauses = []; // [{tStart, tEnd, minPause}]
 let pauseActive = false;
+// v1.35 : état Tâches LCA (semblable aux pauses mais visible en bleu côté bureau)
+let dayLcaTasks = [];      // [{tStart, tEnd, minTasks}]
+let lcaTasksActive = false;
 
 async function initMissions() {
   if (window.missionsFromSupabase && window.missionsFromSupabase.length > 0) {
@@ -1357,6 +1380,8 @@ function restoreFromBetweenMissionsCache(driverName, today) {
     } else {
       show('pause-section', true);
       show('pause-active-panel', false);
+      show('lcatasks-section', true);          // v1.35
+      show('lcatasks-active-panel', false);    // v1.35
       show('end-day-section', true);
       if (btnStart) btnStart.disabled = false;
     }
@@ -1511,11 +1536,15 @@ async function restoreBetweenMissionsState(driverName, today, fromIso) {
     if (pauseActive) {
       show('pause-section', false);
       show('pause-active-panel', true);
+      show('lcatasks-section', false);         // v1.35
+      show('lcatasks-active-panel', false);    // v1.35
       show('end-day-section', false);
       if (btnStart) btnStart.disabled = true;
     } else {
       show('pause-section', true);
       show('pause-active-panel', false);
+      show('lcatasks-section', true);          // v1.35
+      show('lcatasks-active-panel', false);    // v1.35
       show('end-day-section', true);
       if (btnStart) btnStart.disabled = false;
     }
@@ -1696,6 +1725,7 @@ function startTicker() {
     up('t-day', hms(now-dayStart));
     if(step===0&&active?.tDispatchNotified) up('t-dispatch', dur(ms2min(now-active.tDispatchNotified)));
     if(pauseActive && dayPauses.length) { const _p=dayPauses[dayPauses.length-1]; if(_p&&!_p.tEnd) up('t-pause', dur(ms2min(now-_p.tStart))); }
+    if(lcaTasksActive && dayLcaTasks.length) { const _t=dayLcaTasks[dayLcaTasks.length-1]; if(_t&&!_t.tEnd) up('t-lcatasks', dur(ms2min(now-_t.tStart))); }
     if(step===1&&curStop?.tArrival)    up('t-wait',   dur(ms2min(now-curStop.tArrival)));
     if(step===2&&curStop?.tDockAssigned) up('t-dock', dur(ms2min(now-curStop.tDockAssigned)));
     if(step===4&&curStop?.tOpsStart)   up('t-ops',    dur(ms2min(now-curStop.tOpsStart)));
@@ -1994,6 +2024,7 @@ function endPause() {
   // Si le chauffeur est entre missions, il retrouve l'écran ph0 normal
   if (!active) {
     show('pause-section', true);
+    show('lcatasks-section', true);   // v1.35
     show('end-day-section', true);
   } else {
     // v1.13b : fin de pause pendant une mission active — revenir à ph-mission
@@ -2006,6 +2037,82 @@ function endPause() {
   if(btnStart) btnStart.disabled = false;
   updateActiveDriverState({ is_paused: false, pause_start: null });
   toast('Pause terminée ✓ — ' + (p?.minPause||0) + ' min');
+}
+
+// ============================================================
+// v1.35 : Tâches LCA — mêmes mécanismes que pauses mais dédiés
+// ============================================================
+function startLcaTasks() {
+  lcaTasksActive = true;
+  const tStart = Date.now();
+  dayLcaTasks.push({ tStart, tEnd: null, minTasks: null });
+  if (active) {
+    active.isLcaTasks   = true;
+    active.tLcaTasksStart = tStart;
+    active.lcaTasks     = [...dayLcaTasks];
+    syncActive();
+  } else {
+    persistDayLcaTasksToLastMission();
+    saveBetweenMissionsCache();
+  }
+  // Masquer pause et end-day pendant les tâches LCA pour clarté
+  show('pause-section', false);
+  show('end-day-section', false);
+  show('lcatasks-section', false);
+  show('lcatasks-active-panel', true);
+  const btnStart = document.getElementById('btn-start-day');
+  if (btnStart) btnStart.disabled = true;
+  updateActiveDriverState({ is_lca_tasks: true, lca_tasks_start: tStart });
+  toast('Tâches LCA démarrées 🏢');
+}
+
+function endLcaTasks() {
+  const t = dayLcaTasks[dayLcaTasks.length - 1];
+  if (t) { t.tEnd = Date.now(); t.minTasks = ms2min(t.tEnd - t.tStart); }
+  lcaTasksActive = false;
+  if (active) {
+    active.isLcaTasks   = false;
+    active.tLcaTasksStart = null;
+    active.lcaTasks     = [...dayLcaTasks];
+    syncActive();
+  } else {
+    persistDayLcaTasksToLastMission();
+    saveBetweenMissionsCache();
+  }
+  show('lcatasks-active-panel', false);
+  if (!active) {
+    show('pause-section', true);
+    show('lcatasks-section', true);
+    show('end-day-section', true);
+  } else {
+    show('ph0', false);
+    show('ph-mission', true);
+    setStep(step);
+  }
+  const btnStart = document.getElementById('btn-start-day');
+  if (btnStart) btnStart.disabled = false;
+  updateActiveDriverState({ is_lca_tasks: false, lca_tasks_start: null });
+  toast('Tâches LCA terminées ✓ — ' + (t?.minTasks || 0) + ' min');
+}
+
+async function persistDayLcaTasksToLastMission() {
+  if (!window.supabaseClient || !currentDriver) return;
+  try {
+    const driverName = currentDriver.fullName || currentDriver.fullname || currentDriver.username;
+    const today = todayStr();
+    const { data } = await window.supabaseClient
+      .from('missions')
+      .select('id')
+      .eq('driver', driverName)
+      .eq('date', today)
+      .order('daystartts', { ascending: false })
+      .limit(1);
+    if (data && data.length) {
+      await window.supabaseClient.from('missions')
+        .update({ lca_tasks: dayLcaTasks })
+        .eq('id', data[0].id);
+    }
+  } catch(e) { console.warn('[persistDayLcaTasks]', e.message); }
 }
 
 // v1.09f : attache les pauses de la journée à la DERNIÈRE mission enregistrée
@@ -2227,19 +2334,29 @@ function doDoc() {
     }
   }
 
-  // ── 2. Type de fret obligatoire (Loose ou ULD) ─────────────
+  // ── 2. Type de fret obligatoire (Loose, ULD, ou Autre) ─────
   const isLooseOn = $('btn-loose').classList.contains('on');
   const isULDOn   = $('btn-uld').classList.contains('on');
-  if (!isLooseOn && !isULDOn) {
-    toast('Veuillez sélectionner le type de fret : Loose ou ULD.', true);
-    // Mettre en évidence les boutons
-    ['btn-loose','btn-uld'].forEach(id => {
+  const isAutreOn = $('btn-autre')?.classList.contains('on') || false;   // v1.35
+  if (!isLooseOn && !isULDOn && !isAutreOn) {
+    toast('Veuillez sélectionner le type de fret : Loose, ULD ou Autre.', true);
+    ['btn-loose','btn-uld','btn-autre'].forEach(id => {
       const el = $(id);
+      if (!el) return;
       el.style.borderColor = 'var(--red)';
       el.style.color = 'var(--red)';
       setTimeout(() => { el.style.borderColor=''; el.style.color=''; }, 2500);
     });
     return;
+  }
+  // v1.35 : Autre → description obligatoire
+  if (isAutreOn) {
+    const desc = ($('autre-description')?.value || '').trim();
+    if (!desc) {
+      toast('Autre : veuillez décrire le fret.', true);
+      $('autre-description')?.focus();
+      return;
+    }
   }
 
   // ── 3. Validations Loose : AWB + quantité obligatoires ─────
@@ -2441,6 +2558,7 @@ function endMissionNewOne() {
   $('live-banner').innerHTML = '';
   show('ph-mission', false); show('ph0', true);
   show('pause-section', true);
+  show('lcatasks-section', true);   // v1.35
   show('end-day-section', true);
   // Déverrouiller les sélecteurs → le chauffeur peut changer de véhicule
   lockVehicleSelects(false);
@@ -2448,7 +2566,7 @@ function endMissionNewOne() {
   if (btnStart) btnStart.textContent = '▶ Démarrer nouvelle mission';
   // Notifier le bureau que le chauffeur est entre missions (disponible, pas en pause)
   if (currentDriver) {
-    updateActiveDriverState({ is_paused: false, pause_start: null, between_missions: true });
+    updateActiveDriverState({ is_paused: false, pause_start: null, is_lca_tasks: false, lca_tasks_start: null, between_missions: true });
   }
   saveBetweenMissionsCache(); // v1.19 : cache local de l'écran entre-missions
   toast('Mission terminée ✓ — choisissez vos véhicules et démarrez la prochaine');
@@ -2463,7 +2581,11 @@ function renderTimeline() {
   let html='';
   active.stops.forEach((s,i)=>{
     if(i>0) html+='<div class="sconn"></div>';
-    const cargo=s.cargo&&s.cargo.length?s.cargo.map(c=>c.type==='uld'?(c.uld||'ULD'):((c.pieces||'')+'pc '+(c.awb||''))).join(' / '):'';
+    const cargo=s.cargo&&s.cargo.length?s.cargo.map(c=>{
+      if (c.type==='uld')   return c.uld||'ULD';
+      if (c.type==='autre') return '📄 '+(c.description||'Autre');
+      return (c.pieces||'')+'pc '+(c.awb||'');
+    }).join(' / '):'';
     const chips=[
       '<span class="chip c-gr">'+tsStr(s.tArrival)+'→'+tsStr(s.tDoc)+'</span>',
       s.dock?'<span class="chip c-b">Quai '+s.dock+'</span>':'',
@@ -2768,17 +2890,24 @@ function collectCargo() {
       if (u) res.push({type:'uld', uld:u, awb:'', pieces:''});
     });
   }
+  // v1.35 : Autre — description libre
+  if ($('btn-autre')?.classList.contains('on')) {
+    const desc = ($('autre-description')?.value || '').trim();
+    if (desc) res.push({ type:'autre', description: desc, pieces:'', awb:'', uld:'' });
+  }
   return res;
 }
 
 function resetCargo() {
-  ['btn-loose','btn-uld'].forEach(id => $(id).classList.remove('on'));
-  show('cargo-loose', false); show('cargo-uld', false);
+  ['btn-loose','btn-uld','btn-autre'].forEach(id => $(id)?.classList.remove('on'));
+  show('cargo-loose', false); show('cargo-uld', false); show('cargo-autre', false);
   ['loose-items','uld-items'].forEach(id => {
     const c = $(id);
+    if (!c) return;
     c.querySelectorAll('.ci:not(:first-child)').forEach(e => e.remove());
     c.querySelectorAll('input').forEach(i => i.value = '');
   });
+  const ad = $('autre-description'); if (ad) ad.value = '';
 }
 
 // ============================================================
