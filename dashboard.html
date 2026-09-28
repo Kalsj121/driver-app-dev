@@ -120,22 +120,30 @@ body{
 
   .msg-thread-wrap { padding: 10px 12px !important; }
   .msg-composer-wrap { padding: 8px 12px 14px !important; }
-  .msg-composer-wrap .msg-compose > div[style*="flex:1 1 auto"],
-  .msg-composer-wrap .msg-compose > div[style*="display:flex"] {
+  /* v1.35.2 : cible UNIQUEMENT le premier flex row (Destinataire + Message), pas la rangée des boutons */
+  .msg-composer-wrap .msg-compose > div:first-child {
     flex-direction: column !important;
+    align-items: stretch !important;
     gap: 8px !important;
   }
-  .msg-composer-wrap .msg-compose > div > div[style*="flex:0 0 220px"] {
+  .msg-composer-wrap .msg-compose > div:first-child > div {
     flex: 1 1 auto !important;
     min-width: 0 !important;
     width: 100% !important;
   }
-  .msg-composer-wrap textarea { min-height: 44px !important; font-size: 13px !important; }
-  .msg-composer-wrap select.fi { font-size: 13px !important; }
+  .msg-composer-wrap textarea { min-height: 44px !important; font-size: 13px !important; width: 100% !important; box-sizing: border-box; }
+  .msg-composer-wrap select.fi { font-size: 13px !important; width: 100% !important; box-sizing: border-box; }
 
-  /* Boutons envoi + pièce jointe compacts */
-  .msg-composer-wrap button[onclick*="sendMsg"] { padding: 8px 14px !important; font-size: 13px !important; }
-  .msg-composer-wrap .btn { padding: 8px !important; font-size: 12px !important; }
+  /* Rangée boutons (camera + mic + envoyer) : garder en row, envoyer prend la place restante à droite */
+  .msg-composer-wrap .msg-compose > div[style*="align-items:center"] {
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+  }
+  .msg-composer-wrap button[onclick*="sendMsg"] {
+    padding: 10px 14px !important;
+    font-size: 13px !important;
+    margin-left: auto !important;
+  }
 }
 
 /* LOGIN */
@@ -735,7 +743,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.35.2</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.35.3</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
