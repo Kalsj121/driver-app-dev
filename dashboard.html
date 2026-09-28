@@ -10,9 +10,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="LCA Bureau"/>
 <link rel="manifest" href="./dashboard-manifest.json"/>
-<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png"/>
-<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png"/>
-<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png"/>
+<!-- v1.35.1 : icônes bureau (fond blanc) pour distinguer visuellement de l'app driver -->
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/bureau/apple-touch-icon.png"/>
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/bureau/favicon-32.png"/>
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/bureau/icon-192.png"/>
 <title>LCA Bureau</title>
 <style>
 :root{
@@ -26,8 +27,7 @@
   --header:#4da9be;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-/* v1.32f : anti-bounce iOS PWA — html et body verrouillés, scroll sur #main-app.
-   Cette architecture est plus fiable sur iOS que body:fixed pour les pages longues. */
+/* v1.32f : anti-bounce iOS PWA — html et body verrouillés, scroll sur #main-app. */
 html,body{
   height:100%;
   overflow:hidden;
@@ -39,8 +39,60 @@ body{
 }
 #main-app{
   position:absolute;top:0;left:0;right:0;bottom:0;
-  overflow-y:auto;overscroll-behavior:none;
+  overflow-y:auto;overflow-x:hidden;overscroll-behavior:none;
   -webkit-overflow-scrolling:touch;
+}
+
+/* ============================================================
+   v1.35.1 : MOBILE RESPONSIVE — bureau utilisable comme PWA sur GSM
+   Masque les onglets non essentiels + adapte header et stats
+============================================================ */
+@media (max-width: 700px) {
+  /* Masquer les onglets non essentiels sur mobile : garder uniquement Temps réel + Messages */
+  #tab-reports, #tab-accounts, #tab-vehicles, #tab-backups { display: none !important; }
+
+  /* Header plus compact */
+  .hdr { padding: 8px 12px !important; }
+  .hdr .logo img.logo-img, .hdr img.logo-img { width: 30px !important; height: auto !important; }
+  .hdr .ltx { font-size: 14px !important; line-height: 1.1; }
+  .hdr .lsb { font-size: 10px !important; line-height: 1.1; }
+  .hdr-right { gap: 6px !important; }
+  .btn-logout { font-size: 11px !important; padding: 4px 8px !important; }
+  .live-badge { font-size: 10px !important; padding: 3px 6px !important; }
+
+  /* Tabs : remplissent proprement l'écran, plus de max-width */
+  .tabs { position: sticky !important; top: 0 !important; z-index: 99; }
+  .tab { padding: 10px 6px !important; font-size: 12px !important; max-width: none !important; }
+
+  /* Empêcher tout scroll horizontal */
+  #main-app { overflow-x: hidden !important; }
+
+  /* Pages : padding réduit */
+  .page, .page-narrow { padding: 12px !important; }
+
+  /* Stats grid 2 colonnes serrées au lieu de 6 */
+  .stats { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+  .sc { padding: 12px 10px !important; }
+  .sc-l { font-size: 10px !important; }
+  .sc-v { font-size: 24px !important; }
+  .sc-s { font-size: 10px !important; }
+
+  /* Cards plus compactes */
+  .card { padding: 12px !important; margin-bottom: 10px !important; }
+  .ctit { font-size: 13px !important; }
+
+  /* Barre de settings (thresholds) : wrap */
+  .settings-bar { flex-wrap: wrap !important; gap: 6px !important; }
+  .settings-bar input[type="number"] { width: 50px !important; }
+  .settings-bar label { font-size: 11px !important; }
+
+  /* Table active drivers : scroll horizontal interne uniquement si nécessaire */
+  #active-drivers-table { overflow-x: auto; }
+  .reg-table { font-size: 11px !important; }
+  .reg-table th, .reg-table td { padding: 6px 4px !important; }
+
+  /* Driver grid (temps réel cards) : 1 colonne */
+  .driver-grid { grid-template-columns: 1fr !important; }
 }
 
 /* LOGIN */
@@ -640,7 +692,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.35</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.35.1</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -875,6 +927,15 @@ function showApp() {
   document.getElementById('user-name').textContent = currentUser?.full_name || 'Bureau';
   // v1.27 : masquer les onglets non autorisés selon le rôle
   applyTabPermissions();
+  // v1.35.1 : sur mobile, forcer la vue Temps réel si on est sur un onglet masqué
+  if (window.matchMedia && window.matchMedia('(max-width: 700px)').matches) {
+    const active = document.querySelector('.tab.on');
+    if (active) {
+      const id = active.id.replace('tab-','');
+      const mobileTabs = ['dashboard','messages'];
+      if (mobileTabs.indexOf(id) === -1) switchView('dashboard');
+    }
+  }
   onAppReady();
 }
 
