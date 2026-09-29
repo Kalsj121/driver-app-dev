@@ -251,7 +251,11 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 
 <!-- v1.23 : bandeau DEV — auto-affiché par le script en bas si l'URL Supabase
      pointe sur le projet de développement. Invisible en prod. -->
-<div id="dev-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:repeating-linear-gradient(45deg,#ff6b00,#ff6b00 10px,#cc5500 10px,#cc5500 20px);color:#fff;text-align:center;padding:6px 8px;font-size:13px;font-weight:700;letter-spacing:.04em;z-index:99999;text-shadow:0 1px 2px rgba(0,0,0,0.4);box-shadow:0 2px 8px rgba(0,0,0,0.3);">⚠️ DEV — Données de test, ne pas utiliser pour de vraies missions</div>
+<!-- v1.36.2 : mode DEV → bordure orange fine autour de la viewport + petit badge discret en haut à droite -->
+<div id="dev-banner" style="display:none;">
+  <div id="dev-border" style="position:fixed;inset:0;pointer-events:none;border:3px solid #ff6b00;z-index:99999;box-sizing:border-box;"></div>
+  <div id="dev-chip" style="position:fixed;top:6px;right:8px;background:#ff6b00;color:#fff;font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:99px;z-index:99999;box-shadow:0 1px 4px rgba(0,0,0,0.25);pointer-events:none;">DEV</div>
+</div>
 
 
 <!-- LOGIN SCREEN -->
@@ -597,7 +601,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <!-- v1.33.2 : Footer complet -->
 <div class="app-footer" style="text-align:center;padding:24px 20px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:520px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.1</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.2</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie :<br><a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -634,7 +638,7 @@ function applyDevBanner(retries) {
     if (url.indexOf('qkvnggcecmukogctfgsl') !== -1) {
       var banner = document.getElementById('dev-banner');
       if (banner) banner.style.display = '';
-      document.body.style.paddingTop = '32px';
+      // v1.36.2 : plus de paddingTop — le badge DEV est en overlay, pas un ruban
       if (document.title.indexOf('[DEV]') !== 0) document.title = '[DEV] ' + document.title;
     }
   } catch(e) { /* silencieux */ }

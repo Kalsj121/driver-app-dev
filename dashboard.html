@@ -407,7 +407,11 @@ textarea.fi{resize:vertical;min-height:72px;}
 <body>
 
 <!-- v1.23 : bandeau DEV — auto-affiché si l'URL Supabase pointe sur la dev -->
-<div id="dev-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:repeating-linear-gradient(45deg,#ff6b00,#ff6b00 10px,#cc5500 10px,#cc5500 20px);color:#fff;text-align:center;padding:6px 8px;font-size:13px;font-weight:700;letter-spacing:.04em;z-index:99999;text-shadow:0 1px 2px rgba(0,0,0,0.4);box-shadow:0 2px 8px rgba(0,0,0,0.3);">⚠️ DEV — Données de test, ne pas utiliser pour de vraies missions</div>
+<!-- v1.36.2 : mode DEV → bordure orange fine autour de la viewport + badge discret -->
+<div id="dev-banner" style="display:none;">
+  <div id="dev-border" style="position:fixed;inset:0;pointer-events:none;border:3px solid #ff6b00;z-index:99999;box-sizing:border-box;"></div>
+  <div id="dev-chip" style="position:fixed;top:6px;right:8px;background:#ff6b00;color:#fff;font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:99px;z-index:99999;box-shadow:0 1px 4px rgba(0,0,0,0.25);pointer-events:none;">DEV</div>
+</div>
 
 <!-- LOGIN SCREEN -->
 <div id="login-screen">
@@ -443,6 +447,8 @@ textarea.fi{resize:vertical;min-height:72px;}
   <div class="hdr-right">
     <div class="live-badge"><div class="live-dot"></div>En direct</div>
     <span class="user-pill" id="user-name">—</span>
+    <!-- v1.36.2 : bouton notifications bureau (active/désactive Web Push) -->
+    <button id="btn-notif-bureau" onclick="toggleBureauNotif()" title="Notifications" style="background:rgba(255,255,255,0.18);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;display:none;padding:0;">🔕</button>
     <button class="btn-logout" onclick="doLogout()">Déconnexion</button>
   </div>
 </div>
@@ -816,7 +822,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.1</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.2</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -957,7 +963,7 @@ function applyDevBanner(retries) {
     if (url.indexOf('qkvnggcecmukogctfgsl') !== -1) {
       var banner = document.getElementById('dev-banner');
       if (banner) banner.style.display = '';
-      document.body.style.paddingTop = '32px';
+      // v1.36.2 : plus de paddingTop — le badge DEV est en overlay, pas un ruban
       if (document.title.indexOf('[DEV]') !== 0) document.title = '[DEV] ' + document.title;
     }
   } catch(e) { /* silencieux */ }
@@ -1782,12 +1788,66 @@ async function subscribeBureauPush() {
 }
 
 // v1.36 : appelée au démarrage — si la permission est déjà accordée, s'abonner en silence.
-// Sinon, ne rien faire (la première fois, l'ancien initBureauNotifPermission demande).
 async function maybeSubscribeBureauPush() {
   if (!('Notification' in window)) return;
   if (Notification.permission === 'granted') {
     await subscribeBureauPush();
   }
+  updateBureauNotifBadge();
+}
+
+// v1.36.2 : désabonnement bureau (SW + serveur)
+async function unsubscribeBureauPush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return true;
+    if (window.supabaseClient) {
+      try {
+        await window.supabaseClient.from('bureau_push_subscriptions').delete().eq('endpoint', sub.endpoint);
+      } catch(e) { console.warn('[Bureau Push] delete sub row:', e.message); }
+    }
+    await sub.unsubscribe();
+    console.log('[Bureau Push] désabonné');
+    return true;
+  } catch(e) { console.warn('[Bureau Push] unsubscribe:', e.message); return false; }
+}
+
+// v1.36.2 : rafraîchit l'état du bouton 🔔/🔕 dans le header
+async function updateBureauNotifBadge() {
+  const btn = document.getElementById('btn-notif-bureau');
+  if (!btn) return;
+  if (!('Notification' in window)) { btn.style.display = 'none'; return; }
+  btn.style.display = '';
+  const perm = Notification.permission;
+  const reg = ('serviceWorker' in navigator && navigator.serviceWorker.controller) ? await navigator.serviceWorker.ready : null;
+  const sub = reg ? await reg.pushManager.getSubscription() : null;
+  const isActive = perm === 'granted' && !!sub;
+  btn.textContent = isActive ? '🔔' : '🔕';
+  btn.title = isActive
+    ? 'Notifications actives — clic pour désactiver'
+    : (perm === 'denied' ? 'Notifications bloquées dans les réglages navigateur' : 'Cliquez pour activer les notifications');
+}
+
+// v1.36.2 : toggle notifications bureau
+async function toggleBureauNotif() {
+  if (!('Notification' in window)) { showToast('Notifications non supportées.'); return; }
+  const perm = Notification.permission;
+  const reg = ('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null;
+  const sub = reg ? await reg.pushManager.getSubscription() : null;
+  if (perm === 'granted' && sub) {
+    // Actuellement activé → désactiver
+    if (!confirm('Désactiver les notifications ? Vous ne recevrez plus les messages des chauffeurs quand l\'app est fermée.')) return;
+    await unsubscribeBureauPush();
+    showToast('🔕 Notifications désactivées');
+  } else if (perm === 'denied') {
+    showToast('Notifications bloquées — activez-les dans les réglages du navigateur/téléphone.');
+  } else {
+    // Activer
+    const ok = await subscribeBureauPush();
+    if (ok) showToast('🔔 Notifications activées ✓');
+  }
+  updateBureauNotifBadge();
 }
 
 // v1.30 : demander la permission de notifier au premier chargement du dashboard
