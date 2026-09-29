@@ -601,7 +601,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <!-- v1.33.2 : Footer complet -->
 <div class="app-footer" style="text-align:center;padding:24px 20px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:520px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.2</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.3</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie :<br><a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -1811,14 +1811,10 @@ async function startDay() {
   if (!name)          { toast('Erreur : nom chauffeur introuvable.', true); return; }
   if (!plateTracteur) { toast('Veuillez sélectionner un tracteur.', true); return; }
 
-  // v1.31 : désactiver le bouton pour éviter les double-clics et créations
-  // de missions multiples si l'utilisateur re-clique après un swipe-close
   const btnStartLock = document.getElementById('btn-start-day');
   if (btnStartLock) btnStartLock.disabled = true;
 
-  // v1.32 : safety net — si Supabase a déjà une mission ouverte pour ce chauffeur,
-  // on la reprend au lieu d'en créer une nouvelle (évite les doublons côté bureau
-  // quand la restauration automatique a échoué pour X raison).
+  // v1.32 : safety net — si Supabase a déjà une mission ouverte pour ce chauffeur, on la reprend
   if (window.supabaseClient) {
     try {
       const { data: existing } = await window.supabaseClient
@@ -1830,7 +1826,6 @@ async function startDay() {
         .limit(1);
       if (existing && existing.length) {
         const ageH = getShiftAgeHours(new Date(existing[0].daystartts).getTime());
-        console.log('[startDay] Mission existante détectée id=', existing[0].id, 'âge=', fmtDurationHours(ageH), '→ reprise au lieu de création');
         toast('Shift déjà en cours (depuis ' + fmtDurationHours(ageH) + ') — reprise...');
         await restoreDriverSession();
         if (btnStartLock) btnStartLock.disabled = false;
@@ -1839,7 +1834,41 @@ async function startDay() {
     } catch(e) { console.warn('[startDay] safety check failed:', e.message); }
   }
 
-  dayStart = Date.now();
+  // v1.36.3 : la journée n'a pas encore démarré (dayStart null) → mode "attente"
+  // On reste sur ph0 avec les 3 options (Mission / Pause / Tâches LCA / Terminer journée)
+  // et on NE crée PAS de mission. La mission sera créée quand le chauffeur cliquera
+  // sur « Démarrer nouvelle mission ».
+  if (!dayStart) {
+    dayStart = Date.now();
+    active = null;
+    curStop = null;
+    lockVehicleSelects(true);
+    // Afficher les 3 options + terminer journée
+    show('pause-section', true);
+    show('lcatasks-section', true);
+    show('end-day-section', true);
+    show('pause-active-panel', false);
+    show('lcatasks-active-panel', false);
+    // Renommer le bouton pour clarifier
+    if (btnStartLock) { btnStartLock.textContent = '▶ Démarrer nouvelle mission'; btnStartLock.disabled = false; }
+    $('dayhdr').style.display = '';
+    startTicker();
+    // Enregistrement immédiat côté serveur (entre-missions, pas de mission active)
+    try {
+      await registerActiveDriver(name, plateTracteur, plateRemorque);
+      await updateActiveDriverState({ is_paused: false, pause_start: null, is_lca_tasks: false, lca_tasks_start: null, between_missions: true });
+    } catch(e) { console.warn('[Driver] register active failed:', e.message); }
+    // Heartbeat
+    if (!window._activeDriverInterval) {
+      window._activeDriverInterval = setInterval(() => {
+        registerActiveDriver(name, plateTracteur, plateRemorque);
+      }, 120000);
+    }
+    toast('Bonne journée ' + name + ' ! Vous pouvez démarrer une mission, prendre une pause ou faire des tâches LCA.');
+    return;
+  }
+
+  // Sinon (dayStart déjà set → clic sur "Démarrer nouvelle mission") : créer la mission et aller sur ph-mission
   active = {
     id: Date.now(), driver: name,
     plate: plateTracteur, plateTracteur, plateRemorque,
@@ -1849,15 +1878,15 @@ async function startDay() {
     stops: [], completed: false, _cmr: null
   };
   curStop = null;
-  clearBetweenMissionsCache(); // v1.19 : nouvelle mission démarrée, plus en mode entre-missions
+  clearBetweenMissionsCache();
 
-  // Griser les sélecteurs pour la durée de la journée
   lockVehicleSelects(true);
   const btnStart = document.getElementById('btn-start-day');
   if (btnStart) btnStart.textContent = '▶ Journée en cours…';
 
   show('ph0', false); show('ph-mission', true);
   show('pause-section', false);
+  show('lcatasks-section', false);
   show('end-day-section', false);
   $('dayhdr').style.display = '';
   startTicker();
@@ -2113,9 +2142,18 @@ async function persistDayLcaTasksToLastMission() {
       .order('daystartts', { ascending: false })
       .limit(1);
     if (data && data.length) {
+      const missionId = data[0].id;
+      // Update dans missions (mission en cours ou complétée récente)
       await window.supabaseClient.from('missions')
         .update({ lca_tasks: dayLcaTasks })
-        .eq('id', data[0].id);
+        .eq('id', missionId);
+      // v1.36.3 : update aussi dans missions_archive (sinon feuille de route ne voit rien
+      // car elle prend l'archive prioritairement lors du merge)
+      try {
+        await window.supabaseClient.from('missions_archive')
+          .update({ lca_tasks: dayLcaTasks })
+          .eq('id', String(missionId));
+      } catch(e) { console.warn('[persistDayLcaTasks] archive update:', e.message); }
     }
   } catch(e) { console.warn('[persistDayLcaTasks]', e.message); }
 }
@@ -2518,8 +2556,10 @@ async function archiveMissionData(mission) {
     if (mission.tDispatchReceived != null) payload.tdispatchreceived = new Date(mission.tDispatchReceived).toISOString();
     if (typeof mission.isPaused === 'boolean') payload.ispaused = mission.isPaused;
     if (mission.tPauseStart != null) payload.tpausestart = new Date(mission.tPauseStart).toISOString();
+    // v1.36.3 : propager aussi les Tâches LCA dans l'archive
+    if (Array.isArray(mission.lcaTasks)) payload.lca_tasks = mission.lcaTasks;
 
-    const OPT = ['pauses','plate_remorque','archivedat','updatedat','tdispatchnotified','tdispatchreceived','ispaused','tpausestart'];
+    const OPT = ['pauses','plate_remorque','archivedat','updatedat','tdispatchnotified','tdispatchreceived','ispaused','tpausestart','lca_tasks'];
     let { error } = await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
     let safety = 6;
     while (error && safety-- > 0) {
