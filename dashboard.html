@@ -52,13 +52,31 @@ body{
   #tab-reports, #tab-accounts, #tab-vehicles, #tab-backups { display: none !important; }
 
   /* Header plus compact */
-  .hdr { padding: 8px 12px !important; }
-  .hdr .logo img.logo-img, .hdr img.logo-img { width: 30px !important; height: auto !important; }
-  .hdr .ltx { font-size: 14px !important; line-height: 1.1; }
-  .hdr .lsb { font-size: 10px !important; line-height: 1.1; }
-  .hdr-right { gap: 6px !important; }
-  .btn-logout { font-size: 11px !important; padding: 4px 8px !important; }
-  .live-badge { font-size: 10px !important; padding: 3px 6px !important; }
+  .hdr { padding: 8px 10px !important; }
+  .hdr .logo img.logo-img, .hdr img.logo-img { width: 28px !important; height: auto !important; }
+  .hdr .ltx { font-size: 13px !important; line-height: 1.1; }
+  .hdr .lsb { font-size: 9px !important; line-height: 1.1; }
+  .hdr-right { gap: 4px !important; align-items: center; }
+  /* v1.36.6 : sur mobile, masquer les pills "En direct" et "Bureau" (nom user) pour libérer la place */
+  .live-badge, #user-name { display: none !important; }
+  /* Boutons cloches plus petits pour rentrer dans la largeur */
+  #btn-notif-bureau, #btn-alerts-bureau { width: 30px !important; height: 30px !important; font-size: 14px !important; }
+  /* Déconnexion réduite à une icône ⏻ sur mobile */
+  .btn-logout {
+    font-size: 0 !important;
+    padding: 0 !important;
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 50% !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-logout::before {
+    content: '⏻';
+    font-size: 15px;
+    color: #fff;
+  }
 
   /* Tabs : remplissent proprement l'écran, plus de max-width */
   .tabs { position: sticky !important; top: 0 !important; z-index: 99; }
@@ -846,7 +864,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.5</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.6</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -1984,6 +2002,23 @@ function toggleBureauNotif() {
   }).catch(() => {});
 }
 
+// v1.36.6 : prompt discret au login pour activer les notifications
+async function maybePromptBureauNotif() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission !== 'default') return;   // déjà accordé ou refusé
+  setTimeout(() => {
+    if (confirm('🔔 Activer les notifications ?\n\nVous serez averti quand un chauffeur vous écrit ou qu\'un chauffeur reste bloqué en attente de quai.')) {
+      Notification.requestPermission().then(async (result) => {
+        if (result !== 'granted') { showToast('Autorisation refusée.'); return; }
+        const ok = await subscribeBureauPush();
+        if (ok) showToast('🔔 Notifications activées ✓');
+        updateBureauNotifBadge();
+      }).catch(() => {});
+    }
+  }, 1500);
+}
+
 // v1.30 : demander la permission de notifier au premier chargement du dashboard
 async function initBureauNotifPermission() {
   if (!('Notification' in window)) return;
@@ -2944,31 +2979,68 @@ async function openFeuilleDeRoute(driverName, dateStr) {
   if (!window.supabaseClient) { showToast('Supabase non disponible.'); return; }
 
   try {
-    // 1. Récupérer toutes les missions du chauffeur pour la date donnée
-    // On cherche dans les archives + dans les missions actives
+    // v1.36.6 : la feuille de route est par SHIFT (dayStartTs), pas par jour calendrier.
+    // Un shift nuit 22h → 6h chevauche 2 dates calendrier — on doit tout regrouper.
+    // Stratégie : fetch les missions du chauffeur des 3 derniers jours, group by daystartts,
+    // et prendre le shift qui correspond à dateStr (ou le plus récent si dateStr=aujourd'hui).
+    const now = Date.now();
+    const fromIso = new Date(now - 72 * 3600 * 1000).toISOString(); // 3 jours de recul
     const { data: archiveData } = await window.supabaseClient
       .from('missions_archive').select('*')
-      .eq('driver', driverName).eq('date', dateStr);
+      .eq('driver', driverName)
+      .gte('daystartts', fromIso);
     const { data: activeData } = await window.supabaseClient
       .from('missions').select('*')
-      .eq('driver', driverName).eq('date', dateStr);
+      .eq('driver', driverName)
+      .gte('daystartts', fromIso);
 
-    // Fusion (préférer archive si les deux existent pour même id)
-    // v1.09d : normaliser l'id en string — missions stocke number, missions_archive stocke text,
-    // le Map traite "123" et 123 comme des clés différentes → duplication visible.
+    // Fusion + dédup
     const byId = new Map();
     (activeData || []).forEach(m => byId.set(String(m.id), m));
     (archiveData || []).forEach(m => byId.set(String(m.id), m));
-    const allMissions = Array.from(byId.values()).sort((a,b) => {
+    const merged = Array.from(byId.values());
+
+    if (!merged.length) {
+      showToast('Aucune mission trouvée pour ce chauffeur sur les 72 dernières heures. (Les pauses et tâches LCA seront visibles après la première mission de la journée.)');
+      return;
+    }
+
+    // Grouper par dayStartTs (= shift key)
+    const byShift = new Map();
+    merged.forEach(m => {
+      const key = m.daystartts || m.dayStartTs;
+      if (!key) return;
+      const arr = byShift.get(key) || [];
+      arr.push(m);
+      byShift.set(key, arr);
+    });
+    // Trier les shifts du plus récent au plus ancien
+    const shifts = Array.from(byShift.entries()).sort((a,b) =>
+      new Date(b[0]).getTime() - new Date(a[0]).getTime()
+    );
+
+    // Sélection du shift : celui dont la date CALENDAIRE de démarrage correspond à dateStr,
+    // sinon (si dateStr = aujourd'hui) prendre le shift le plus récent — utile car un shift nuit
+    // du 28/09 22h est encore "en cours" à 2h du 29/09.
+    const todayStr = new Date().toLocaleDateString('fr-BE');
+    let chosenShift = null;
+    for (const [key, missions] of shifts) {
+      const startDateStr = new Date(key).toLocaleDateString('fr-BE');
+      if (startDateStr === dateStr) { chosenShift = missions; break; }
+    }
+    // Fallback : si on demande "aujourd'hui" et qu'aucun shift ne matche, prendre le plus récent
+    if (!chosenShift && dateStr === todayStr && shifts.length) {
+      chosenShift = shifts[0][1];
+    }
+    if (!chosenShift) {
+      showToast('Aucun shift trouvé pour la date sélectionnée.');
+      return;
+    }
+    const allMissions = chosenShift.sort((a,b) => {
       const ta = a.daystartts ? new Date(a.daystartts).getTime() : 0;
       const tb = b.daystartts ? new Date(b.daystartts).getTime() : 0;
       return ta - tb;
     });
-
-    if (!allMissions.length) {
-      showToast('Aucune mission trouvée pour ce chauffeur à cette date. (Les pauses et tâches LCA seront visibles après la première mission de la journée.)');
-      return;
-    }
 
     // 2. Récupérer le compte chauffeur (full name, username)
     let accountInfo = { fullName: driverName, username: '' };
@@ -4223,10 +4295,9 @@ async function onAppReady() {
   await refreshBureauSettings();
   loadMessages();
   await fetchDrivers();
-  // v1.36.5 : ne PLUS demander automatiquement la permission au login
-  // (l'utilisateur active via le bouton cloche du header en click direct)
-  // initBureauNotifPermission();  ← désactivé
-  // v1.36.5 : mais on rafraîchit tout de même l'état de la cloche
+  // v1.36.6 : prompt notif au login (comme app chauffeur — un confirm() est un user gesture
+  // valide pour iOS PWA, donc requestPermission() marche derrière).
+  maybePromptBureauNotif();
   updateBureauNotifBadge();
   // v1.09 : rafraîchir toutes les 10s pour que la durée de pause s'incrémente visiblement
   // et pour rattraper un UPDATE Realtime manqué sur active_drivers.
