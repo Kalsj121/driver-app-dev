@@ -3019,16 +3019,23 @@ async function openFeuilleDeRoute(driverName, dateStr) {
       new Date(b[0]).getTime() - new Date(a[0]).getTime()
     );
 
-    // Sélection du shift : celui dont la date CALENDAIRE de démarrage correspond à dateStr,
-    // sinon (si dateStr = aujourd'hui) prendre le shift le plus récent — utile car un shift nuit
-    // du 28/09 22h est encore "en cours" à 2h du 29/09.
+    // Sélection du shift : plusieurs stratégies successives pour matcher au mieux
+    // 1) match sur daystartts converti en date locale
+    // 2) match sur le champ `date` de n'importe quelle mission du shift (couvre le cas timezone
+    //    où daystartts UTC = 22h se convertit en jour suivant en local, cf. shift nuit)
+    // 3) fallback aujourd'hui → prendre le shift le plus récent
     const todayStr = new Date().toLocaleDateString('fr-BE');
     let chosenShift = null;
     for (const [key, missions] of shifts) {
       const startDateStr = new Date(key).toLocaleDateString('fr-BE');
       if (startDateStr === dateStr) { chosenShift = missions; break; }
     }
-    // Fallback : si on demande "aujourd'hui" et qu'aucun shift ne matche, prendre le plus récent
+    if (!chosenShift) {
+      // v1.36.6b : matcher via le champ date d'une mission du shift
+      for (const [key, missions] of shifts) {
+        if (missions.some(m => m.date === dateStr)) { chosenShift = missions; break; }
+      }
+    }
     if (!chosenShift && dateStr === todayStr && shifts.length) {
       chosenShift = shifts[0][1];
     }
