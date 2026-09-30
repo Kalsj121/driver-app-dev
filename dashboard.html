@@ -481,12 +481,11 @@ textarea.fi{resize:vertical;min-height:72px;}
     <div id="active-drivers-table"><div class="empty"><p style="padding:8px 0;">Aucun chauffeur connecté.</p></div></div>
   </div>
 
-  <div class="settings-bar">
-    <label>⚠️ Alerte autres sites ></label>
-    <input type="number" id="thr-other" value="60" min="5"/>
-    <label>min &nbsp;·&nbsp; LCA sites ></label>
-    <input type="number" id="thr-lca" value="30" min="5"/>
-    <label>min</label>
+  <!-- v1.36.4 : inputs cachés — les vraies valeurs viennent de bureau_settings.
+       Le bouton Actualiser + heure MAJ restent visibles pour tous. -->
+  <div class="settings-bar" style="justify-content:flex-end;">
+    <input type="hidden" id="thr-other" value="60"/>
+    <input type="hidden" id="thr-lca"   value="30"/>
     <button class="btn-sm-act" onclick="fetchDrivers()">↺ Actualiser</button>
     <span style="font-size:11px;color:var(--t3);" id="last-refresh">Rafraîchissement auto toutes les 30s</span>
   </div>
@@ -598,6 +597,7 @@ textarea.fi{resize:vertical;min-height:72px;}
     <button class="acc-subtab" data-sub="bureau"  onclick="switchAccountsSub('bureau')"  style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;display:none;" id="acc-subtab-bureau">👥 Bureau</button>
     <button class="acc-subtab" data-sub="entities" onclick="switchAccountsSub('entities')" style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;display:none;" id="acc-subtab-entities">🏢 Entités</button>
     <button class="acc-subtab" data-sub="history" onclick="switchAccountsSub('history')" style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;display:none;" id="acc-subtab-history">📋 Historique</button>
+    <button class="acc-subtab" data-sub="settings" onclick="switchAccountsSub('settings')" style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;display:none;" id="acc-subtab-settings">⚙️ Paramètres</button>
   </div>
 
   <!-- SUB CHAUFFEURS -->
@@ -681,6 +681,28 @@ textarea.fi{resize:vertical;min-height:72px;}
     <div class="card">
       <div class="ctit">Entités existantes</div>
       <div id="entities-list"><div class="empty"><p>Chargement…</p></div></div>
+    </div>
+  </div>
+
+  <!-- SUB PARAMÈTRES (super_admin only) — v1.36.4 -->
+  <div id="acc-sub-settings" style="display:none;">
+    <div class="card">
+      <div class="ctit">⚠️ Seuils d'alerte « Attente quai »</div>
+      <p style="font-size:12px;color:var(--t2);margin-bottom:14px;">Une alerte apparaît sur le dashboard Temps réel quand un chauffeur reste en attente de quai plus longtemps que ces seuils.</p>
+      <div class="fg"><label class="fl">Sites LCA (LCA Nord, LCA Selys, …)</label>
+        <div style="display:flex;align-items:center;gap:8px;"><input class="fi" type="number" id="set-thr-lca" min="5" style="width:100px;"/><span style="font-size:13px;color:var(--t2);">minutes avant alerte</span></div>
+      </div>
+      <div class="fg"><label class="fl">Autres sites (WFS, Aviapartner, etc.)</label>
+        <div style="display:flex;align-items:center;gap:8px;"><input class="fi" type="number" id="set-thr-other" min="5" style="width:100px;"/><span style="font-size:13px;color:var(--t2);">minutes avant alerte</span></div>
+      </div>
+      <div class="fg" style="margin-bottom:0;">
+        <label class="fl">Liste des sites LCA (séparés par virgule)</label>
+        <input class="fi" type="text" id="set-lca-sites" placeholder="LCA Nord, LCA Selys"/>
+      </div>
+      <button class="btn bp" style="margin-top:14px;" onclick="saveBureauSettings()">💾 Enregistrer les paramètres</button>
+    </div>
+    <div class="card" style="background:var(--blt);border-color:var(--blue);">
+      <p style="font-size:13px;color:var(--bdk);margin:0;">💡 Les valeurs sont partagées entre tous les comptes bureau. Seuls les super administrateurs peuvent les modifier depuis cet écran.</p>
     </div>
   </div>
 
@@ -822,7 +844,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.3</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.4</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -1215,7 +1237,10 @@ setTimeout(() => { adjustHdrHeight(); adjustMsgViewTop(); }, 100);
 // ============================================================
 // CONSTANTS
 // ============================================================
-const LCA_SITES = ['LCA Nord','LCA Selys'];
+// v1.36.4 : LCA_SITES devient variable — sync avec bureau_settings.lca_sites
+let LCA_SITES = ['LCA Nord','LCA Selys'];
+// Getter compatible : renvoie la liste dynamique si window._LCA_SITES est set
+function getLcaSites() { return Array.isArray(window._LCA_SITES) ? window._LCA_SITES : LCA_SITES; }
 const STEP_LABELS = ['En attente d\'instructions','Attente quai','Quai attribué','À quai','En opération','Opération terminée','CMR reçu','En transit','En pause','Tâches LCA'];
 
 function getStepLabel(d) {
@@ -1546,7 +1571,7 @@ function dismissCard(userId) {
 function renderDashboard() {
   const thrOther = parseInt(document.getElementById('thr-other').value)||60;
   const thrLCA   = parseInt(document.getElementById('thr-lca').value)||30;
-  function thr(loc) { return LCA_SITES.includes(loc) ? thrLCA : thrOther; }
+  function thr(loc) { return getLcaSites().includes(loc) ? thrLCA : thrOther; }
   document.getElementById('s-active').textContent  = drivers.length;
   document.getElementById('s-transit').textContent = drivers.filter(d=>d.step==7).length;
   document.getElementById('s-wait').textContent    = drivers.filter(d=>d.step==1).length;
@@ -1558,7 +1583,7 @@ function renderDashboard() {
   const alertDs = drivers.filter(d => d.step==1&&d.ts_arrival&&elapsed(d.ts_arrival)>=thr(d.location));
   az.innerHTML = alertDs.map(d => {
     const w=elapsed(d.ts_arrival), t=thr(d.location);
-    return `<div class="alert-item"><span style="font-size:15px;">⚠️</span><span class="alert-txt">${d.driver_name} — ${d.location} : attente quai > ${t} min${LCA_SITES.includes(d.location)?' (LCA)':''}</span><span class="alert-dur">${w} min</span><button class="bsm bo" style="cursor:pointer;border:1px solid var(--b2);border-radius:6px;padding:5px 10px;font-size:12px;background:none;margin-left:8px;" onclick="quickMsg('${d.driver_name}')">💬 Message</button></div>`;
+    return `<div class="alert-item"><span style="font-size:15px;">⚠️</span><span class="alert-txt">${d.driver_name} — ${d.location} : attente quai > ${t} min${getLcaSites().includes(d.location)?' (LCA)':''}</span><span class="alert-dur">${w} min</span><button class="bsm bo" style="cursor:pointer;border:1px solid var(--b2);border-radius:6px;padding:5px 10px;font-size:12px;background:none;margin-left:8px;" onclick="quickMsg('${d.driver_name}')">💬 Message</button></div>`;
   }).join('');
 
   const grid = document.getElementById('driver-grid');
@@ -1649,7 +1674,7 @@ function liveTick() {
   const thrOther=parseInt(document.getElementById('thr-other').value)||60;
   const thrLCA=parseInt(document.getElementById('thr-lca').value)||30;
   drivers.forEach(d=>{
-    const step=parseInt(d.step)||0, thr=LCA_SITES.includes(d.location)?thrLCA:thrOther;
+    const step=parseInt(d.step)||0, thr=getLcaSites().includes(d.location)?thrLCA:thrOther;
     if(step===1&&d.ts_arrival){const w=e(d.ts_arrival);up('tw-'+d.user_id,dur(w),w>=thr?'tv-r':w>=thr*.7?'tv-a':'tv-b');}
     if(step===2&&d.ts_dock_assigned)up('tdk-'+d.user_id,dur(e(d.ts_dock_assigned)));
     if((step===4||step===5)&&d.ts_ops_start){const op=e(d.ts_ops_start);up('top-'+d.user_id,dur(op),op>60?'tv-r':op>30?'tv-a':'tv-b');}
@@ -2842,7 +2867,7 @@ async function openFeuilleDeRoute(driverName, dateStr) {
     });
 
     if (!allMissions.length) {
-      showToast('Aucune mission trouvée pour ce chauffeur à cette date.');
+      showToast('Aucune mission trouvée pour ce chauffeur à cette date. (Les pauses et tâches LCA seront visibles après la première mission de la journée.)');
       return;
     }
 
@@ -3115,7 +3140,7 @@ function dlCSV(content, filename) {
 // v1.33 : SUB-TABS de la page Comptes + gestion Bureau + Historique
 // ============================================================
 function switchAccountsSub(sub) {
-  ['drivers','bureau','entities','history'].forEach(s => {
+  ['drivers','bureau','entities','history','settings'].forEach(s => {
     const div = document.getElementById('acc-sub-'+s);
     const btn = document.querySelector('.acc-subtab[data-sub="'+s+'"]');
     if (div) div.style.display = (s === sub) ? '' : 'none';
@@ -3124,9 +3149,10 @@ function switchAccountsSub(sub) {
       else           { btn.style.color = 'var(--t2)';    btn.style.borderBottomColor = 'transparent'; }
     }
   });
-  if (sub === 'bureau')   loadBureauAccounts();
-  if (sub === 'entities') loadEntitiesList();
-  if (sub === 'history')  loadLoginHistory();
+  if (sub === 'bureau')    loadBureauAccounts();
+  if (sub === 'entities')  loadEntitiesList();
+  if (sub === 'history')   loadLoginHistory();
+  if (sub === 'settings')  loadBureauSettingsUI();
 }
 
 // ============================================================
@@ -3137,9 +3163,11 @@ async function loadAccounts() {
   const subBureau   = document.getElementById('acc-subtab-bureau');
   const subEntities = document.getElementById('acc-subtab-entities');
   const subHistory  = document.getElementById('acc-subtab-history');
+  const subSettings = document.getElementById('acc-subtab-settings');
   if (subBureau)   subBureau.style.display   = isSuperAdmin() ? '' : 'none';
   if (subEntities) subEntities.style.display = isSuperAdmin() ? '' : 'none';
   if (subHistory)  subHistory.style.display  = isSuperAdmin() ? '' : 'none';
+  if (subSettings) subSettings.style.display = isSuperAdmin() ? '' : 'none';
   // v1.34 : rafraîchir la liste d'entités pour le dropdown de création chauffeur
   await refreshEntitiesList();
   const sel = document.getElementById('acc-entity');
@@ -3550,6 +3578,79 @@ async function deleteBureauAccount(username) {
     showToast('Compte '+username+' supprimé ✓');
     loadBureauAccounts();
   } catch(e) { showToast('Erreur : '+e.message); }
+}
+
+// ============================================================
+// v1.36.4 : PARAMÈTRES BUREAU (bureau_settings — super_admin uniquement)
+// ============================================================
+async function refreshBureauSettings() {
+  if (!window.supabaseClient) return;
+  try {
+    const { data } = await window.supabaseClient.from('bureau_settings').select('*');
+    const map = {};
+    (data || []).forEach(r => { map[r.key] = r.value; });
+    // Appliquer les seuils dans les inputs cachés du dashboard
+    const thrOther = map['alert_threshold_other'];
+    const thrLca   = map['alert_threshold_lca'];
+    const lcaSites = map['lca_sites'];
+    if (thrOther != null) {
+      const el = document.getElementById('thr-other');
+      if (el) el.value = String(thrOther);
+    }
+    if (thrLca != null) {
+      const el = document.getElementById('thr-lca');
+      if (el) el.value = String(thrLca);
+    }
+    if (Array.isArray(lcaSites)) {
+      // remplace la constante globale
+      window._LCA_SITES = lcaSites;
+    }
+    console.log('[Settings] chargés depuis Supabase:', map);
+  } catch(e) { console.warn('[Settings] load failed:', e.message); }
+}
+
+async function loadBureauSettingsUI() {
+  if (!isSuperAdmin()) return;
+  if (!window.supabaseClient) return;
+  try {
+    const { data } = await window.supabaseClient.from('bureau_settings').select('*');
+    const map = {};
+    (data || []).forEach(r => { map[r.key] = r.value; });
+    const setLca = document.getElementById('set-thr-lca');
+    const setOther = document.getElementById('set-thr-other');
+    const setSites = document.getElementById('set-lca-sites');
+    if (setLca)   setLca.value   = (map['alert_threshold_lca']   != null) ? String(map['alert_threshold_lca'])   : '30';
+    if (setOther) setOther.value = (map['alert_threshold_other'] != null) ? String(map['alert_threshold_other']) : '60';
+    if (setSites) setSites.value = Array.isArray(map['lca_sites']) ? map['lca_sites'].join(', ') : 'LCA Nord, LCA Selys';
+  } catch(e) { showToast('Erreur chargement paramètres : ' + e.message); }
+}
+
+async function saveBureauSettings() {
+  if (!isSuperAdmin()) { showToast('Réservé aux super administrateurs.'); return; }
+  if (!window.supabaseClient) return;
+  const thrLca   = parseInt(document.getElementById('set-thr-lca').value) || 30;
+  const thrOther = parseInt(document.getElementById('set-thr-other').value) || 60;
+  const sitesStr = (document.getElementById('set-lca-sites').value || '').trim();
+  const sites = sitesStr.split(',').map(s => s.trim()).filter(Boolean);
+  if (thrLca < 5 || thrOther < 5) { showToast('Seuils minimum : 5 minutes.'); return; }
+  if (!sites.length) { showToast('Renseignez au moins un site LCA.'); return; }
+  try {
+    const nowIso = new Date().toISOString();
+    const updatedBy = currentUser?.username || '';
+    const upserts = [
+      { key: 'alert_threshold_lca',   value: thrLca,   updated_at: nowIso, updated_by: updatedBy },
+      { key: 'alert_threshold_other', value: thrOther, updated_at: nowIso, updated_by: updatedBy },
+      { key: 'lca_sites',             value: sites,    updated_at: nowIso, updated_by: updatedBy }
+    ];
+    for (const u of upserts) {
+      await window.supabaseClient.from('bureau_settings').upsert([u], { onConflict: 'key' });
+    }
+    showToast('Paramètres enregistrés ✓');
+    // Appliquer immédiatement
+    await refreshBureauSettings();
+    // Re-render alertes avec nouveaux seuils
+    if (typeof renderDashboard === 'function') renderDashboard();
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 
 // ============================================================
@@ -4019,6 +4120,8 @@ async function onAppReady() {
   // v1.34 : recharger caches entités + mapping chauffeur→entité avant tout render
   await refreshEntitiesList();
   await refreshDriverEntityCache();
+  // v1.36.4 : charger les paramètres bureau (seuils d'alerte, liste sites LCA)
+  await refreshBureauSettings();
   loadMessages();
   await fetchDrivers();
   // v1.30 : demander la permission de notifier au premier rendu du bureau
