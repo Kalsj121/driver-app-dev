@@ -577,33 +577,47 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- ============================================================ REPORTS -->
 <div class="view" id="view-reports">
 <div class="page">
-  <div class="card">
-    <div class="ctit">Rapports & Exports</div>
-    <p style="font-size:13px;color:var(--t2);margin-bottom:14px;">Exportez les données archivées en CSV ou accédez aux rapports détaillés.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn bo bsm" onclick="exportArchiveCSV()">📥 Exporter archives CSV</button>
-      <button class="btn bo bsm" onclick="exportMsgsCSV()">📥 Exporter messages CSV</button>
-      <button class="btn bo bsm" onclick="window.open('index.html#manager')">Ouvrir vue Manager</button>
+  <!-- v1.36.7 : sub-tabs Missions / Feuilles de route -->
+  <div style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--b1);">
+    <button class="rep-subtab on" data-sub="missions" onclick="switchReportsSub('missions')" style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid var(--blue);color:var(--blue);font-size:14px;font-weight:500;cursor:pointer;">🚛 Missions</button>
+    <button class="rep-subtab" data-sub="shifts" onclick="switchReportsSub('shifts')" style="flex:0 0 auto;padding:9px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-size:14px;font-weight:500;cursor:pointer;">📄 Feuilles de route</button>
+  </div>
+
+  <!-- SUB MISSIONS : liste + exports (sans bouton feuille par mission) -->
+  <div id="rep-sub-missions">
+    <div class="card">
+      <div class="ctit">Exports</div>
+      <p style="font-size:13px;color:var(--t2);margin-bottom:14px;">Exportez les données archivées.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn bo bsm" onclick="exportArchiveCSV()">📥 Exporter archives CSV</button>
+        <button class="btn bo bsm" onclick="exportMsgsCSV()">📥 Exporter messages CSV</button>
+      </div>
+    </div>
+    <div id="report-summary" class="card">
+      <div class="ctit">Missions archivées</div>
+      <div id="archive-search" style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+        <div style="position:relative;flex:1;min-width:260px;">
+          <input id="archive-search-input" type="search" autocomplete="off"
+            placeholder="🔎 Rechercher AWB, ULD ou PMC (ex: 123-4567 8901, PMC-8712-XF)"
+            style="width:100%;padding:9px 36px 9px 12px;font-size:13px;border:1px solid var(--b2);border-radius:var(--rmd);background:var(--subcard);color:var(--t1);"
+            oninput="onArchiveSearchInput()" onkeydown="if(event.key==='Escape'){this.value='';onArchiveSearchInput();}"/>
+          <button id="archive-search-clear" onclick="clearArchiveSearch()"
+            title="Effacer la recherche"
+            style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--t3);font-size:16px;cursor:pointer;padding:4px 8px;">×</button>
+        </div>
+        <div id="archive-search-status" style="font-size:12px;color:var(--t2);min-width:180px;"></div>
+      </div>
+      <div id="archive-list"><div class="empty"><p>Chargement…</p></div></div>
     </div>
   </div>
-  <div id="report-summary" class="card">
-    <div class="ctit">Missions archivées</div>
 
-    <!-- v1.11 : recherche par AWB / ULD / PMC -->
-    <div id="archive-search" style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
-      <div style="position:relative;flex:1;min-width:260px;">
-        <input id="archive-search-input" type="search" autocomplete="off"
-          placeholder="🔎 Rechercher AWB, ULD ou PMC (ex: 123-4567 8901, PMC-8712-XF)"
-          style="width:100%;padding:9px 36px 9px 12px;font-size:13px;border:1px solid var(--b2);border-radius:var(--rmd);background:var(--subcard);color:var(--t1);"
-          oninput="onArchiveSearchInput()" onkeydown="if(event.key==='Escape'){this.value='';onArchiveSearchInput();}"/>
-        <button id="archive-search-clear" onclick="clearArchiveSearch()"
-          title="Effacer la recherche"
-          style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--t3);font-size:16px;cursor:pointer;padding:4px 8px;">×</button>
-      </div>
-      <div id="archive-search-status" style="font-size:12px;color:var(--t2);min-width:180px;"></div>
+  <!-- SUB FEUILLES DE ROUTE : liste des shifts (1 shift = 1 démarrage journée) -->
+  <div id="rep-sub-shifts" style="display:none;">
+    <div class="card">
+      <div class="ctit">Feuilles de route par shift</div>
+      <p style="font-size:13px;color:var(--t2);margin-bottom:14px;">Une feuille par shift (chaque « Démarrer ma journée » du chauffeur, indépendamment de la date calendrier).</p>
+      <div id="shifts-list"><div class="empty"><p>Chargement…</p></div></div>
     </div>
-
-    <div id="archive-list"><div class="empty"><p>Chargement…</p></div></div>
   </div>
 </div>
 </div>
@@ -864,7 +878,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.6</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.7</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -1221,7 +1235,7 @@ function switchView(v) {
     if(view) view.classList.toggle('on', id===v);
   });
   if (v === 'messages') { adjustMsgViewTop(); renderMessages(); }
-  if (v === 'reports')  loadArchiveList();
+  if (v === 'reports')  { loadArchiveList(); switchReportsSub('missions'); }
   if (v === 'accounts') loadAccounts();
   if (v === 'vehicles') loadVehicles();
   if (v === 'backups')  loadBackupSummary();
@@ -2634,7 +2648,6 @@ function renderArchiveTable(container, missions, matchMap) {
         <td>${g.stopsCount}</td>
         <td>${dur}</td>
         <td style="white-space:nowrap;">
-          <button onclick="openFeuilleDeRoute('${drv}','${dt}')" style="padding:4px 8px;font-size:11px;font-weight:600;border:1px solid var(--b2);border-radius:6px;background:none;color:var(--blue);cursor:pointer;margin-right:4px;" title="Télécharger feuille de route du jour">📄 Feuille</button>
           ${atchBtn}${noCmrBtn}${delBtns}
         </td>
       </tr>${matchRow}`;
@@ -3116,27 +3129,26 @@ function buildFeuilleDeRouteHTML(allMissions, pauses, driver, dateStr, lcaTasks)
   const dateLabel = dateObj.toLocaleDateString('fr-BE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const getMs = v => !v ? null : (typeof v === 'number' ? v : new Date(v).getTime());
 
+  // v1.36.7 : chaque mission a UNIQUEMENT une petite ligne "Instruction reçue"
+  // + son tableau de stops. Les infos globales (tracteur, remorque, début/fin journée)
+  // sont dans le header du document, plus dupliquées par mission.
   let missionsHTML = '';
   allMissions.forEach((m, mi) => {
-    const tracteur = m.plateTracteur || m.plate || '—';
-    const remorque = m.plateRemorque || m.plate_remorque || '—';
-    const startMs = getMs(m.daystartts || m.dayStartTs);
-    const endMs   = getMs(m.dayendts   || m.dayEndTs);
     const dispatchNotifMs = getMs(m.tDispatchNotified);
     const dispatchRecMs   = getMs(m.tDispatchReceived);
-    const dispatchWait = (dispatchNotifMs && dispatchRecMs) ? durF(Math.round((dispatchRecMs - dispatchNotifMs)/60000)) : '—';
+    const dispatchInfoLine = dispatchRecMs
+      ? `<div class="miss-info">Instruction reçue à <b>${tsF(dispatchRecMs)}</b>${dispatchNotifMs ? ' · Notifiée à ' + tsF(dispatchNotifMs) : ''}${dispatchNotifMs && dispatchRecMs ? ' · Attente ' + durF(Math.round((dispatchRecMs - dispatchNotifMs)/60000)) : ''}</div>`
+      : '';
     const stops = (m.stops || []);
     const stopsRows = stops.map((s,si) => {
       const arr  = getMs(s.tArrival);
       const docT = getMs(s.tDoc);
-      const opsS = getMs(s.tOpsStart);
       const total = (arr && docT) ? Math.round((docT - arr)/60000) : null;
       const cargoStr = (s.cargo||[]).map(c=>{
         if (c.type==='uld')   return c.uld||'ULD';
-        if (c.type==='autre') return c.description||'Autre';    // v1.35
+        if (c.type==='autre') return c.description||'Autre';
         return (c.pieces||'')+'pc '+(c.awb||'');
       }).join(', ')||'—';
-      // v1.12 : statut CMR — ✓ présent, ⚠️ sans PJ + raison, ou —
       let cmrStatusCell = '—';
       if (hasCmr(s)) {
         cmrStatusCell = '<span style="color:#0f6e56;font-weight:600;">✓ PJ</span>';
@@ -3153,13 +3165,8 @@ function buildFeuilleDeRouteHTML(allMissions, pauses, driver, dateStr, lcaTasks)
         <td>${cmrStatusCell}</td>
         <td>${s.comment||'—'}</td></tr>`;
     }).join('');
-    const dayDur = (startMs && endMs) ? durF(Math.round((endMs - startMs)/60000)) : '—';
     missionsHTML += `<div class="mb"><h3>Mission ${mi+1}</h3>
-      <table class="it">
-        <tr><td><b>Tracteur</b></td><td>${tracteur}</td><td><b>Remorque</b></td><td>${remorque}</td></tr>
-        <tr><td><b>Démarrage</b></td><td>${tsF(startMs)}</td><td><b>Fin</b></td><td>${endMs?tsF(endMs):'—'}</td></tr>
-        <tr><td><b>Attente instruction</b></td><td>${dispatchWait}</td><td><b>Durée mission</b></td><td>${dayDur}</td></tr>
-      </table>
+      ${dispatchInfoLine}
       ${stopsRows ? `<table class="st"><thead><tr><th>#</th><th>Lieu</th><th>Opération</th><th>Arrivée</th><th>Quai</th><th>Att.quai</th><th>Déb.opé</th><th>Dur.opé</th><th>CMR</th><th>Total</th><th>Fret</th><th>PJ</th><th>Commentaire</th></tr></thead><tbody>${stopsRows}</tbody></table>` : '<p style="color:#888;font-style:italic;font-size:11px;">Aucun stop.</p>'}
     </div>`;
   });
@@ -3199,6 +3206,9 @@ function buildFeuilleDeRouteHTML(allMissions, pauses, driver, dateStr, lcaTasks)
   const firstStart = getMs(firstM?.daystartts || firstM?.dayStartTs);
   const lastEnd    = getMs(lastM?.dayendts   || lastM?.dayEndTs);
   const totalDay = (firstStart && lastEnd) ? durF(Math.round((lastEnd - firstStart)/60000)) : '—';
+  // v1.36.7 : infos globales dans le header (tracteur/remorque du premier mission)
+  const shiftTracteur = firstM?.plateTracteur || firstM?.plate || '—';
+  const shiftRemorque = firstM?.plateRemorque || firstM?.plate_remorque || '—';
   const totalStops = allMissions.reduce((a,m)=>a+(m.stops||[]).length,0);
   const totalPausesMin = pauses.reduce((a,p)=>a+(p.minPause||p.min_pause||0),0);
 
@@ -3221,6 +3231,7 @@ h3{font-size:13px;font-weight:700;color:#1a5c6e;margin:16px 0 8px;border-bottom:
 .st td{padding:4px;border:1px solid #e0e0e0;}
 .st tr:nth-child(even) td{background:#f9f9f9;}
 .mb{margin-bottom:22px;page-break-inside:avoid;}
+.miss-info{font-size:11px;color:#555;margin:4px 0 8px;font-style:italic;}
 .sum{background:#f0f8fb;border:1px solid #4da9be;border-radius:6px;padding:12px 16px;margin-top:18px;}
 .sum div{margin-bottom:4px;}
 .sum b{display:inline-block;width:180px;}
@@ -3245,6 +3256,10 @@ h3{font-size:13px;font-weight:700;color:#1a5c6e;margin:16px 0 8px;border-bottom:
   <div class="hdr-r">
     <div><b>Chauffeur :</b> ${driver.fullName||driver.username||'—'}</div>
     <div><b>Identifiant :</b> ${driver.username||'—'}</div>
+    <div><b>Tracteur :</b> ${shiftTracteur}</div>
+    <div><b>Remorque :</b> ${shiftRemorque}</div>
+    <div><b>Début journée :</b> ${firstStart ? tsF(firstStart) : '—'}</div>
+    <div><b>Fin journée :</b> ${lastEnd ? tsF(lastEnd) : '—'}</div>
     <div><b>Durée totale :</b> ${totalDay}</div>
     <div style="margin-top:6px;font-size:10px;color:#999;">Généré le ${new Date().toLocaleString('fr-BE')}</div>
   </div>
@@ -3317,6 +3332,92 @@ function dlCSV(content, filename) {
 // ============================================================
 // v1.33 : SUB-TABS de la page Comptes + gestion Bureau + Historique
 // ============================================================
+// ============================================================
+// v1.36.7 : SUB-TABS Rapports (Missions / Feuilles de route)
+// ============================================================
+function switchReportsSub(sub) {
+  ['missions','shifts'].forEach(s => {
+    const div = document.getElementById('rep-sub-'+s);
+    const btn = document.querySelector('.rep-subtab[data-sub="'+s+'"]');
+    if (div) div.style.display = (s === sub) ? '' : 'none';
+    if (btn) {
+      if (s === sub) { btn.style.color = 'var(--blue)'; btn.style.borderBottomColor = 'var(--blue)'; }
+      else           { btn.style.color = 'var(--t2)';    btn.style.borderBottomColor = 'transparent'; }
+    }
+  });
+  if (sub === 'shifts') loadShiftsList();
+}
+
+// Charge la liste des shifts (groupement par (driver, daystartts))
+async function loadShiftsList() {
+  const container = document.getElementById('shifts-list');
+  if (!container || !window.supabaseClient) return;
+  container.innerHTML = '<div class="empty"><p>Chargement…</p></div>';
+  try {
+    const { data: archiveData } = await window.supabaseClient.from('missions_archive').select('*').order('daystartts', { ascending: false }).limit(500);
+    const { data: activeData }  = await window.supabaseClient.from('missions').select('*').order('daystartts', { ascending: false }).limit(500);
+    const byId = new Map();
+    (activeData || []).forEach(m => byId.set(String(m.id), m));
+    (archiveData || []).forEach(m => byId.set(String(m.id), m));
+    const all = Array.from(byId.values());
+    // v1.34 : filtrer selon allowed_entities du user courant
+    const filtered = all.filter(m => canCurrentUserSeeDriver(m.driver));
+    // Grouper par (driver, daystartts)
+    const shiftMap = new Map();  // key = driver + '|' + daystartts → { driver, daystartts, dayendts, missions, totalStops }
+    filtered.forEach(m => {
+      const key = (m.driver || '?') + '|' + (m.daystartts || '');
+      if (!shiftMap.has(key)) {
+        shiftMap.set(key, {
+          driver:     m.driver,
+          daystartts: m.daystartts,
+          dayendts:   m.dayendts,
+          missions:   [],
+          totalStops: 0
+        });
+      }
+      const s = shiftMap.get(key);
+      s.missions.push(m);
+      s.totalStops += (m.stops || []).length;
+      // Prendre le dayendts le plus tardif si plusieurs missions
+      if (m.dayendts && (!s.dayendts || new Date(m.dayendts) > new Date(s.dayendts))) s.dayendts = m.dayendts;
+    });
+    const shifts = Array.from(shiftMap.values()).sort((a,b) =>
+      new Date(b.daystartts).getTime() - new Date(a.daystartts).getTime()
+    );
+    if (!shifts.length) {
+      container.innerHTML = '<div class="empty"><p>Aucune feuille de route à afficher.</p></div>';
+      return;
+    }
+    const fmtDate = ts => {
+      if (!ts) return '—';
+      return new Date(ts).toLocaleDateString('fr-BE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+    const fmtDur = (msMin) => {
+      if (msMin == null || isNaN(msMin)) return '—';
+      if (msMin < 60) return msMin + ' min';
+      return Math.floor(msMin/60) + 'h' + String(msMin%60).padStart(2, '0');
+    };
+    container.innerHTML = '<table class="reg-table" style="width:100%;"><thead><tr><th>Date de démarrage</th><th>Chauffeur</th><th>Missions</th><th>Stops</th><th>Durée</th><th style="text-align:right;">Action</th></tr></thead><tbody>'
+      + shifts.map(s => {
+        const dateStr = fmtDate(s.daystartts);
+        const ms = s.daystartts && s.dayendts ? Math.round((new Date(s.dayendts).getTime() - new Date(s.daystartts).getTime())/60000) : null;
+        const safeDriver = (s.driver||'').replace(/'/g, "\\'");
+        return `<tr>
+          <td><strong>${dateStr}</strong></td>
+          <td>${s.driver||'—'}</td>
+          <td>${s.missions.length}</td>
+          <td>${s.totalStops}</td>
+          <td>${fmtDur(ms)}</td>
+          <td style="text-align:right;">
+            <button onclick="openFeuilleDeRoute('${safeDriver}','${dateStr}')" style="padding:5px 12px;font-size:12px;font-weight:600;border:1px solid var(--blue);border-radius:6px;background:none;color:var(--blue);cursor:pointer;">📄 Feuille</button>
+          </td>
+        </tr>`;
+      }).join('') + '</tbody></table>';
+  } catch(e) {
+    container.innerHTML = '<div class="empty"><p>Erreur : '+e.message+'</p></div>';
+  }
+}
+
 function switchAccountsSub(sub) {
   ['drivers','bureau','entities','history','settings'].forEach(s => {
     const div = document.getElementById('acc-sub-'+s);
