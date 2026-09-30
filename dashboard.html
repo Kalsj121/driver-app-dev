@@ -589,8 +589,8 @@ textarea.fi{resize:vertical;min-height:72px;}
       <div class="ctit">Exports</div>
       <p style="font-size:13px;color:var(--t2);margin-bottom:14px;">Exportez les données archivées.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn bo bsm" onclick="exportArchiveCSV()">📥 Exporter archives CSV</button>
-        <button class="btn bo bsm" onclick="exportMsgsCSV()">📥 Exporter messages CSV</button>
+        <button class="btn bo bsm" style="min-width:220px;flex:0 0 auto;" onclick="exportArchiveCSV()">📥 Exporter archives CSV</button>
+        <button class="btn bo bsm" style="min-width:220px;flex:0 0 auto;" onclick="exportMsgsCSV()">📥 Exporter messages CSV</button>
       </div>
     </div>
     <div id="report-summary" class="card">
@@ -691,7 +691,7 @@ textarea.fi{resize:vertical;min-height:72px;}
       </div>
       <div class="fg" style="margin-bottom:0;">
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
-          <input type="checkbox" id="bacc-superadmin"/> Super Administrateur (accès total + gestion des comptes)
+          <input type="checkbox" id="bacc-superadmin" onchange="toggleBaccSuper()"/> Super Administrateur (accès total + gestion des comptes)
         </label>
       </div>
       <button class="btn bp" style="margin-top:12px;" onclick="createBureauAccount()">Créer le compte bureau</button>
@@ -878,7 +878,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.7</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.8</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -2618,7 +2618,12 @@ function renderArchiveTable(container, missions, matchMap) {
         const payload = encodeURIComponent(JSON.stringify({ driver: g.driver, date: g.date, items: g.noCmrItems }));
         noCmrBtn = `<button onclick="openNoCmrReasonsModal('${payload}')" style="padding:4px 8px;font-size:11px;font-weight:600;border:1px solid rgba(180,83,9,0.4);border-radius:6px;background:rgba(253,230,138,0.35);color:#92400e;cursor:pointer;margin-right:4px;" title="Consulter les raisons d'absence de pièce jointe">⚠️ ${nb} sans PJ</button>`;
       }
-      const delBtns = g.missionIds.map(id => `<button class="del-btn" onclick="deleteArchiveMission(${id})" title="Supprimer mission #${id}" style="margin-left:2px;">✕</button>`).join('');
+      // v1.36.8 : suppression réservée au super_admin + un seul bouton par ligne
+      let delBtns = '';
+      if (isSuperAdmin()) {
+        const idsPayload = encodeURIComponent(JSON.stringify(g.missionIds));
+        delBtns = `<button class="del-btn" onclick="openDeleteMissionsPicker('${idsPayload}','${drv}','${dt}')" title="Supprimer une mission (super admin)" style="margin-left:6px;">🗑</button>`;
+      }
 
       // v1.11 : sous-ligne "Correspondance" quand la recherche est active
       let matchRow = '';
@@ -3275,7 +3280,37 @@ ${missionsHTML}${pausesHTML}${lcaTasksHTML}
 </body></html>`;
 }
 
+// v1.36.8 : picker de suppression missions (super_admin only)
+function openDeleteMissionsPicker(payload, driverName, dateStr) {
+  if (!isSuperAdmin()) { showToast('Suppression réservée aux super administrateurs.'); return; }
+  let ids = [];
+  try { ids = JSON.parse(decodeURIComponent(payload)); } catch(e) { ids = []; }
+  if (!ids.length) { showToast('Aucune mission à supprimer.'); return; }
+  if (ids.length === 1) {
+    if (confirm('Supprimer cette mission archivée (#' + ids[0] + ') ?\n\nChauffeur : ' + driverName + '\nDate : ' + dateStr)) {
+      deleteArchiveMission(ids[0]);
+    }
+    return;
+  }
+  // Plusieurs missions : petit overlay avec la liste
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--card);border-radius:12px;max-width:440px;width:100%;padding:20px;box-shadow:0 12px 48px rgba(0,0,0,0.4);';
+  box.innerHTML = '<h3 style="margin:0 0 8px;font-size:16px;">🗑 Supprimer une mission</h3>'
+    + '<p style="font-size:12px;color:var(--t2);margin-bottom:12px;">'+driverName+' — '+dateStr+' ('+ids.length+' missions dans ce shift)</p>'
+    + '<div style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">'
+    + ids.map((id,i) => `<button class="btn bo bsm" style="margin:0;text-align:left;" onclick="if(confirm('Supprimer la mission #${id} ?')){document.getElementById('_delmiss-overlay').remove();deleteArchiveMission(${id});}">Mission #${i+1} (id ${id})</button>`).join('')
+    + '</div>'
+    + '<div style="text-align:right;margin-top:12px;"><button class="btn bo bsm" style="margin:0;" onclick="document.getElementById(\'_delmiss-overlay\').remove();">Annuler</button></div>';
+  overlay.id = '_delmiss-overlay';
+  overlay.appendChild(box);
+  overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
 async function deleteArchiveMission(id) {
+  if (!isSuperAdmin()) { showToast('Suppression réservée aux super administrateurs.'); return; }
   if (!confirm('Supprimer cette mission archivée ?')) return;
   if (window.supabaseClient) {
     try {
@@ -3706,6 +3741,19 @@ function escapeHtml(s) {
 // ============================================================
 // v1.33 : BUREAU ACCOUNTS (super_admin uniquement)
 // ============================================================
+// v1.36.8 : quand Super Admin coché → pré-coche + grise toutes les vues dans le form création
+function toggleBaccSuper() {
+  const sup = document.getElementById('bacc-superadmin');
+  const wrap = document.getElementById('bacc-views');
+  if (!sup || !wrap) return;
+  const checked = sup.checked;
+  wrap.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    if (checked) { cb.checked = true; cb.disabled = true; }
+    else         { cb.disabled = false; }
+  });
+  wrap.style.opacity = checked ? '0.55' : '1';
+}
+
 function generateBureauPassword() {
   if (!window.generateStrongPassword) { showToast('Helper non chargé.'); return; }
   const p = window.generateStrongPassword(16);
@@ -3760,7 +3808,8 @@ async function createBureauAccount() {
     document.getElementById('bacc-role').value = '';
     document.getElementById('bacc-pass').value = '';
     document.getElementById('bacc-superadmin').checked = false;
-    document.querySelectorAll('#bacc-views input[type=checkbox]').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#bacc-views input[type=checkbox]').forEach(cb => { cb.checked = false; cb.disabled = false; });
+    const bv = document.getElementById('bacc-views'); if (bv) bv.style.opacity = '1';
     document.querySelectorAll('#bacc-entities input[type=checkbox]').forEach(cb => cb.checked = false);
     loadBureauAccounts();
   } catch(e) { showToast('Erreur : ' + e.message); }
@@ -3794,25 +3843,32 @@ async function loadBureauAccounts() {
         if (typeof ents === 'string') { try { ents = JSON.parse(ents); } catch(_) { ents = []; } }
         if (!Array.isArray(ents)) ents = [];
         const isSuper = a.role === 'super_admin';
+        // v1.36.8 : badges vues sur plusieurs lignes (flex-wrap) pour éviter la file interminable
         const badges = isSuper
-          ? '<span style="background:var(--amber);color:#fff;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;">SUPER ADMIN</span>'
-          : (Array.isArray(views) ? views.map(v => '<span style="background:var(--subcard);border:1px solid var(--b1);padding:1px 5px;border-radius:3px;font-size:10px;margin-right:3px;">'+v+'</span>').join('') : '');
+          ? '<span style="background:var(--amber);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">SUPER ADMIN</span>'
+          : (Array.isArray(views) && views.length
+              ? '<div style="display:flex;flex-wrap:wrap;gap:3px;max-width:220px;">' + views.map(v => '<span style="background:var(--subcard);border:1px solid var(--b1);padding:1px 5px;border-radius:3px;font-size:10px;">'+v+'</span>').join('') + '</div>'
+              : '');
         const entBadges = isSuper
           ? '<span style="font-size:11px;color:var(--t3);">— toutes —</span>'
           : (ents.length === 0
               ? '<span style="font-size:11px;color:var(--t3);">— toutes —</span>'
-              : ents.map(e => '<span style="background:var(--blt);border:1px solid var(--blue);color:var(--bdk);padding:1px 5px;border-radius:3px;font-size:10px;margin-right:3px;">'+escapeHtml(e)+'</span>').join(''));
+              : '<div style="display:flex;flex-wrap:wrap;gap:3px;max-width:180px;">' + ents.map(e => '<span style="background:var(--blt);border:1px solid var(--blue);color:var(--bdk);padding:1px 5px;border-radius:3px;font-size:10px;">'+escapeHtml(e)+'</span>').join('') + '</div>');
         const status = a.is_active ? '<span style="color:var(--green);">● Actif</span>' : '<span style="color:var(--red);">● Désactivé</span>';
+        // v1.36.8 : 3 boutons d'action alignés horizontalement, taille homogène
+        const actBtnStyle = 'margin:0;padding:5px 9px;font-size:13px;line-height:1;min-width:34px;';
         return `<tr>
           <td><code>${a.username}</code><div style="font-size:11px;color:var(--t3);">${a.fullname||''}</div></td>
           <td><span style="font-size:12px;">${a.role||'operations'}</span></td>
           <td>${badges}</td>
           <td>${entBadges}</td>
           <td>${status}</td>
-          <td style="text-align:right;">
-            <button class="btn bo bsm" style="margin:0 4px 0 0;padding:4px 10px;font-size:12px;" onclick="editBureauAccount('${uname}')">✏️</button>
-            <button class="btn bo bsm" style="margin:0 4px 0 0;padding:4px 10px;font-size:12px;" onclick="resetBureauPassword('${uname}')">🔑</button>
-            <button class="del-btn" onclick="deleteBureauAccount('${uname}')">✕</button>
+          <td style="text-align:right;white-space:nowrap;">
+            <div style="display:inline-flex;gap:4px;align-items:center;justify-content:flex-end;">
+              <button class="btn bo bsm" style="${actBtnStyle}" title="Modifier" onclick="editBureauAccount('${uname}')">✏️</button>
+              <button class="btn bo bsm" style="${actBtnStyle}" title="Réinitialiser le mot de passe" onclick="resetBureauPassword('${uname}')">🔑</button>
+              <button class="del-btn" title="Supprimer" style="padding:5px 9px;font-size:13px;line-height:1;" onclick="deleteBureauAccount('${uname}')">✕</button>
+            </div>
           </td>
         </tr>`;
       }).join('') + '</tbody></table>';
