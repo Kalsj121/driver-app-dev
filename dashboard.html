@@ -879,7 +879,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.8</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.9</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -2472,14 +2472,15 @@ function missionCargoMatches(mission, normQuery) {
     if (!s) return;
     // Scanner chaque item cargo
     (s.cargo||[]).forEach(c => {
+      // v1.36.9 : inclure aussi c.description (type "Autre") dans les tokens de recherche
       const tokens = [
-        c.awb, c.uld,
-        // Token combiné type (ex: "loose") — en général on s'en fiche, mais on matche aussi au cas où
+        c.awb, c.uld, c.description
       ].filter(Boolean);
       for (const t of tokens) {
         const norm = normalizeCargoToken(t);
         if (norm && norm.includes(normQuery)) {
-          matches.push({ stopIdx: idx+1, stopLoc: s.location||'', operation: s.operation||'', cargoLabel: (c.uld || c.awb || '').trim(), cargoType: c.type||'' });
+          const label = (c.uld || c.awb || c.description || '').trim();
+          matches.push({ stopIdx: idx+1, stopLoc: s.location||'', operation: s.operation||'', cargoLabel: label, cargoType: c.type||'' });
           break; // un seul match par item cargo
         }
       }
@@ -2637,7 +2638,7 @@ function renderArchiveTable(container, missions, matchMap) {
           if (!seen.has(sig)) { seen.add(sig); uniq.push(x); }
         });
         const chips = uniq.map(x => {
-          const icon = x.cargoType === 'uld' ? '🛄' : '📦';
+          const icon = x.cargoType === 'uld' ? '🛄' : (x.cargoType === 'autre' ? '📋' : '📦');
           const opShort = (x.operation||'').toLowerCase().startsWith('charg') ? '⬆' : ((x.operation||'').toLowerCase().startsWith('déch') || (x.operation||'').toLowerCase().startsWith('dech') ? '⬇' : '•');
           return `<span style="display:inline-block;background:var(--glt);border:1px solid rgba(15,110,86,0.25);color:var(--green);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;margin:2px 4px 2px 0;">${icon} ${escapeHTML(x.cargoLabel||'—')} <span style="color:var(--t2);font-weight:500;">· stop ${x.stopIdx} ${opShort} ${escapeHTML(x.stopLoc||'')}</span></span>`;
         }).join('');
