@@ -447,8 +447,10 @@ textarea.fi{resize:vertical;min-height:72px;}
   <div class="hdr-right">
     <div class="live-badge"><div class="live-dot"></div>En direct</div>
     <span class="user-pill" id="user-name">—</span>
-    <!-- v1.36.2 : bouton notifications bureau (active/désactive Web Push) -->
-    <button id="btn-notif-bureau" onclick="toggleBureauNotif()" title="Notifications" style="background:rgba(255,255,255,0.18);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;display:none;padding:0;">🔕</button>
+    <!-- v1.36.2 : bouton notifications bureau (active/désactive Web Push messages) -->
+    <button id="btn-notif-bureau" onclick="toggleBureauNotif()" title="Notifications messages" style="background:rgba(255,255,255,0.18);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;display:none;padding:0;">🔕</button>
+    <!-- v1.36.5 : bouton alertes push (active/désactive push d'alertes chauffeur bloqué) -->
+    <button id="btn-alerts-bureau" onclick="toggleBureauAlerts()" title="Notifications alertes" style="background:rgba(255,255,255,0.18);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;display:none;padding:0;">🔇</button>
     <button class="btn-logout" onclick="doLogout()">Déconnexion</button>
   </div>
 </div>
@@ -844,7 +846,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.4</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.36.5</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -1585,6 +1587,23 @@ function renderDashboard() {
     const w=elapsed(d.ts_arrival), t=thr(d.location);
     return `<div class="alert-item"><span style="font-size:15px;">⚠️</span><span class="alert-txt">${d.driver_name} — ${d.location} : attente quai > ${t} min${getLcaSites().includes(d.location)?' (LCA)':''}</span><span class="alert-dur">${w} min</span><button class="bsm bo" style="cursor:pointer;border:1px solid var(--b2);border-radius:6px;padding:5px 10px;font-size:12px;background:none;margin-left:8px;" onclick="quickMsg('${d.driver_name}')">💬 Message</button></div>`;
   }).join('');
+  // v1.36.5 : envoyer un push aux bureaux qui ont activé les alertes,
+  // uniquement pour les NOUVELLES alertes (dédup en mémoire)
+  if (!window._notifiedAlerts) window._notifiedAlerts = new Set();
+  const nowAlertIds = new Set();
+  alertDs.forEach(d => {
+    // clé stable pour ne notifier qu'une fois par alerte : driver + arrival timestamp
+    const key = d.driver_name + '|' + d.ts_arrival;
+    nowAlertIds.add(key);
+    if (!window._notifiedAlerts.has(key)) {
+      window._notifiedAlerts.add(key);
+      sendAlertPush(d, thr(d.location), elapsed(d.ts_arrival));
+    }
+  });
+  // Nettoyer les alertes qui ne sont plus actives (le chauffeur a bougé)
+  for (const key of window._notifiedAlerts) {
+    if (!nowAlertIds.has(key)) window._notifiedAlerts.delete(key);
+  }
 
   const grid = document.getElementById('driver-grid');
   if (!drivers.length) {
@@ -1767,24 +1786,23 @@ function urlBase64ToUint8ArrayB(base64String) {
   return Uint8Array.from(raw, c => c.charCodeAt(0));
 }
 
+// v1.36.5 : la permission DOIT être demandée en réponse au user gesture direct,
+// pas après un await. Sinon iOS PWA renvoie 'denied'. Cette fonction assume que
+// permission est déjà 'granted' (le toggleBureauNotif s'en occupe avant).
 async function subscribeBureauPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     showToast('Notifications non supportées sur ce navigateur.'); return false;
   }
-  if (Notification.permission === 'denied') {
-    showToast('Permission refusée — activez les notifs dans les réglages navigateur.');
-    return false;
+  if (Notification.permission !== 'granted') {
+    showToast('Autorisation notifications requise.'); return false;
   }
   if (!window.VAPID_PUBLIC_KEY) {
-    showToast('Clé VAPID manquante — configuration incomplète.');
-    return false;
+    showToast('Clé VAPID manquante — configuration incomplète.'); return false;
   }
   try {
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
-      const perm = await Notification.requestPermission();
-      if (perm !== 'granted') { showToast('Permission refusée.'); return false; }
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8ArrayB(window.VAPID_PUBLIC_KEY)
@@ -1801,8 +1819,6 @@ async function subscribeBureauPush() {
       last_used_at: new Date().toISOString()
     };
     if (window.supabaseClient) {
-      // v1.36.3 : supprimer les autres abonnements du même user (empêche les push en double
-      // quand un même user s'est abonné depuis plusieurs devices ou après re-install).
       try {
         if (currentUser?.username) {
           await window.supabaseClient.from('bureau_push_subscriptions')
@@ -1848,41 +1864,124 @@ async function unsubscribeBureauPush() {
   } catch(e) { console.warn('[Bureau Push] unsubscribe:', e.message); return false; }
 }
 
-// v1.36.2 : rafraîchit l'état du bouton 🔔/🔕 dans le header
+// v1.36.2 : rafraîchit l'état du bouton 🔔/🔕 (messages) dans le header
 async function updateBureauNotifBadge() {
   const btn = document.getElementById('btn-notif-bureau');
-  if (!btn) return;
-  if (!('Notification' in window)) { btn.style.display = 'none'; return; }
-  btn.style.display = '';
-  const perm = Notification.permission;
-  const reg = ('serviceWorker' in navigator && navigator.serviceWorker.controller) ? await navigator.serviceWorker.ready : null;
-  const sub = reg ? await reg.pushManager.getSubscription() : null;
-  const isActive = perm === 'granted' && !!sub;
-  btn.textContent = isActive ? '🔔' : '🔕';
-  btn.title = isActive
-    ? 'Notifications actives — clic pour désactiver'
-    : (perm === 'denied' ? 'Notifications bloquées dans les réglages navigateur' : 'Cliquez pour activer les notifications');
+  const btnAl = document.getElementById('btn-alerts-bureau');
+  if (btn && 'Notification' in window) {
+    btn.style.display = '';
+    const perm = Notification.permission;
+    const reg = ('serviceWorker' in navigator && navigator.serviceWorker.controller) ? await navigator.serviceWorker.ready : null;
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    const isActive = perm === 'granted' && !!sub;
+    btn.textContent = isActive ? '🔔' : '🔕';
+    btn.title = isActive
+      ? 'Notifications messages actives — clic pour désactiver'
+      : (perm === 'denied' ? 'Notifications bloquées dans les réglages' : 'Activer les notifications messages');
+    // v1.36.5 : le bouton alertes n'apparaît QUE si notifs messages activées (dépendance logique)
+    if (btnAl) btnAl.style.display = isActive ? '' : 'none';
+    if (isActive) await updateBureauAlertsBadge();
+  } else if (btn) {
+    btn.style.display = 'none';
+    if (btnAl) btnAl.style.display = 'none';
+  }
 }
 
-// v1.36.2 : toggle notifications bureau
-async function toggleBureauNotif() {
+// v1.36.5 : rafraîchit l'état du bouton 🚨/🔇 (alertes) dans le header
+async function updateBureauAlertsBadge() {
+  const btn = document.getElementById('btn-alerts-bureau');
+  if (!btn || !window.supabaseClient || !currentUser?.username) return;
+  try {
+    const { data } = await window.supabaseClient
+      .from('bureau_push_subscriptions')
+      .select('alerts_enabled')
+      .eq('username', currentUser.username)
+      .limit(1);
+    const enabled = !!(data && data[0] && data[0].alerts_enabled !== false);
+    btn.textContent = enabled ? '🚨' : '🔇';
+    btn.title = enabled
+      ? 'Alertes chauffeur activées — clic pour désactiver'
+      : 'Alertes chauffeur désactivées — clic pour activer';
+  } catch(e) {}
+}
+
+// v1.36.5 : envoyer un push d'alerte via l'Edge Function send-bureau-push
+// (l'Edge Function filtrera sur alerts_enabled=true si alerts_only est passé)
+async function sendAlertPush(d, threshold, elapsedMin) {
+  if (!window.SUPABASE_URL || !window.SUPABASE_ANON) return;
+  const url = window.SUPABASE_URL + '/functions/v1/send-bureau-push';
+  const site = d.location || 'Site inconnu';
+  const isLca = getLcaSites().includes(d.location);
+  const body = `${d.driver_name} bloqué à ${site} depuis ${elapsedMin} min (seuil ${threshold}${isLca ? ' — LCA' : ''})`;
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + window.SUPABASE_ANON },
+      body: JSON.stringify({
+        fromDriverName: 'Alerte',
+        title: '⚠️ Alerte attente quai',
+        body:  body.slice(0, 160),
+        msgId: 'alert-' + d.driver_name + '-' + d.ts_arrival,
+        alerts_only: true
+      })
+    });
+  } catch(e) { console.warn('[Alert Push] fetch failed:', e.message); }
+}
+
+// v1.36.5 : toggle des notifs alertes (chauffeur bloqué en attente)
+async function toggleBureauAlerts() {
+  if (!window.supabaseClient || !currentUser?.username) return;
+  try {
+    const { data } = await window.supabaseClient
+      .from('bureau_push_subscriptions')
+      .select('alerts_enabled')
+      .eq('username', currentUser.username)
+      .limit(1);
+    const currentlyEnabled = !!(data && data[0] && data[0].alerts_enabled !== false);
+    const newVal = !currentlyEnabled;
+    await window.supabaseClient
+      .from('bureau_push_subscriptions')
+      .update({ alerts_enabled: newVal })
+      .eq('username', currentUser.username);
+    showToast(newVal ? '🚨 Alertes activées' : '🔇 Alertes désactivées');
+    updateBureauAlertsBadge();
+  } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+// v1.36.5 : toggle notifications bureau — demander la permission DIRECTEMENT
+// dans le click handler (pas après un await), sinon iOS refuse.
+function toggleBureauNotif() {
   if (!('Notification' in window)) { showToast('Notifications non supportées.'); return; }
   const perm = Notification.permission;
-  const reg = ('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null;
-  const sub = reg ? await reg.pushManager.getSubscription() : null;
-  if (perm === 'granted' && sub) {
-    // Actuellement activé → désactiver
-    if (!confirm('Désactiver les notifications ? Vous ne recevrez plus les messages des chauffeurs quand l\'app est fermée.')) return;
-    await unsubscribeBureauPush();
-    showToast('🔕 Notifications désactivées');
-  } else if (perm === 'denied') {
-    showToast('Notifications bloquées — activez-les dans les réglages du navigateur/téléphone.');
-  } else {
-    // Activer
+  if (perm === 'denied') {
+    showToast('Notifications bloquées — activez-les dans les réglages navigateur/téléphone.');
+    return;
+  }
+  if (perm === 'granted') {
+    // Permission déjà accordée : vérifier si abonné, sinon s'abonner ; sinon désabonner
+    (async () => {
+      const reg = ('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null;
+      const sub = reg ? await reg.pushManager.getSubscription() : null;
+      if (sub) {
+        if (!confirm('Désactiver les notifications ? Vous ne recevrez plus les messages des chauffeurs quand l\'app est fermée.')) return;
+        await unsubscribeBureauPush();
+        showToast('🔕 Notifications désactivées');
+      } else {
+        const ok = await subscribeBureauPush();
+        if (ok) showToast('🔔 Notifications activées ✓');
+      }
+      updateBureauNotifBadge();
+    })();
+    return;
+  }
+  // perm === 'default' : demander l'autorisation SYNCHRONE (user gesture),
+  // puis enchaîner l'abonnement une fois qu'on a la réponse.
+  Notification.requestPermission().then(async (result) => {
+    if (result !== 'granted') { showToast('Autorisation refusée.'); return; }
     const ok = await subscribeBureauPush();
     if (ok) showToast('🔔 Notifications activées ✓');
-  }
-  updateBureauNotifBadge();
+    updateBureauNotifBadge();
+  }).catch(() => {});
 }
 
 // v1.30 : demander la permission de notifier au premier chargement du dashboard
@@ -4124,8 +4223,11 @@ async function onAppReady() {
   await refreshBureauSettings();
   loadMessages();
   await fetchDrivers();
-  // v1.30 : demander la permission de notifier au premier rendu du bureau
-  initBureauNotifPermission();
+  // v1.36.5 : ne PLUS demander automatiquement la permission au login
+  // (l'utilisateur active via le bouton cloche du header en click direct)
+  // initBureauNotifPermission();  ← désactivé
+  // v1.36.5 : mais on rafraîchit tout de même l'état de la cloche
+  updateBureauNotifBadge();
   // v1.09 : rafraîchir toutes les 10s pour que la durée de pause s'incrémente visiblement
   // et pour rattraper un UPDATE Realtime manqué sur active_drivers.
   setInterval(() => { renderActiveDriversTable(); }, 10000);
