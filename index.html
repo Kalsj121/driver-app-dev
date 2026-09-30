@@ -334,9 +334,12 @@ select.fi-locked{pointer-events:none;opacity:.7;}
     <div><div class="ltx">LCA Transfert</div><div class="lsb">Liege Cargo Agency</div></div>
   </div>
   <div class="dayhdr" id="dayhdr" style="display:none;">00:00:00</div>
-  <!-- v1.29 : bouton notifications push -->
-  <button id="btn-notif-toggle" onclick="toggleNotif()" title="Notifications" style="background:rgba(255,255,255,0.18);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;display:none;margin-right:8px;padding:0;">🔕</button>
-  <button class="btn-logout-driver" onclick="doDriverLogout()">Déconnexion</button>
+  <!-- v1.36.6 : wrapper avec margin-left:auto pour figer cloche + Déconnexion à droite,
+       même quand le timer apparaît/disparaît au démarrage/fin de journée -->
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+    <button id="btn-notif-toggle" onclick="toggleNotif()" title="Notifications" style="background:rgba(255,255,255,0.18);border:none;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;display:none;padding:0;">🔕</button>
+    <button class="btn-logout-driver" onclick="doDriverLogout()">Déconnexion</button>
+  </div>
 </div>
 
 <!-- TABS -->
