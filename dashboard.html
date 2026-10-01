@@ -879,7 +879,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.1</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.2</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -3684,15 +3684,21 @@ async function saveDriverEdit(username) {
   const pdfAllowed = document.getElementById('edit-driver-pdf').checked;
   const entity     = document.getElementById('edit-driver-entity')?.value || '';
   const update = { fullname, pdf_allowed: pdfAllowed, entity };
-  // v1.37.0 : si nouveau mdp fourni, on hash côté client et on écrit password_hash
-  // v1.37.1 : la colonne `password` en clair a été droppée, plus besoin de la nettoyer
+  // v1.37.2 : les champs non sensibles vont dans driver_accounts.
+  // Le nouveau mdp (si fourni) passe par l'RPC set_driver_credentials.
+  let newHash = null;
   if (newPass.trim().length) {
     if (!window.hashPassword) { showToast('Helper hash non chargé.'); return; }
-    update.password_hash = await window.hashPassword(newPass);
+    newHash = await window.hashPassword(newPass);
   }
   try {
     const { error } = await window.supabaseClient.from('driver_accounts').update(update).eq('username', username);
     if (error) { showToast('Erreur : ' + error.message); return; }
+    if (newHash) {
+      const { error: credErr } = await window.supabaseClient
+        .rpc('set_driver_credentials', { p_username: username, p_hash: newHash });
+      if (credErr) { showToast('Mdp non mis à jour : ' + credErr.message); return; }
+    }
     showToast('Compte chauffeur ' + username + ' mis à jour ✓');
     closeEditModal();
     await refreshDriverEntityCache();
@@ -4061,9 +4067,10 @@ async function createAccount() {
   if (!window.supabaseClient) { showToast('Supabase non disponible.'); return; }
   if (!window.hashPassword)   { showToast('Helper hash non chargé.'); return; }
 
-  // v1.37.0 : on écrit directement le hash (SHA-256 du salt+password), plus de clair en DB
+  // v1.37.2 : on crée d'abord le compte dans driver_accounts (sans password_hash),
+  // puis on écrit le hash dans driver_credentials via l'RPC SECURITY DEFINER.
   const hash = await window.hashPassword(pass);
-  const newAcc = { username: login, fullname: name, password_hash: hash, pdf_allowed: false, entity };
+  const newAcc = { username: login, fullname: name, pdf_allowed: false, entity };
   try {
     let { error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' });
     // Retry si colonnes manquantes (schéma pas encore migré)
@@ -4078,6 +4085,14 @@ async function createAccount() {
     if (error) {
       console.error('[createAccount] erreur:', error);
       showToast('Erreur création compte : ' + error.message);
+      return;
+    }
+    // v1.37.2 : écrire le hash dans driver_credentials via l'RPC SECURITY DEFINER
+    const { error: credErr } = await window.supabaseClient
+      .rpc('set_driver_credentials', { p_username: login, p_hash: hash });
+    if (credErr) {
+      console.error('[createAccount] set_driver_credentials:', credErr);
+      showToast('Compte créé mais mdp non enregistré : ' + credErr.message);
       return;
     }
     document.getElementById('acc-name').value = '';
