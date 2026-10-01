@@ -129,24 +129,18 @@ async function saveMissionToSupabase(mission, opts) {
     if (mission.tLcaTasksStart != null)            payload.t_lca_tasks_start  = toISO(mission.tLcaTasksStart);
     if (Array.isArray(mission.lcaTasks))           payload.lca_tasks          = mission.lcaTasks;
 
-    // Retry robuste : si une colonne optionnelle n'existe pas encore dans la DB,
-    // on l'enlève et on réessaie (jusqu'à épuisement des colonnes optionnelles).
-    const OPT = ['pauses','tdispatchnotified','tdispatchreceived','ispaused','tpausestart','plate_remorque','is_lca_tasks','t_lca_tasks_start','lca_tasks'];
-    let attempt = 0;
-    let error;
-    while (attempt < OPT.length + 1) {
-      const r = await supabaseClient.from('missions').upsert([payload], { onConflict: 'id' });
-      error = r.error;
-      if (!error) break;
-      const msg = error.message || '';
-      const col = OPT.find(c => c in payload && (msg.includes(`"${c}"`) || new RegExp(`column.*${c}|${c}.*column`, 'i').test(msg)));
-      if (!col) break;
-      console.warn('[Supabase] colonne manquante, retry sans:', col);
-      delete payload[col];
-      attempt++;
+    // v1.37.4 : écriture via RPC driver_save_mission (session chauffeur requise)
+    const token = getDriverCookie();
+    if (!token) { console.warn('[Supabase] saveMission : pas de token chauffeur'); return false; }
+    const { data, error } = await supabaseClient.rpc('driver_save_mission', {
+      p_token: token, p_payload: payload
+    });
+    if (error) { console.error('[Supabase] driver_save_mission:', error.message); return false; }
+    if (!data || !data.ok) {
+      console.error('[Supabase] driver_save_mission refusé:', data && data.reason);
+      return false;
     }
-    if (error) { console.error('[Supabase] Error saving mission:', error.message); return false; }
-    console.log('[Supabase] ✅ Mission saved');
+    console.log('[Supabase] ✅ Mission saved via RPC (id=' + data.id + ')');
     return true;
   } catch (e) { console.error('[Supabase] Mission save exception:', e.message); return false; }
 }
@@ -379,6 +373,22 @@ function clearBureauCookie() {
   document.cookie = BUREAU_COOKIE_NAME + '=; path=/; max-age=0; SameSite=Lax';
 }
 
+// v1.37.4 : cookie session chauffeur (identique au bureau mais clé séparée)
+const DRIVER_COOKIE_NAME     = 'lca_driver_session';
+const DRIVER_SESSION_HOURS   = 72;  // long shift coverage
+function setDriverCookie(token, hours = DRIVER_SESSION_HOURS) {
+  const maxAge = Math.floor(hours * 3600);
+  document.cookie = DRIVER_COOKIE_NAME + '=' + encodeURIComponent(token) +
+    '; path=/; max-age=' + maxAge + '; SameSite=Lax';
+}
+function getDriverCookie() {
+  const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + DRIVER_COOKIE_NAME + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function clearDriverCookie() {
+  document.cookie = DRIVER_COOKIE_NAME + '=; path=/; max-age=0; SameSite=Lax';
+}
+
 // Récupère l'user-agent + best-effort IP (l'IP réelle n'est pas dispo côté client,
 // on log ce qu'on a — Supabase peut avoir accès au header X-Forwarded-For si besoin
 // via une Edge Function, mais pour v1.33 on garde simple : IP = null).
@@ -537,6 +547,9 @@ window.validateBureauSession          = validateBureauSession;
 window.touchBureauSession             = touchBureauSession;
 window.endBureauSession               = endBureauSession;
 window.getBureauCookie                = getBureauCookie;  // v1.37.3 : exposé pour les RPCs CRUD
+window.getDriverCookie                = getDriverCookie;  // v1.37.4
+window.setDriverCookie                = setDriverCookie;
+window.clearDriverCookie              = clearDriverCookie;
 window.getBureauAccountByUsername     = getBureauAccountByUsername;
 window.logLoginAttempt                = logLoginAttempt;
 window.BUREAU_SALT                    = BUREAU_SALT;

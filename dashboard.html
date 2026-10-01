@@ -879,7 +879,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.3</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.4</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -1550,9 +1550,14 @@ async function forceEndDay(username) {
   if (!username) return;
   if (!confirm('Forcer la fin de journée pour ce chauffeur ?\n\nIl sera retiré de la liste des actifs et son opération sera clôturée.')) return;
   if (!window.supabaseClient) return;
+  // v1.37.4 : passage par les RPCs bureau_*
+  const tokenB = window.getBureauCookie ? window.getBureauCookie() : null;
+  if (!tokenB) { showToast('Session expirée.'); return; }
   try {
-    // 1. Supprimer de active_drivers
-    await window.supabaseClient.from('active_drivers').delete().eq('username', username);
+    // 1. Dismiss active_drivers via RPC
+    await window.supabaseClient.rpc('bureau_dismiss_active_driver', {
+      p_caller_token: tokenB, p_username: username
+    });
 
     // 2. Trouver la mission active du chauffeur (completed=false, aujourd'hui)
     const todayStr = new Date().toLocaleDateString('fr-BE');
@@ -1564,24 +1569,29 @@ async function forceEndDay(username) {
     ) || allMissions.find(m => !m.completed && m.date === todayStr && (m.driver || '').toLowerCase().includes((username || '').toLowerCase()));
 
     if (driverMission) {
-      // 3. Marquer comme completed dans missions
-      await window.supabaseClient.from('missions')
-        .update({ completed: true, dayendts: new Date().toISOString() })
-        .eq('id', driverMission.id);
+      // 3. Marquer comme completed dans missions via RPC
+      await window.supabaseClient.rpc('bureau_update_mission', {
+        p_caller_token: tokenB,
+        p_mission_id:   driverMission.id,
+        p_patch:        { completed: true, dayendts: new Date().toISOString() }
+      });
 
-      // 4. Archiver dans missions_archive
-      await window.supabaseClient.from('missions_archive').upsert([{
-        id:          driverMission.id,
-        driver:      driverMission.driver,
-        plate:       driverMission.plateTracteur || driverMission.plate || '',
-        plate_remorque: driverMission.plateRemorque || driverMission.plate_remorque || '',
-        date:        driverMission.date,
-        daystartts:  driverMission.dayStartTs ? new Date(driverMission.dayStartTs).toISOString() : null,
-        dayendts:    new Date().toISOString(),
-        completed:   true,
-        stops:       driverMission.stops || [],
-        archivedat:  new Date().toISOString()
-      }], { onConflict: 'id' });
+      // 4. Archiver via RPC bureau_upsert_mission_archive
+      await window.supabaseClient.rpc('bureau_upsert_mission_archive', {
+        p_caller_token: tokenB,
+        p_payload: {
+          id:             String(driverMission.id),
+          driver:         driverMission.driver,
+          plate:          driverMission.plateTracteur || driverMission.plate || '',
+          plate_remorque: driverMission.plateRemorque || driverMission.plate_remorque || '',
+          date:           driverMission.date,
+          daystartts:     driverMission.dayStartTs ? new Date(driverMission.dayStartTs).toISOString() : null,
+          dayendts:       new Date().toISOString(),
+          completed:      true,
+          stops:          driverMission.stops || [],
+          archivedat:     new Date().toISOString()
+        }
+      });
     }
 
     showToast('Fin de journée forcée pour ' + username + ' ✓');
@@ -2735,10 +2745,13 @@ async function deleteAttachmentCMR(missionId, stopIdx0) {
         if (stops[stopIdx0]) {
           // v1.23 : effacer les deux formats (base64 + URL Storage)
           stops[stopIdx0] = { ...stops[stopIdx0], cmrData: null, cmrUrl: null };
-          const { error } = await window.supabaseClient.from('missions').update({
-            stops,
-            updatedat: new Date().toISOString()
-          }).eq('id', missionId);
+          // v1.37.4 : passage via bureau_update_mission
+          const _tok = window.getBureauCookie ? window.getBureauCookie() : null;
+          const r = await window.supabaseClient.rpc('bureau_update_mission', {
+            p_caller_token: _tok, p_mission_id: missionId,
+            p_patch: { stops, updatedat: new Date().toISOString() }
+          });
+          const error = r.error || (r.data && !r.data.ok ? { message: 'RPC: '+r.data.reason } : null);
           if (!error) patched = true;
           else console.warn('[deleteAttachmentCMR] missions update error:', error.message);
         }
@@ -2752,10 +2765,13 @@ async function deleteAttachmentCMR(missionId, stopIdx0) {
         if (stops[stopIdx0]) {
           // v1.23 : effacer les deux formats (base64 + URL Storage)
           stops[stopIdx0] = { ...stops[stopIdx0], cmrData: null, cmrUrl: null };
-          const { error } = await window.supabaseClient.from('missions_archive').update({
-            stops,
-            updatedat: new Date().toISOString()
-          }).eq('id', String(missionId));
+          // v1.37.4 : passage via bureau_update_mission_archive
+          const _tok = window.getBureauCookie ? window.getBureauCookie() : null;
+          const r = await window.supabaseClient.rpc('bureau_update_mission_archive', {
+            p_caller_token: _tok, p_id: String(missionId),
+            p_patch: { stops, updatedat: new Date().toISOString() }
+          });
+          const error = r.error || (r.data && !r.data.ok ? { message: 'RPC: '+r.data.reason } : null);
           if (!error) patched = true;
           else console.warn('[deleteAttachmentCMR] archive update error:', error.message);
         }
@@ -3310,12 +3326,16 @@ function openDeleteMissionsPicker(payload, driverName, dateStr) {
 async function deleteArchiveMission(id) {
   if (!isSuperAdmin()) { showToast('Suppression réservée aux super administrateurs.'); return; }
   if (!confirm('Supprimer cette mission archivée ?')) return;
-  if (window.supabaseClient) {
-    try {
-      await window.supabaseClient.from('missions_archive').delete().eq('id', id);
-      await window.supabaseClient.from('missions').delete().eq('id', id);
-    } catch(e) { console.warn('[Archive] Delete failed:', e.message); }
-  }
+  // v1.37.4 : via RPC bureau_delete_mission (super_admin vérifié côté serveur)
+  const tok = window.getBureauCookie ? window.getBureauCookie() : null;
+  if (!tok) { showToast('Session expirée.'); return; }
+  try {
+    const { data, error } = await window.supabaseClient.rpc('bureau_delete_mission', {
+      p_caller_token: tok, p_mission_id: Number(id)
+    });
+    if (error)         { showToast('Erreur : '+error.message); return; }
+    if (!data || !data.ok) { showToast('Erreur : '+(data && data.reason || 'inconnue')); return; }
+  } catch(e) { console.warn('[Archive] Delete failed:', e.message); }
   showToast('Mission supprimée ✓');
   loadArchiveList();
 }

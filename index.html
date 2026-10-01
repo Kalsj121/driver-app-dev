@@ -635,7 +635,7 @@ select.fi-locked{pointer-events:none;opacity:.7;}
 <!-- v1.33.2 : Footer complet -->
 <div class="app-footer" style="text-align:center;padding:24px 20px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:520px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.3</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.4</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie :<br><a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -686,20 +686,28 @@ const FALLBACK_ACCOUNTS = [
   // Empty by default — accounts created from dashboard
 ];
 
-// v1.37.0 : plus de SELECT full-table sur driver_accounts côté client (fuite password).
-// Le login passe désormais par l'RPC verify_driver_login (comparaison hash côté serveur).
+// v1.37.4 : login chauffeur via attempt_driver_login (émet un token de session
+// server-side stocké en cookie, utilisé pour signer toutes les écritures mission).
 async function verifyDriverLogin(username, password) {
   if (!window.supabaseClient || !window.hashPassword) return { ok: false, reachable: false };
   try {
     const hash = await window.hashPassword(password);
     const { data, error } = await window.supabaseClient
-      .rpc('verify_driver_login', { p_username: username, p_hash: hash });
+      .rpc('attempt_driver_login', {
+        p_username: username,
+        p_hash:     hash,
+        p_ip:       null,
+        p_ua:       navigator.userAgent
+      });
     if (error) {
       console.warn('[login] RPC error:', error.message);
       return { ok: false, reachable: true };
     }
-    const row = Array.isArray(data) && data.length ? data[0] : null;
-    return { ok: !!row, reachable: true, account: row };
+    if (!data || !data.ok) {
+      return { ok: false, reachable: true, reason: (data && data.reason) || 'unknown' };
+    }
+    if (window.setDriverCookie) window.setDriverCookie(data.token);
+    return { ok: true, reachable: true, account: data.account };
   } catch(e) {
     console.warn('[login] exception:', e);
     return { ok: false, reachable: false };
@@ -1978,23 +1986,26 @@ async function startDay() {
   }
 }
 
+// v1.37.4 : active_drivers n'est plus writeable directement → RPC gated by driver session
 async function registerActiveDriver(name, plate, plateRemorque) {
-  if (!window.supabaseClient) return;
+  if (!window.supabaseClient || !window.getDriverCookie) return;
+  const token = window.getDriverCookie();
+  if (!token) return;
   try {
-    await window.supabaseClient.from('active_drivers').upsert([{
-      username:       currentDriver?.username || name,
-      fullname:       name,
-      plate:          plate || '',
-      plate_remorque: plateRemorque || '',
-      lastseen:       new Date().toISOString()
-    }], { onConflict: 'username' });
+    await window.supabaseClient.rpc('driver_register_active', {
+      p_token:          token,
+      p_plate:          plate || '',
+      p_plate_remorque: plateRemorque || ''
+    });
   } catch(e) { console.warn('[Driver register]', e.message); }
 }
 
-async function removeActiveDriver(username) {
-  if (!window.supabaseClient || !username) return;
+async function removeActiveDriver(/*username*/) {
+  if (!window.supabaseClient || !window.getDriverCookie) return;
+  const token = window.getDriverCookie();
+  if (!token) return;
   try {
-    await window.supabaseClient.from('active_drivers').delete().eq('username', username);
+    await window.supabaseClient.rpc('driver_remove_active', { p_token: token });
   } catch(e) { console.warn('[Driver remove]', e.message); }
 }
 
@@ -2032,6 +2043,14 @@ async function doDriverLogout() {
     clearActiveCache(); // v1.18 : pas de mission, cache local inutile
     clearBetweenMissionsCache(); // v1.19 : idem cache entre-missions
   }
+  // v1.37.4 : invalider la session chauffeur côté serveur + supprimer le cookie
+  try {
+    const _dtok = window.getDriverCookie ? window.getDriverCookie() : null;
+    if (_dtok && window.supabaseClient) {
+      await window.supabaseClient.rpc('end_driver_session', { p_token: _dtok });
+    }
+    if (window.clearDriverCookie) window.clearDriverCookie();
+  } catch(e) {}
   currentDriver = null; pauseActive = false; dayPauses = [];
   // v1.31 : effacer AUSSI le cookie de backup lors d'une déconnexion volontaire
   clearCurrentDriverPersist();
@@ -2619,25 +2638,16 @@ async function archiveMissionData(mission) {
     // v1.36.3 : propager aussi les Tâches LCA dans l'archive
     if (Array.isArray(mission.lcaTasks)) payload.lca_tasks = mission.lcaTasks;
 
-    const OPT = ['pauses','plate_remorque','archivedat','updatedat','tdispatchnotified','tdispatchreceived','ispaused','tpausestart','lca_tasks'];
-    let { error } = await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
-    let safety = 6;
-    while (error && safety-- > 0) {
-      const msg = error.message || '';
-      console.warn('[Archive] upsert error:', msg);
-      if (/column.*archivedat|archivedat.*column/i.test(msg) && 'archivedat' in payload) {
-        payload.archived_at = payload.archivedat;
-        delete payload.archivedat;
-        const r = await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
-        error = r.error;
-        continue;
-      }
-      const dropped = OPT.find(c => c in payload && (msg.includes(c) || new RegExp('column.+' + c + '|' + c + '.+column', 'i').test(msg)));
-      if (!dropped) break;
-      console.warn('[Archive] Retry sans colonne', dropped);
-      delete payload[dropped];
-      const r = await window.supabaseClient.from('missions_archive').upsert([payload], { onConflict: 'id' });
-      error = r.error;
+    // v1.37.4 : upsert via RPC driver_save_mission_archive (session chauffeur requise)
+    const _driverToken = window.getDriverCookie ? window.getDriverCookie() : null;
+    let error = null;
+    if (!_driverToken) {
+      error = { message: 'driver session missing' };
+    } else {
+      const r = await window.supabaseClient.rpc('driver_save_mission_archive', {
+        p_token: _driverToken, p_payload: payload
+      });
+      error = r.error || (r.data && !r.data.ok ? { message: 'RPC refused: ' + r.data.reason } : null);
     }
     if (error) {
       console.error('[Archive] ECHEC definitif :', error.message);
