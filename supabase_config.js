@@ -170,39 +170,46 @@ async function loadMessagesFromSupabase() {
   } catch (e) { console.warn('[Supabase] Message load failed:', e.message); return []; }
 }
 
+// v1.37.5 : envoi via RPC (session validée server-side).
+// Détection auto chauffeur vs bureau selon le cookie présent.
 async function saveMessageToSupabase(message) {
   if (!supabaseClient) return false;
   try {
-    // v1.25 : payload avec attachment_* optionnels
-    const payload = {
-      id:       message.id,
-      from:     message.from,
-      fromname: message.fromName || '',
-      to:       message.to,
-      tolabel:  message.toLabel || '',
-      text:     message.text || '',
-      ts:       toISO(message.ts),
-      read:     message.read || false
+    const driverTok = getDriverCookie();
+    const bureauTok = getBureauCookie();
+    const common = {
+      p_client_id:       message.id || null,
+      p_to:              message.to || null,
+      p_tolabel:         message.toLabel || null,
+      p_text:            message.text || '',
+      p_attachment_url:  message.attachmentUrl || null,
+      p_attachment_type: message.attachmentType || null
     };
-    if (message.attachmentUrl)  payload.attachment_url  = message.attachmentUrl;
-    if (message.attachmentType) payload.attachment_type = message.attachmentType;
-
-    let { error } = await supabaseClient.from('messages').insert([payload]);
-    if (error && /attachment_/i.test(error.message || '')) {
-      delete payload.attachment_url;
-      delete payload.attachment_type;
-      const r = await supabaseClient.from('messages').insert([payload]);
-      error = r.error;
+    let rpcName, token;
+    if (message.from === 'driver' && driverTok) {
+      rpcName = 'driver_send_message'; token = driverTok;
+    } else if (message.from === 'bureau' && bureauTok) {
+      rpcName = 'bureau_send_message'; token = bureauTok;
+    } else if (bureauTok) {
+      rpcName = 'bureau_send_message'; token = bureauTok;
+    } else if (driverTok) {
+      rpcName = 'driver_send_message'; token = driverTok;
+    } else {
+      console.warn('[Supabase] saveMessage : pas de session');
+      return false;
     }
-    if (error) { console.error('[Supabase] Error saving message:', error.message); return false; }
+    const { data, error } = await supabaseClient.rpc(rpcName, { p_token: token, ...common });
+    if (error)         { console.error('[Supabase] ' + rpcName + ':', error.message); return false; }
+    if (!data || !data.ok) { console.error('[Supabase] ' + rpcName + ' refused:', data && data.reason); return false; }
     return true;
-  } catch (e) { return false; }
+  } catch (e) { console.error('[Supabase] saveMessage exception:', e); return false; }
 }
 
 async function updateMessageReadStatus(messageId, read) {
   if (!supabaseClient) return false;
+  if (!read) return true;  // read=false ne nous intéresse pas, on ne « dé-marque » jamais
   try {
-    const { error } = await supabaseClient.from('messages').update({ read }).eq('id', messageId);
+    const { error } = await supabaseClient.rpc('mark_messages_read', { p_ids: [messageId] });
     return !error;
   } catch (e) { return false; }
 }
