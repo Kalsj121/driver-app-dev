@@ -879,7 +879,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.5</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.6</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -1857,17 +1857,18 @@ async function subscribeBureauPush() {
       user_agent:   navigator.userAgent.slice(0, 500),
       last_used_at: new Date().toISOString()
     };
-    if (window.supabaseClient) {
-      try {
-        if (currentUser?.username) {
-          await window.supabaseClient.from('bureau_push_subscriptions')
-            .delete()
-            .eq('username', currentUser.username)
-            .neq('endpoint', sub.endpoint);
-        }
-      } catch(e) { console.warn('[Bureau Push] cleanup old subs:', e.message); }
-      await window.supabaseClient.from('bureau_push_subscriptions')
-        .upsert([payload], { onConflict: 'endpoint' });
+    // v1.37.6 : passage via RPC bureau_subscribe_push (nettoyage + upsert atomique)
+    const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
+    if (window.supabaseClient && _btok) {
+      const { data, error } = await window.supabaseClient.rpc('bureau_subscribe_push', {
+        p_token:      _btok,
+        p_endpoint:   payload.endpoint,
+        p_p256dh:     payload.p256dh,
+        p_auth:       payload.auth,
+        p_user_agent: payload.user_agent
+      });
+      if (error)             console.warn('[Bureau Push] RPC error:', error.message);
+      else if (!data || !data.ok) console.warn('[Bureau Push] RPC refused:', data && data.reason);
     }
     console.log('[Bureau Push] abonnement enregistré');
     return true;
@@ -1892,10 +1893,12 @@ async function unsubscribeBureauPush() {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
     if (!sub) return true;
-    if (window.supabaseClient) {
+    // v1.37.6 : via RPC bureau_unsubscribe_push
+    const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
+    if (window.supabaseClient && _btok) {
       try {
-        await window.supabaseClient.from('bureau_push_subscriptions').delete().eq('endpoint', sub.endpoint);
-      } catch(e) { console.warn('[Bureau Push] delete sub row:', e.message); }
+        await window.supabaseClient.rpc('bureau_unsubscribe_push', { p_token: _btok, p_endpoint: sub.endpoint });
+      } catch(e) { console.warn('[Bureau Push] unsubscribe RPC:', e.message); }
     }
     await sub.unsubscribe();
     console.log('[Bureau Push] désabonné');
@@ -1930,13 +1933,12 @@ async function updateBureauNotifBadge() {
 async function updateBureauAlertsBadge() {
   const btn = document.getElementById('btn-alerts-bureau');
   if (!btn || !window.supabaseClient || !currentUser?.username) return;
+  // v1.37.6 : via RPC bureau_get_alerts_enabled
+  const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
+  if (!_btok) return;
   try {
-    const { data } = await window.supabaseClient
-      .from('bureau_push_subscriptions')
-      .select('alerts_enabled')
-      .eq('username', currentUser.username)
-      .limit(1);
-    const enabled = !!(data && data[0] && data[0].alerts_enabled !== false);
+    const { data } = await window.supabaseClient.rpc('bureau_get_alerts_enabled', { p_token: _btok });
+    const enabled = !!(data && data.ok && data.enabled);
     btn.textContent = enabled ? '🚨' : '🔇';
     btn.title = enabled
       ? 'Alertes chauffeur activées — clic pour désactiver'
@@ -1970,18 +1972,17 @@ async function sendAlertPush(d, threshold, elapsedMin) {
 // v1.36.5 : toggle des notifs alertes (chauffeur bloqué en attente)
 async function toggleBureauAlerts() {
   if (!window.supabaseClient || !currentUser?.username) return;
+  // v1.37.6 : via RPCs bureau_get_alerts_enabled + bureau_set_alerts_enabled
+  const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
+  if (!_btok) { showToast('Session expirée.'); return; }
   try {
-    const { data } = await window.supabaseClient
-      .from('bureau_push_subscriptions')
-      .select('alerts_enabled')
-      .eq('username', currentUser.username)
-      .limit(1);
-    const currentlyEnabled = !!(data && data[0] && data[0].alerts_enabled !== false);
+    const { data: cur } = await window.supabaseClient.rpc('bureau_get_alerts_enabled', { p_token: _btok });
+    const currentlyEnabled = !!(cur && cur.ok && cur.enabled);
     const newVal = !currentlyEnabled;
-    await window.supabaseClient
-      .from('bureau_push_subscriptions')
-      .update({ alerts_enabled: newVal })
-      .eq('username', currentUser.username);
+    const { error } = await window.supabaseClient.rpc('bureau_set_alerts_enabled', {
+      p_token: _btok, p_enabled: newVal
+    });
+    if (error) { showToast('Erreur : ' + error.message); return; }
     showToast(newVal ? '🚨 Alertes activées' : '🔇 Alertes désactivées');
     updateBureauAlertsBadge();
   } catch(e) { showToast('Erreur : ' + e.message); }
