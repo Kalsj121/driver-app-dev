@@ -240,28 +240,35 @@ async function loadActiveVehiclesFromSupabase(type) {
   } catch (e) { return []; }
 }
 
+// v1.37.7 : vehicles via RPCs (super_admin uniquement, vérifié côté serveur)
 async function saveVehicleToSupabase(vehicle) {
   if (!supabaseClient) return false;
+  const tok = getBureauCookie();
+  if (!tok) return false;
   try {
-    const { error } = await supabaseClient.from('vehicles').upsert([vehicle], { onConflict: 'plate' });
-    return !error;
+    const { data, error } = await supabaseClient.rpc('vehicles_upsert', { p_token: tok, p_payload: vehicle });
+    return !error && data && data.ok;
   } catch (e) { return false; }
 }
 
 async function deleteVehicleFromSupabase(plate) {
   if (!supabaseClient) return false;
+  const tok = getBureauCookie();
+  if (!tok) return false;
   try {
-    const { error } = await supabaseClient.from('vehicles').delete().eq('plate', plate);
-    return !error;
+    const { data, error } = await supabaseClient.rpc('vehicles_delete', { p_token: tok, p_plate: plate });
+    return !error && data && data.ok;
   } catch (e) { return false; }
 }
 
 async function toggleVehicleActiveStatus(plate, active) {
   if (!supabaseClient) return false;
+  const tok = getBureauCookie();
+  if (!tok) return false;
   try {
-    const { error } = await supabaseClient.from('vehicles').update({ active }).eq('plate', plate);
+    const { data, error } = await supabaseClient.rpc('vehicles_toggle', { p_token: tok, p_plate: plate, p_active: active });
     if (error) { console.warn('[Supabase] Error toggling vehicle:', error.message); return false; }
-    return true;
+    return !!(data && data.ok);
   } catch (e) { return false; }
 }
 

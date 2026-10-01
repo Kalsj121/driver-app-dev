@@ -879,7 +879,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.6</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.7</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -4032,15 +4032,19 @@ async function saveBureauSettings() {
   if (thrLca < 5 || thrOther < 5) { showToast('Seuils minimum : 5 minutes.'); return; }
   if (!sites.length) { showToast('Renseignez au moins un site LCA.'); return; }
   try {
-    const nowIso = new Date().toISOString();
-    const updatedBy = currentUser?.username || '';
+    // v1.37.7 : via RPC bureau_settings_set (super_admin vérifié côté serveur)
+    const tokS = window.getBureauCookie ? window.getBureauCookie() : null;
+    if (!tokS) { showToast('Session expirée.'); return; }
     const upserts = [
-      { key: 'alert_threshold_lca',   value: thrLca,   updated_at: nowIso, updated_by: updatedBy },
-      { key: 'alert_threshold_other', value: thrOther, updated_at: nowIso, updated_by: updatedBy },
-      { key: 'lca_sites',             value: sites,    updated_at: nowIso, updated_by: updatedBy }
+      { key: 'alert_threshold_lca',   value: thrLca   },
+      { key: 'alert_threshold_other', value: thrOther },
+      { key: 'lca_sites',             value: sites    }
     ];
     for (const u of upserts) {
-      await window.supabaseClient.from('bureau_settings').upsert([u], { onConflict: 'key' });
+      const { error } = await window.supabaseClient.rpc('bureau_settings_set', {
+        p_token: tokS, p_key: u.key, p_value: u.value
+      });
+      if (error) { showToast('Erreur : ' + error.message); return; }
     }
     showToast('Paramètres enregistrés ✓');
     // Appliquer immédiatement
@@ -4173,11 +4177,15 @@ async function createEntity() {
   if (!name) { showToast('Entrez un nom d\'entité.'); return; }
   if (!window.supabaseClient) return;
   try {
-    const { error } = await window.supabaseClient.from('entities').insert({ name, is_active: true });
+    // v1.37.7 : via RPC entities_insert
+    const tokE = window.getBureauCookie ? window.getBureauCookie() : null;
+    if (!tokE) { showToast('Session expirée.'); return; }
+    const { data, error } = await window.supabaseClient.rpc('entities_insert', { p_token: tokE, p_name: name });
     if (error) {
       if (/duplicate|unique/i.test(error.message)) { showToast('Cette entité existe déjà.'); return; }
       showToast('Erreur : ' + error.message); return;
     }
+    if (!data || !data.ok) { showToast('Erreur : ' + (data && data.reason || 'inconnue')); return; }
     if (input) input.value = '';
     showToast('Entité "' + name + '" créée ✓');
     await refreshEntitiesList();
@@ -4226,20 +4234,15 @@ async function renameEntity(oldName) {
   if (newName === null) return;
   const trimmed = newName.trim();
   if (!trimmed || trimmed === oldName) return;
+  // v1.37.7 : via RPC entities_rename (fait tout : entité + driver + bureau)
+  const tok1 = window.getBureauCookie ? window.getBureauCookie() : null;
+  if (!tok1) { showToast('Session expirée.'); return; }
   try {
-    const { error: e1 } = await window.supabaseClient.from('entities').update({ name: trimmed, updated_at: new Date().toISOString() }).eq('name', oldName);
-    if (e1) { showToast('Erreur : ' + e1.message); return; }
-    // Propager le renommage sur les chauffeurs concernés
-    const { error: e2 } = await window.supabaseClient.from('driver_accounts').update({ entity: trimmed }).eq('entity', oldName);
-    if (e2) console.warn('[renameEntity] propagation chauffeurs:', e2.message);
-    // v1.37.3 : propagation sur bureau_accounts.allowed_entities via RPC (anon ne peut plus UPDATE direct)
-    const tok1 = window.getBureauCookie ? window.getBureauCookie() : null;
-    if (tok1) {
-      const { error: eCasc } = await window.supabaseClient.rpc('cascade_entity_rename', {
-        p_caller_token: tok1, p_old_name: oldName, p_new_name: trimmed
-      });
-      if (eCasc) console.warn('[renameEntity] cascade bureaux:', eCasc.message);
-    }
+    const { data, error } = await window.supabaseClient.rpc('entities_rename', {
+      p_token: tok1, p_old: oldName, p_new: trimmed
+    });
+    if (error) { showToast('Erreur : ' + error.message); return; }
+    if (!data || !data.ok) { showToast('Erreur : ' + (data && data.reason || 'inconnue')); return; }
     showToast('Entité renommée ✓');
     await refreshEntitiesList();
     await refreshDriverEntityCache();
@@ -4249,9 +4252,13 @@ async function renameEntity(oldName) {
 
 async function toggleEntity(id, newActive) {
   if (!isSuperAdmin()) return;
+  // v1.37.7 : via RPC entities_toggle
+  const tokT = window.getBureauCookie ? window.getBureauCookie() : null;
+  if (!tokT) { showToast('Session expirée.'); return; }
   try {
-    const { error } = await window.supabaseClient.from('entities').update({ is_active: newActive, updated_at: new Date().toISOString() }).eq('id', id);
+    const { data, error } = await window.supabaseClient.rpc('entities_toggle', { p_token: tokT, p_id: id, p_active: newActive });
     if (error) { showToast('Erreur : ' + error.message); return; }
+    if (!data || !data.ok) { showToast('Erreur : ' + (data && data.reason || 'inconnue')); return; }
     showToast('Entité ' + (newActive ? 'activée' : 'désactivée') + ' ✓');
     await refreshEntitiesList();
     loadEntitiesList();
@@ -4265,20 +4272,15 @@ async function deleteEntity(id, name, nbDrivers) {
   } else {
     if (!confirm('Supprimer l\'entité "' + name + '" ?')) return;
   }
+  // v1.37.7 : via RPC entities_delete (cascade driver + bureau + delete entité)
+  const tok2 = window.getBureauCookie ? window.getBureauCookie() : null;
+  if (!tok2) { showToast('Session expirée.'); return; }
   try {
-    // Vider entity chez les chauffeurs concernés
-    await window.supabaseClient.from('driver_accounts').update({ entity: '' }).eq('entity', name);
-    // v1.37.3 : retrait des allowed_entities via RPC (anon ne peut plus UPDATE direct)
-    const tok2 = window.getBureauCookie ? window.getBureauCookie() : null;
-    if (tok2) {
-      const { error: eCasc } = await window.supabaseClient.rpc('cascade_entity_delete', {
-        p_caller_token: tok2, p_name: name
-      });
-      if (eCasc) console.warn('[deleteEntity] cascade bureaux:', eCasc.message);
-    }
-    // Delete l'entité
-    const { error } = await window.supabaseClient.from('entities').delete().eq('id', id);
+    const { data, error } = await window.supabaseClient.rpc('entities_delete', {
+      p_token: tok2, p_id: id, p_name: name
+    });
     if (error) { showToast('Erreur : ' + error.message); return; }
+    if (!data || !data.ok) { showToast('Erreur : ' + (data && data.reason || 'inconnue')); return; }
     showToast('Entité "' + name + '" supprimée ✓');
     await refreshEntitiesList();
     await refreshDriverEntityCache();
