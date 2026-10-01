@@ -879,7 +879,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.7</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.8</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -1950,6 +1950,9 @@ async function updateBureauAlertsBadge() {
 // (l'Edge Function filtrera sur alerts_enabled=true si alerts_only est passé)
 async function sendAlertPush(d, threshold, elapsedMin) {
   if (!window.SUPABASE_URL || !window.SUPABASE_ANON) return;
+  // v1.37.8 : alerte envoyée par un bureau → bureau_token requis
+  const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
+  if (!_btok) { console.warn('[Alert Push] bureau token manquant'); return; }
   const url = window.SUPABASE_URL + '/functions/v1/send-bureau-push';
   const site = d.location || 'Site inconnu';
   const isLca = getLcaSites().includes(d.location);
@@ -1959,11 +1962,12 @@ async function sendAlertPush(d, threshold, elapsedMin) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + window.SUPABASE_ANON },
       body: JSON.stringify({
+        bureau_token:    _btok,
         fromDriverName: 'Alerte',
         title: '⚠️ Alerte attente quai',
         body:  body.slice(0, 160),
         msgId: 'alert-' + d.driver_name + '-' + d.ts_arrival,
-        alerts_only: true
+        alerts_only:    true
       })
     });
   } catch(e) { console.warn('[Alert Push] fetch failed:', e.message); }
@@ -2295,9 +2299,12 @@ async function sendDriverPush(toFullname, msg) {
   let bodyText = (msg.text || '').slice(0, 140);
   if (!bodyText && msg.attachmentType === 'image') bodyText = '📷 Photo';
   if (!bodyText && msg.attachmentType === 'audio') bodyText = '🎤 Message audio';
+  // v1.37.8 : passer le bureau_token (Edge Function le valide côté serveur)
+  const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
+  if (!_btok) { console.warn('[Push] bureau token manquant'); return; }
   const payload = (toFullname === 'all')
-    ? { sendToAll: true, title, body: bodyText, msgId: msg.id }
-    : { driverFullname: toFullname, title, body: bodyText, msgId: msg.id };
+    ? { bureau_token: _btok, sendToAll: true, title, body: bodyText, msgId: msg.id }
+    : { bureau_token: _btok, driverFullname: toFullname, title, body: bodyText, msgId: msg.id };
   try {
     const res = await fetch(url, {
       method: 'POST',
