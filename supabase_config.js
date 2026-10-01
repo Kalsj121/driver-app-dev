@@ -404,7 +404,13 @@ async function logLoginAttempt(username, success, reason) {
   } catch(e) { console.warn('[Auth] log attempt failed:', e.message); }
 }
 
-// Fetch le compte bureau — retourne null si inconnu ou verrouillé/inactif
+// v1.37.3 : tous les flux login / session passent désormais par des RPCs
+// SECURITY DEFINER côté Postgres. Plus de SELECT direct sur bureau_accounts
+// ou bureau_sessions côté client. Les hashes vivent dans bureau_credentials
+// (table verrouillée, lecture impossible depuis le client).
+
+// Récupération d'un compte bureau — utilisé uniquement pour l'affichage (sans mdp).
+// Reste un SELECT sur bureau_accounts (plus de password_hash dedans).
 async function getBureauAccountByUsername(username) {
   if (!supabaseClient || !username) return null;
   try {
@@ -418,126 +424,72 @@ async function getBureauAccountByUsername(username) {
   } catch(e) { return null; }
 }
 
-// Tentative de login — retourne { ok: bool, reason: string, session: object|null }
+// Tentative de login via l'RPC server-side (brute-force + session gérés en SQL).
 async function attemptBureauLogin(username, password) {
-  const acc = await getBureauAccountByUsername(username);
-  if (!acc) {
-    await logLoginAttempt(username, false, 'unknown_user');
-    return { ok: false, reason: 'unknown_user' };
-  }
-  if (!acc.is_active) {
-    await logLoginAttempt(username, false, 'account_disabled');
-    return { ok: false, reason: 'account_disabled' };
-  }
-  // Compte verrouillé encore ?
-  if (acc.locked_until && new Date(acc.locked_until).getTime() > Date.now()) {
-    await logLoginAttempt(username, false, 'account_locked');
-    return { ok: false, reason: 'account_locked', locked_until: acc.locked_until };
-  }
-  const hash = await hashPassword(password);
-  if (hash !== acc.password_hash) {
-    // Incrément compteur d'échec + éventuel lock
-    const newAttempts = (acc.failed_attempts || 0) + 1;
-    const update = { failed_attempts: newAttempts, updated_at: new Date().toISOString() };
-    if (newAttempts >= BUREAU_MAX_FAILED_ATTEMPTS) {
-      update.locked_until = new Date(Date.now() + BUREAU_LOCK_MINUTES * 60000).toISOString();
-      update.failed_attempts = 0; // reset compteur pendant le lock
-    }
-    await supabaseClient.from('bureau_accounts').update(update).eq('id', acc.id);
-    await logLoginAttempt(username, false, 'bad_password');
-    return {
-      ok: false,
-      reason: newAttempts >= BUREAU_MAX_FAILED_ATTEMPTS ? 'account_locked' : 'bad_password',
-      attempts_left: Math.max(0, BUREAU_MAX_FAILED_ATTEMPTS - newAttempts)
-    };
-  }
-  // Auth OK → créer session
-  const token = generateSessionToken();
-  const now   = new Date();
-  const exp   = new Date(now.getTime() + BUREAU_SESSION_HOURS * 3600 * 1000);
-  const ctx   = getClientContext();
+  if (!supabaseClient) return { ok: false, reason: 'server_error' };
   try {
-    await supabaseClient.from('bureau_sessions').insert({
-      token,
-      username: acc.username,
-      created_at: now.toISOString(),
-      expires_at: exp.toISOString(),
-      last_activity: now.toISOString(),
-      ip: ctx.ip,
-      user_agent: ctx.user_agent
+    const hash = await hashPassword(password);
+    const ctx  = getClientContext();
+    const { data, error } = await supabaseClient.rpc('attempt_bureau_login', {
+      p_username: username, p_hash: hash, p_ip: ctx.ip, p_ua: ctx.user_agent
     });
-    await supabaseClient.from('bureau_accounts').update({
-      failed_attempts: 0, locked_until: null,
-      last_login: now.toISOString(),
-      updated_at: now.toISOString()
-    }).eq('id', acc.id);
-    await logLoginAttempt(username, true, 'ok');
-    setBureauCookie(token);
-    return { ok: true, session: { token, username: acc.username, expires_at: exp.toISOString() }, account: acc };
+    if (error) {
+      console.warn('[Auth] attempt_bureau_login RPC:', error.message);
+      return { ok: false, reason: 'server_error' };
+    }
+    if (!data || !data.ok) {
+      return {
+        ok: false,
+        reason: (data && data.reason) || 'unknown',
+        attempts_left: data && data.attempts_left,
+        locked_until:  data && data.locked_until
+      };
+    }
+    setBureauCookie(data.token);
+    return { ok: true, session: { token: data.token, username: data.account.username, expires_at: data.expires_at }, account: data.account };
   } catch(e) {
-    console.warn('[Auth] session create failed:', e.message);
+    console.warn('[Auth] attempt_bureau_login exception:', e);
     return { ok: false, reason: 'server_error' };
   }
 }
 
-// Valide une session (via cookie). Retourne { valid, account } ou { valid: false, reason }.
+// Valide une session (via cookie) → RPC validate_bureau_session
 async function validateBureauSession() {
   const token = getBureauCookie();
   if (!token) return { valid: false, reason: 'no_cookie' };
   if (!supabaseClient) return { valid: false, reason: 'supabase_not_ready' };
   try {
-    const { data: sessions } = await supabaseClient
-      .from('bureau_sessions')
-      .select('*')
-      .eq('token', token)
-      .limit(1);
-    if (!sessions || !sessions.length) { clearBureauCookie(); return { valid: false, reason: 'unknown_token' }; }
-    const s = sessions[0];
-    const now = Date.now();
-    const expiresAt = new Date(s.expires_at).getTime();
-    if (expiresAt < now) {
-      await supabaseClient.from('bureau_sessions').delete().eq('token', token);
-      clearBureauCookie();
-      return { valid: false, reason: 'expired' };
+    const { data, error } = await supabaseClient.rpc('validate_bureau_session', {
+      p_token: token,
+      p_inactivity_minutes: BUREAU_INACTIVITY_MINUTES
+    });
+    if (error) {
+      console.warn('[Auth] validate_bureau_session RPC:', error.message);
+      return { valid: false, reason: 'server_error' };
     }
-    // Timeout d'inactivité
-    const lastActivity = new Date(s.last_activity || s.created_at).getTime();
-    const inactivityMs = BUREAU_INACTIVITY_MINUTES * 60 * 1000;
-    if ((now - lastActivity) > inactivityMs) {
-      await supabaseClient.from('bureau_sessions').delete().eq('token', token);
+    if (!data || !data.valid) {
       clearBureauCookie();
-      return { valid: false, reason: 'inactivity_timeout' };
+      return { valid: false, reason: (data && data.reason) || 'invalid' };
     }
-    // Session OK — récup account
-    const acc = await getBureauAccountByUsername(s.username);
-    if (!acc || !acc.is_active) {
-      await supabaseClient.from('bureau_sessions').delete().eq('token', token);
-      clearBureauCookie();
-      return { valid: false, reason: 'account_disabled' };
-    }
-    return { valid: true, session: s, account: acc };
+    return { valid: true, session: { token, expires_at: data.expires_at, username: data.account.username }, account: data.account };
   } catch(e) {
-    console.warn('[Auth] validate session:', e.message);
+    console.warn('[Auth] validate exception:', e);
     return { valid: false, reason: 'server_error' };
   }
 }
 
-// Refresh last_activity de la session courante (throttled côté appelant)
+// Refresh last_activity de la session courante
 async function touchBureauSession() {
   const token = getBureauCookie();
   if (!token || !supabaseClient) return;
-  try {
-    await supabaseClient.from('bureau_sessions')
-      .update({ last_activity: new Date().toISOString() })
-      .eq('token', token);
-  } catch(e) {}
+  try { await supabaseClient.rpc('touch_bureau_session', { p_token: token }); } catch(e) {}
 }
 
-// Déconnexion : delete session + clear cookie
+// Déconnexion : RPC end_bureau_session + clear cookie
 async function endBureauSession() {
   const token = getBureauCookie();
   if (token && supabaseClient) {
-    try { await supabaseClient.from('bureau_sessions').delete().eq('token', token); } catch(e) {}
+    try { await supabaseClient.rpc('end_bureau_session', { p_token: token }); } catch(e) {}
   }
   clearBureauCookie();
 }
@@ -584,6 +536,7 @@ window.attemptBureauLogin             = attemptBureauLogin;
 window.validateBureauSession          = validateBureauSession;
 window.touchBureauSession             = touchBureauSession;
 window.endBureauSession               = endBureauSession;
+window.getBureauCookie                = getBureauCookie;  // v1.37.3 : exposé pour les RPCs CRUD
 window.getBureauAccountByUsername     = getBureauAccountByUsername;
 window.logLoginAttempt                = logLoginAttempt;
 window.BUREAU_SALT                    = BUREAU_SALT;
