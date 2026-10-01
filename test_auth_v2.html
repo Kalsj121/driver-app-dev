@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>LCA — Test Supabase Auth v2</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+         max-width: 540px; margin: 40px auto; padding: 20px; background: #f5f7fa; color: #1a2c3d; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 15px; margin-top: 24px; color: #4da9be; border-bottom: 1px solid #d0dde3; padding-bottom: 4px; }
+  label { display: block; margin: 10px 0 4px; font-size: 13px; font-weight: 600; }
+  input, select { width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid #cbd5db; border-radius: 6px; box-sizing: border-box; }
+  button { margin: 12px 6px 12px 0; padding: 10px 18px; font-size: 14px; font-weight: 600; background: #4da9be; color: #fff;
+           border: none; border-radius: 6px; cursor: pointer; }
+  button:hover { background: #3b8a9c; }
+  button.alt { background: #e5edf1; color: #1a2c3d; }
+  .out { background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 6px; font: 12px/1.5 ui-monospace, monospace;
+         white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+  .green { color: #22c55e; }
+  .red { color: #f87171; }
+</style>
+</head>
+<body>
+<h1>🔐 Test Supabase Auth v2</h1>
+<p style="font-size:12px;color:#5a6b7a;">Page autonome pour tester le nouveau flow Supabase Auth sans toucher à l'app. Ouvre-la, teste, puis ferme — rien ne persiste côté UI principale.</p>
+
+<h2>Login</h2>
+<label>Type de compte</label>
+<select id="type">
+  <option value="bureau">Bureau</option>
+  <option value="driver">Chauffeur</option>
+</select>
+<label>Username</label>
+<input id="user" placeholder="AdminAdmin / J.KALSCHEUER / TEST01">
+<label>Password</label>
+<input id="pass" type="password" placeholder="•••••••">
+<button onclick="doLogin()">🔓 Login</button>
+<button class="alt" onclick="doValidate()">🔍 Valider la session courante</button>
+<button class="alt" onclick="doLogout()">🚪 Logout</button>
+
+<h2>Création compte (super_admin requis)</h2>
+<label>Username</label>
+<input id="c-user" placeholder="TEST02">
+<label>Password (min 10 chars)</label>
+<input id="c-pass" value="TestPass123!">
+<label>Fullname</label>
+<input id="c-full" placeholder="Test 02">
+<label>Rôle</label>
+<select id="c-role">
+  <option value="driver">driver</option>
+  <option value="operations">operations</option>
+  <option value="admin">admin</option>
+  <option value="super_admin">super_admin</option>
+</select>
+<label>Entity (chauffeur)</label>
+<input id="c-ent" value="Liege Cargo Agency SA">
+<button onclick="doCreate()">➕ Créer</button>
+
+<h2>Résultat</h2>
+<div id="out" class="out">(aucun test lancé)</div>
+
+<script defer src="./supabase_config.js"></script>
+<script>
+function log(label, obj, cls) {
+  const el = document.getElementById('out');
+  const stamp = new Date().toLocaleTimeString();
+  const txt = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  el.innerHTML = `<span class="${cls||''}">[${stamp}] ${label}:</span>\n${txt}\n\n` + el.innerHTML;
+}
+async function waitReady() {
+  let w = 0;
+  while (w < 5000 && !window._supabaseReady) { await new Promise(r=>setTimeout(r,100)); w+=100; }
+}
+async function doLogin() {
+  await waitReady();
+  const type = document.getElementById('type').value;
+  const u = document.getElementById('user').value.trim();
+  const p = document.getElementById('pass').value;
+  const r = await window.attemptLoginV2(u, p, type === 'bureau');
+  log('Login ' + type, r, r.ok ? 'green' : 'red');
+}
+async function doValidate() {
+  await waitReady();
+  const r = await window.validateSessionV2();
+  log('Validate session', r, r.valid ? 'green' : 'red');
+}
+async function doLogout() {
+  await waitReady();
+  await window.endSessionV2();
+  log('Logout', 'ok', 'green');
+}
+async function doCreate() {
+  await waitReady();
+  const payload = {
+    username:    document.getElementById('c-user').value.trim(),
+    password:    document.getElementById('c-pass').value,
+    fullname:    document.getElementById('c-full').value.trim(),
+    role:        document.getElementById('c-role').value,
+    pdf_allowed: false,
+    entity:      document.getElementById('c-ent').value.trim(),
+    allowed_views:    ['dashboard'],
+    allowed_entities: []
+  };
+  const r = await window.adminCreateUserV2(payload);
+  log('Create user', r, r.ok ? 'green' : 'red');
+}
+</script>
+</body>
+</html>

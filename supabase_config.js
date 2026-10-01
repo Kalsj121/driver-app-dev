@@ -403,6 +403,117 @@ function clearDriverCookie() {
   document.cookie = DRIVER_COOKIE_NAME + '=; path=/; max-age=0; SameSite=Lax';
 }
 
+// ============================================================
+// v1.38.0 — Phase 4.2 : helpers d'authentification Supabase Auth
+// Cohabitent avec les anciens (attemptBureauLogin, etc.) tant qu'on n'a pas
+// bascule l'UI principale. On peut tester en console sans impact.
+// ============================================================
+
+const DRIVER_EMAIL_DOMAIN_V2 = 'drivers.liegecargo.local';
+const BUREAU_EMAIL_DOMAIN_V2 = 'bureau.liegecargo.local';
+
+function _usernameToEmailV2(username, isBureau) {
+  const lower = String(username || '').trim().toLowerCase();
+  return lower + '@' + (isBureau ? BUREAU_EMAIL_DOMAIN_V2 : DRIVER_EMAIL_DOMAIN_V2);
+}
+
+/**
+ * Tentative de login via Supabase Auth.
+ * @param {string} username - identifiant métier (ex: "AdminAdmin", "J.KALSCHEUER")
+ * @param {string} password
+ * @param {boolean} isBureau - true pour un compte bureau, false pour chauffeur
+ * @returns {Promise<{ok:boolean, reason?:string, profile?:object, session?:object}>}
+ */
+async function attemptLoginV2(username, password, isBureau) {
+  if (!supabaseClient) return { ok: false, reason: 'server_error' };
+  if (!username || !password) return { ok: false, reason: 'missing_credentials' };
+  try {
+    const email = _usernameToEmailV2(username, isBureau);
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
+        return { ok: false, reason: 'bad_password' };
+      }
+      if (msg.includes('user not found')) return { ok: false, reason: 'unknown_user' };
+      if (msg.includes('email not confirmed')) return { ok: false, reason: 'account_disabled' };
+      return { ok: false, reason: 'server_error', detail: error.message };
+    }
+    if (!data || !data.user || !data.session) return { ok: false, reason: 'server_error' };
+
+    // Récupérer le profile metier
+    const { data: prof, error: pErr } = await supabaseClient.rpc('me');
+    if (pErr) return { ok: false, reason: 'profile_fetch_failed', detail: pErr.message };
+    if (!prof)           return { ok: false, reason: 'profile_missing' };
+    if (prof.is_active === false) {
+      await supabaseClient.auth.signOut();
+      return { ok: false, reason: 'account_disabled' };
+    }
+    // Garde-fou : rôle doit correspondre au contexte
+    const isBureauRole = ['operations','admin','super_admin'].includes(prof.role);
+    if (isBureau && !isBureauRole) {
+      await supabaseClient.auth.signOut();
+      return { ok: false, reason: 'wrong_role_bureau_expected' };
+    }
+    if (!isBureau && prof.role !== 'driver') {
+      await supabaseClient.auth.signOut();
+      return { ok: false, reason: 'wrong_role_driver_expected' };
+    }
+    return { ok: true, session: data.session, profile: prof };
+  } catch (e) {
+    console.warn('[authV2] exception:', e);
+    return { ok: false, reason: 'server_error' };
+  }
+}
+
+/**
+ * Récupère la session courante Supabase Auth + le profile associé.
+ * @returns {Promise<{valid:boolean, profile?:object, session?:object, reason?:string}>}
+ */
+async function validateSessionV2() {
+  if (!supabaseClient) return { valid: false, reason: 'server_not_ready' };
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return { valid: false, reason: 'no_session' };
+    const { data: prof, error } = await supabaseClient.rpc('me');
+    if (error || !prof) return { valid: false, reason: 'profile_missing' };
+    if (prof.is_active === false) {
+      await supabaseClient.auth.signOut();
+      return { valid: false, reason: 'account_disabled' };
+    }
+    return { valid: true, session, profile: prof };
+  } catch (e) {
+    return { valid: false, reason: 'server_error' };
+  }
+}
+
+/** Déconnexion Supabase Auth */
+async function endSessionV2() {
+  if (!supabaseClient) return;
+  try { await supabaseClient.auth.signOut(); } catch (e) {}
+}
+
+/** Appelle l'Edge Function admin-create-user (super_admin requis) */
+async function adminCreateUserV2(payload) {
+  if (!supabaseClient) return { ok: false, reason: 'server_not_ready' };
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) return { ok: false, reason: 'not_authenticated' };
+  const url = (SUPABASE_URL || '') + '/functions/v1/admin-create-user';
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + session.access_token
+      },
+      body: JSON.stringify(payload)
+    });
+    return await r.json();
+  } catch (e) {
+    return { ok: false, reason: 'fetch_failed', detail: String(e) };
+  }
+}
+
 // Récupère l'user-agent + best-effort IP (l'IP réelle n'est pas dispo côté client,
 // on log ce qu'on a — Supabase peut avoir accès au header X-Forwarded-For si besoin
 // via une Edge Function, mais pour v1.33 on garde simple : IP = null).
@@ -564,6 +675,11 @@ window.getBureauCookie                = getBureauCookie;  // v1.37.3 : exposé p
 window.getDriverCookie                = getDriverCookie;  // v1.37.4
 window.setDriverCookie                = setDriverCookie;
 window.clearDriverCookie              = clearDriverCookie;
+// v1.38.0 — Phase 4.2 : nouvelles helpers Supabase Auth
+window.attemptLoginV2                 = attemptLoginV2;
+window.validateSessionV2              = validateSessionV2;
+window.endSessionV2                   = endSessionV2;
+window.adminCreateUserV2              = adminCreateUserV2;
 window.getBureauAccountByUsername     = getBureauAccountByUsername;
 window.logLoginAttempt                = logLoginAttempt;
 window.BUREAU_SALT                    = BUREAU_SALT;
