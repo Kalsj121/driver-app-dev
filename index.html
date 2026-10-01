@@ -2284,45 +2284,25 @@ async function persistDayPausesToLastMission() {
 // Met à jour active_drivers (pause/état entre missions) — tolérant aux colonnes manquantes
 // v1.09 : LOGS EXPLICITES + retry-drop-column pour diagnostiquer quand la pause
 // n'apparaît pas sur le dashboard.
+// v1.37.4 : écriture via RPC driver_update_active_state (whitelist côté serveur)
 async function updateActiveDriverState(fields) {
   if (!window.supabaseClient) { console.error('[ActiveDriver] supabaseClient manquant'); return; }
-  if (!currentDriver?.username) { console.error('[ActiveDriver] currentDriver.username manquant'); return; }
-  // v1.09b : convertir automatiquement les timestamps numériques en ISO (Supabase exige timestamptz en ISO)
+  const token = window.getDriverCookie ? window.getDriverCookie() : null;
+  if (!token) { console.warn('[ActiveDriver] token chauffeur manquant'); return; }
   const normalized = {};
   for (const [k, v] of Object.entries(fields || {})) {
     if (typeof v === 'number' && v > 1e12) normalized[k] = new Date(v).toISOString();
     else if (v instanceof Date) normalized[k] = v.toISOString();
     else normalized[k] = v;
   }
-  const payload = { lastseen: new Date().toISOString(), ...normalized };
-  const OPT = ['is_paused','pause_start','between_missions'];
-  let attempt = 0;
-  let error;
-  while (attempt < OPT.length + 1) {
-    const r = await window.supabaseClient.from('active_drivers')
-      .update(payload).eq('username', currentDriver.username);
-    error = r.error;
-    if (!error) {
-      console.log('[ActiveDriver] ✅ update OK', currentDriver.username, payload);
-      // Si 0 ligne affectée (row inexistante), on tente un upsert minimal
-      if (Array.isArray(r.data) && r.data.length === 0) {
-        console.warn('[ActiveDriver] 0 ligne mise à jour — upsert de secours');
-        await window.supabaseClient.from('active_drivers').upsert([{
-          username: currentDriver.username,
-          fullname: currentDriver.fullName || currentDriver.fullname || currentDriver.username,
-          ...payload
-        }], { onConflict: 'username' });
-      }
-      return;
-    }
-    const msg = error.message || '';
-    console.error('[ActiveDriver] erreur update:', msg);
-    const col = OPT.find(c => c in payload && (msg.includes(`"${c}"`) || new RegExp('column.*'+c+'|'+c+'.*column', 'i').test(msg)));
-    if (!col) { console.error('[ActiveDriver] ÉCHEC définitif — colonne introuvable dans le message'); return; }
-    console.warn('[ActiveDriver] retry sans colonne:', col);
-    delete payload[col];
-    attempt++;
-  }
+  try {
+    const { data, error } = await window.supabaseClient.rpc('driver_update_active_state', {
+      p_token: token, p_state: normalized
+    });
+    if (error)         { console.error('[ActiveDriver] RPC error:', error.message); return; }
+    if (!data || !data.ok) { console.error('[ActiveDriver] RPC refused:', data && data.reason); return; }
+    console.log('[ActiveDriver] ✅ update OK via RPC', normalized);
+  } catch(e) { console.error('[ActiveDriver] exception:', e.message); }
 }
 
 function togglePw(inputId, btn) {
