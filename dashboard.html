@@ -879,7 +879,7 @@ textarea.fi{resize:vertical;min-height:72px;}
 <!-- v1.33.2 : Footer complet à l'INTÉRIEUR de main-app pour être visible avec le scroll refactoré -->
 <div class="app-footer" id="ver-footer" style="display:none;text-align:center;padding:24px 24px 32px;background:var(--card);border-top:1px solid var(--b1);margin-top:32px;font-size:12px;color:var(--t2);line-height:1.7;">
   <div style="max-width:640px;margin:0 auto;">
-    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.37.9</div>
+    <div style="font-weight:700;color:var(--t1);margin-bottom:4px;">LCA Transfert · Version 1.38.0</div>
     <div>© 2026 <strong>Liege Cargo Agency SA</strong> — Tous droits réservés</div>
     <div style="margin-top:8px;">Support / anomalie : <a href="mailto:quality@liegecargo.com?subject=LCA%20Transfert%20-%20Support" style="color:var(--blue);text-decoration:none;font-weight:600;">quality@liegecargo.com</a></div>
   </div>
@@ -970,7 +970,7 @@ async function refreshEntitiesList() {
 async function refreshDriverEntityCache() {
   if (!window.supabaseClient) return;
   try {
-    const { data } = await window.supabaseClient.from('driver_accounts').select('username, fullname, entity');
+    const { data } = await window.supabaseClient.from('profiles').select('username, fullname, entity').eq('role','driver');
     _driverEntityCache = {};
     (data || []).forEach(d => {
       const ent = d.entity || '';
@@ -1551,12 +1551,10 @@ async function forceEndDay(username) {
   if (!confirm('Forcer la fin de journée pour ce chauffeur ?\n\nIl sera retiré de la liste des actifs et son opération sera clôturée.')) return;
   if (!window.supabaseClient) return;
   // v1.37.4 : passage par les RPCs bureau_*
-  const tokenB = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!tokenB) { showToast('Session expirée.'); return; }
   try {
     // 1. Dismiss active_drivers via RPC
-    await window.supabaseClient.rpc('bureau_dismiss_active_driver', {
-      p_caller_token: tokenB, p_username: username
+    await window.supabaseClient.rpc('bureau_dismiss_active_driver_v2', {
+            p_username: username
     });
 
     // 2. Trouver la mission active du chauffeur (completed=false, aujourd'hui)
@@ -1570,16 +1568,14 @@ async function forceEndDay(username) {
 
     if (driverMission) {
       // 3. Marquer comme completed dans missions via RPC
-      await window.supabaseClient.rpc('bureau_update_mission', {
-        p_caller_token: tokenB,
-        p_mission_id:   driverMission.id,
+      await window.supabaseClient.rpc('bureau_update_mission_v2', {
+            p_mission_id:   driverMission.id,
         p_patch:        { completed: true, dayendts: new Date().toISOString() }
       });
 
       // 4. Archiver via RPC bureau_upsert_mission_archive
-      await window.supabaseClient.rpc('bureau_upsert_mission_archive', {
-        p_caller_token: tokenB,
-        p_payload: {
+      await window.supabaseClient.rpc('bureau_upsert_mission_archive_v2', {
+            p_payload: {
           id:             String(driverMission.id),
           driver:         driverMission.driver,
           plate:          driverMission.plateTracteur || driverMission.plate || '',
@@ -1858,11 +1854,9 @@ async function subscribeBureauPush() {
       last_used_at: new Date().toISOString()
     };
     // v1.37.6 : passage via RPC bureau_subscribe_push (nettoyage + upsert atomique)
-    const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
-    if (window.supabaseClient && _btok) {
-      const { data, error } = await window.supabaseClient.rpc('bureau_subscribe_push', {
-        p_token:      _btok,
-        p_endpoint:   payload.endpoint,
+    if (window.supabaseClient) {
+      const { data, error } = await window.supabaseClient.rpc('bureau_subscribe_push_v2', {
+            p_endpoint:   payload.endpoint,
         p_p256dh:     payload.p256dh,
         p_auth:       payload.auth,
         p_user_agent: payload.user_agent
@@ -1893,10 +1887,9 @@ async function unsubscribeBureauPush() {
     const sub = await reg.pushManager.getSubscription();
     if (!sub) return true;
     // v1.37.6 : via RPC bureau_unsubscribe_push
-    const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
-    if (window.supabaseClient && _btok) {
+    if (window.supabaseClient) {
       try {
-        await window.supabaseClient.rpc('bureau_unsubscribe_push', { p_token: _btok, p_endpoint: sub.endpoint });
+        await window.supabaseClient.rpc('bureau_unsubscribe_push_v2', { p_endpoint: sub.endpoint });
       } catch(e) { console.warn('[Bureau Push] unsubscribe RPC:', e.message); }
     }
     await sub.unsubscribe();
@@ -1933,10 +1926,8 @@ async function updateBureauAlertsBadge() {
   const btn = document.getElementById('btn-alerts-bureau');
   if (!btn || !window.supabaseClient || !currentUser?.username) return;
   // v1.37.6 : via RPC bureau_get_alerts_enabled
-  const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!_btok) return;
   try {
-    const { data } = await window.supabaseClient.rpc('bureau_get_alerts_enabled', { p_token: _btok });
+    const { data } = await window.supabaseClient.rpc('bureau_get_alerts_enabled_v2', {});
     const enabled = !!(data && data.ok && data.enabled);
     btn.textContent = enabled ? '🚨' : '🔇';
     btn.title = enabled
@@ -1948,10 +1939,10 @@ async function updateBureauAlertsBadge() {
 // v1.36.5 : envoyer un push d'alerte via l'Edge Function send-bureau-push
 // (l'Edge Function filtrera sur alerts_enabled=true si alerts_only est passé)
 async function sendAlertPush(d, threshold, elapsedMin) {
-  if (!window.SUPABASE_URL || !window.SUPABASE_ANON) return;
-  // v1.37.8 : alerte envoyée par un bureau → bureau_token requis
-  const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!_btok) { console.warn('[Alert Push] bureau token manquant'); return; }
+  if (!window.SUPABASE_URL || !window.supabaseClient) return;
+  // v1.38.0 : auth via JWT utilisateur (session.access_token) dans Authorization
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (!session) { console.warn('[Alert Push] non authentifié'); return; }
   const url = window.SUPABASE_URL + '/functions/v1/send-bureau-push';
   const site = d.location || 'Site inconnu';
   const isLca = getLcaSites().includes(d.location);
@@ -1959,9 +1950,8 @@ async function sendAlertPush(d, threshold, elapsedMin) {
   try {
     await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + window.SUPABASE_ANON },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
       body: JSON.stringify({
-        bureau_token:    _btok,
         fromDriverName: 'Alerte',
         title: '⚠️ Alerte attente quai',
         body:  body.slice(0, 160),
@@ -1976,14 +1966,12 @@ async function sendAlertPush(d, threshold, elapsedMin) {
 async function toggleBureauAlerts() {
   if (!window.supabaseClient || !currentUser?.username) return;
   // v1.37.6 : via RPCs bureau_get_alerts_enabled + bureau_set_alerts_enabled
-  const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!_btok) { showToast('Session expirée.'); return; }
   try {
-    const { data: cur } = await window.supabaseClient.rpc('bureau_get_alerts_enabled', { p_token: _btok });
+    const { data: cur } = await window.supabaseClient.rpc('bureau_get_alerts_enabled_v2', {});
     const currentlyEnabled = !!(cur && cur.ok && cur.enabled);
     const newVal = !currentlyEnabled;
-    const { error } = await window.supabaseClient.rpc('bureau_set_alerts_enabled', {
-      p_token: _btok, p_enabled: newVal
+    const { error } = await window.supabaseClient.rpc('bureau_set_alerts_enabled_v2', {
+            p_enabled: newVal
     });
     if (error) { showToast('Erreur : ' + error.message); return; }
     showToast(newVal ? '🚨 Alertes activées' : '🔇 Alertes désactivées');
@@ -2055,10 +2043,8 @@ async function initBureauNotifPermission() {
 async function deleteAllMessages() {
   if (!confirm('Supprimer tous les messages ? Cette action est irréversible.')) return;
   // v1.37.5 : RPC super_admin only
-  const tok = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!tok) { showToast('Session expirée.'); return; }
   try {
-    const { data, error } = await window.supabaseClient.rpc('bureau_delete_all_messages', { p_token: tok });
+    const { data, error } = await window.supabaseClient.rpc('bureau_delete_all_messages_v2', {});
     if (error)         { showToast('Erreur : '+error.message); return; }
     if (!data || !data.ok) { showToast('Erreur : '+(data && data.reason || 'inconnue')); return; }
   } catch(e) { console.warn('[Messages] Delete failed:', e.message); }
@@ -2070,10 +2056,8 @@ async function deleteAllMessages() {
 
 async function deleteMessage(msgId) {
   // v1.37.5 : RPC super_admin only
-  const tok = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!tok) { showToast('Session expirée.'); return; }
   try {
-    const { data, error } = await window.supabaseClient.rpc('bureau_delete_message', { p_token: tok, p_id: Number(msgId) });
+    const { data, error } = await window.supabaseClient.rpc('bureau_delete_message_v2', { p_id: Number(msgId) });
     if (error)         { showToast('Erreur : '+error.message); return; }
     if (!data || !data.ok) { showToast('Erreur : '+(data && data.reason || 'inconnue')); return; }
   } catch(e) {}
@@ -2292,25 +2276,23 @@ async function sendMsg() {
 // v1.29 : appelle l'Edge Function send-driver-push pour notifier le(s) chauffeur(s)
 async function sendDriverPush(toFullname, msg) {
   const url = (window.SUPABASE_URL || '') + '/functions/v1/send-driver-push';
-  const key = window.SUPABASE_ANON || '';
-  if (!url || !key) { console.warn('[Push] URL/clé Supabase manquantes'); return; }
+  if (!url || !window.supabaseClient) { console.warn('[Push] Supabase non prêt'); return; }
+  // v1.38.0 : JWT utilisateur dans Authorization (Edge Function valide la session côté serveur)
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (!session) { console.warn('[Push] non authentifié'); return; }
   const title = msg.fromName ? ('Bureau · ' + msg.fromName) : 'Bureau LCA';
   let bodyText = (msg.text || '').slice(0, 140);
   if (!bodyText && msg.attachmentType === 'image') bodyText = '📷 Photo';
   if (!bodyText && msg.attachmentType === 'audio') bodyText = '🎤 Message audio';
-  // v1.37.8 : passer le bureau_token (Edge Function le valide côté serveur)
-  const _btok = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!_btok) { console.warn('[Push] bureau token manquant'); return; }
   const payload = (toFullname === 'all')
-    ? { bureau_token: _btok, sendToAll: true, title, body: bodyText, msgId: msg.id }
-    : { bureau_token: _btok, driverFullname: toFullname, title, body: bodyText, msgId: msg.id };
+    ? { sendToAll: true, title, body: bodyText, msgId: msg.id }
+    : { driverFullname: toFullname, title, body: bodyText, msgId: msg.id };
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
-        'Authorization': 'Bearer ' + key,
-        'apikey':        key
+        'Authorization': 'Bearer ' + session.access_token
       },
       body: JSON.stringify(payload)
     });
@@ -2761,9 +2743,8 @@ async function deleteAttachmentCMR(missionId, stopIdx0) {
           // v1.23 : effacer les deux formats (base64 + URL Storage)
           stops[stopIdx0] = { ...stops[stopIdx0], cmrData: null, cmrUrl: null };
           // v1.37.4 : passage via bureau_update_mission
-          const _tok = window.getBureauCookie ? window.getBureauCookie() : null;
-          const r = await window.supabaseClient.rpc('bureau_update_mission', {
-            p_caller_token: _tok, p_mission_id: missionId,
+          const r = await window.supabaseClient.rpc('bureau_update_mission_v2', {
+            p_mission_id: missionId,
             p_patch: { stops, updatedat: new Date().toISOString() }
           });
           const error = r.error || (r.data && !r.data.ok ? { message: 'RPC: '+r.data.reason } : null);
@@ -2781,9 +2762,8 @@ async function deleteAttachmentCMR(missionId, stopIdx0) {
           // v1.23 : effacer les deux formats (base64 + URL Storage)
           stops[stopIdx0] = { ...stops[stopIdx0], cmrData: null, cmrUrl: null };
           // v1.37.4 : passage via bureau_update_mission_archive
-          const _tok = window.getBureauCookie ? window.getBureauCookie() : null;
-          const r = await window.supabaseClient.rpc('bureau_update_mission_archive', {
-            p_caller_token: _tok, p_id: String(missionId),
+          const r = await window.supabaseClient.rpc('bureau_update_mission_archive_v2', {
+            p_id: String(missionId),
             p_patch: { stops, updatedat: new Date().toISOString() }
           });
           const error = r.error || (r.data && !r.data.ok ? { message: 'RPC: '+r.data.reason } : null);
@@ -3100,7 +3080,7 @@ async function openFeuilleDeRoute(driverName, dateStr) {
     let accountInfo = { fullName: driverName, username: '' };
     try {
       const { data: accs } = await window.supabaseClient
-        .from('driver_accounts').select('*').eq('fullname', driverName);
+        .from('profiles').select('*').eq('role','driver').eq('fullname', driverName);
       if (accs && accs[0]) { accountInfo = { fullName: accs[0].fullname, username: accs[0].username }; }
     } catch(e) {}
 
@@ -3342,11 +3322,9 @@ async function deleteArchiveMission(id) {
   if (!isSuperAdmin()) { showToast('Suppression réservée aux super administrateurs.'); return; }
   if (!confirm('Supprimer cette mission archivée ?')) return;
   // v1.37.4 : via RPC bureau_delete_mission (super_admin vérifié côté serveur)
-  const tok = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!tok) { showToast('Session expirée.'); return; }
   try {
-    const { data, error } = await window.supabaseClient.rpc('bureau_delete_mission', {
-      p_caller_token: tok, p_mission_id: Number(id)
+    const { data, error } = await window.supabaseClient.rpc('bureau_delete_mission_v2', {
+            p_mission_id: Number(id)
     });
     if (error)         { showToast('Erreur : '+error.message); return; }
     if (!data || !data.ok) { showToast('Erreur : '+(data && data.reason || 'inconnue')); return; }
@@ -3562,7 +3540,7 @@ function closeEditModal() {
 
 async function editDriverAccount(username) {
   if (!window.supabaseClient) { showToast('Supabase indisponible.'); return; }
-  const { data } = await window.supabaseClient.from('driver_accounts').select('*').eq('username', username).limit(1);
+  const { data } = await window.supabaseClient.from('profiles').select('*').eq('username', username).limit(1);
   if (!data || !data.length) { showToast('Compte introuvable.'); return; }
   const acc = data[0];
   _editContext = { type: 'driver', username, originalData: acc };
@@ -3594,7 +3572,7 @@ async function editDriverAccount(username) {
 
 async function editBureauAccount(username) {
   if (!isSuperAdmin()) { showToast('Réservé aux super admins.'); return; }
-  const { data } = await window.supabaseClient.from('bureau_accounts').select('*').eq('username', username).limit(1);
+  const { data } = await window.supabaseClient.from('profiles').select('*').eq('username', username).limit(1);
   if (!data || !data.length) { showToast('Compte introuvable.'); return; }
   const acc = data[0];
   _editContext = { type: 'bureau', username, originalData: acc };
@@ -3714,21 +3692,20 @@ async function saveDriverEdit(username) {
   const newPass    = document.getElementById('edit-driver-password').value;
   const pdfAllowed = document.getElementById('edit-driver-pdf').checked;
   const entity     = document.getElementById('edit-driver-entity')?.value || '';
-  const update = { fullname, pdf_allowed: pdfAllowed, entity };
-  // v1.37.2 : les champs non sensibles vont dans driver_accounts.
-  // Le nouveau mdp (si fourni) passe par l'RPC set_driver_credentials.
-  let newHash = null;
-  if (newPass.trim().length) {
-    if (!window.hashPassword) { showToast('Helper hash non chargé.'); return; }
-    newHash = await window.hashPassword(newPass);
-  }
+  // v1.38.0 : update profile via RPC + reset password via Edge Function admin-user-ops
   try {
-    const { error } = await window.supabaseClient.from('driver_accounts').update(update).eq('username', username);
-    if (error) { showToast('Erreur : ' + error.message); return; }
-    if (newHash) {
-      const { error: credErr } = await window.supabaseClient
-        .rpc('set_driver_credentials', { p_username: username, p_hash: newHash });
-      if (credErr) { showToast('Mdp non mis à jour : ' + credErr.message); return; }
+    const r = await window.supabaseClient.rpc('admin_update_profile_v2', {
+      p_target_username: username,
+      p_fullname:        fullname,
+      p_pdf_allowed:     pdfAllowed,
+      p_entity:          entity
+    });
+    if (r.error) { showToast('Erreur : ' + r.error.message); return; }
+    if (!r.data || !r.data.ok) { showToast('Erreur : ' + (r.data && r.data.reason || 'inconnue')); return; }
+    if (newPass.trim().length) {
+      if (newPass.length < 10) { showToast('Mot de passe trop court (10 min).'); return; }
+      const resp = await window.adminUserOps({ action: 'reset_password', username, password: newPass });
+      if (resp.error) { showToast('Mdp : ' + resp.error); return; }
     }
     showToast('Compte chauffeur ' + username + ' mis à jour ✓');
     closeEditModal();
@@ -3751,28 +3728,25 @@ async function saveBureauEdit(username) {
   } else if (views.length === 0) {
     showToast('Sélectionnez au moins une vue autorisée.'); return;
   }
-  // v1.37.3 : édition via RPC update_bureau_account (super_admin vérifié côté serveur)
-  let newHash = null;
-  if (newPass.trim().length) {
-    if (newPass.length < 10) { showToast('Mot de passe trop court (10 min).'); return; }
-    if (!window.hashPassword) { showToast('Helper hash non chargé.'); return; }
-    newHash = await window.hashPassword(newPass);
-  }
-  const token = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!token) { showToast('Session expirée. Reconnecte-toi.'); return; }
   try {
-    const { data, error } = await window.supabaseClient.rpc('update_bureau_account', {
-      p_caller_token:     token,
-      p_username:         username,
+    const r = await window.supabaseClient.rpc('admin_update_profile_v2', {
+      p_target_username:  username,
       p_fullname:         fullname,
       p_role:             role,
       p_allowed_views:    views,
       p_allowed_entities: entitiesSel,
-      p_is_active:        isActive,
-      p_new_hash:         newHash
+      p_is_active:        isActive
     });
-    if (error)         { showToast('Erreur : ' + error.message); return; }
-    if (!data || !data.ok) { showToast('Erreur : ' + (data && data.reason || 'inconnue')); return; }
+    if (r.error) { showToast('Erreur : ' + r.error.message); return; }
+    if (!r.data || !r.data.ok) { showToast('Erreur : ' + (r.data && r.data.reason || 'inconnue')); return; }
+    if (newPass.trim().length) {
+      if (newPass.length < 10) { showToast('Mot de passe trop court (10 min).'); return; }
+      const resp = await window.adminUserOps({ action: 'reset_password', username, password: newPass });
+      if (resp.error) { showToast('Mdp : ' + resp.error); return; }
+    }
+    if (!isActive) {
+      await window.adminUserOps({ action: 'set_active', username, is_active: false });
+    }
     showToast('Compte bureau ' + username + ' mis à jour ✓');
     closeEditModal();
     loadBureauAccounts();
@@ -3834,23 +3808,18 @@ async function createBureauAccount() {
   if (!username || !pass) { showToast('Login et mot de passe requis.'); return; }
   if (pass.length < 10) { showToast('Mot de passe trop court (10 caractères minimum).'); return; }
   if (!isSuper && views.length === 0) { showToast('Sélectionnez au moins une vue autorisée.'); return; }
-  if (!window.hashPassword) { showToast('Helper hash non chargé.'); return; }
-  const hash = await window.hashPassword(pass);
-  // v1.37.3 : création via RPC create_bureau_account (super_admin requis, vérifié côté serveur)
-  const token = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!token) { showToast('Session expirée. Reconnecte-toi.'); return; }
+  // v1.38.0 : création via Edge Function admin-create-user (Supabase Auth)
   try {
-    const { data, error } = await window.supabaseClient.rpc('create_bureau_account', {
-      p_caller_token:     token,
-      p_username:         username,
-      p_hash:             hash,
-      p_fullname:         fullname,
-      p_role:             isSuper ? 'super_admin' : role,
-      p_allowed_views:    isSuper ? ['dashboard','messages','reports','accounts','vehicles','backups'] : views,
-      p_allowed_entities: ents
+    const resp = await window.adminCreateUser({
+      username,
+      password:         pass,
+      fullname,
+      role:             isSuper ? 'super_admin' : role,
+      allowed_views:    isSuper ? ['dashboard','messages','reports','accounts','vehicles','backups'] : views,
+      allowed_entities: ents
     });
-    if (error)         { showToast('Erreur : ' + error.message); return; }
-    if (!data || !data.ok) { showToast('Erreur : ' + (data && data.reason || 'inconnue')); return; }
+    if (resp.error) { showToast('Erreur : ' + resp.error); return; }
+    if (!resp.ok)   { showToast('Erreur : création échouée'); return; }
     showToast('Compte bureau ' + username + ' créé ✓');
     // Reset form
     document.getElementById('bacc-name').value = '';
@@ -3881,7 +3850,11 @@ async function loadBureauAccounts() {
     }
   }
   try {
-    const { data, error } = await window.supabaseClient.from('bureau_accounts').select('*').order('created_at', { ascending: true });
+    // v1.38.0 : lecture depuis profiles (role bureau = operations/admin/super_admin)
+    const { data, error } = await window.supabaseClient
+      .from('profiles').select('*')
+      .in('role', ['operations','admin','super_admin'])
+      .order('created_at', { ascending: true });
     if (error) { container.innerHTML = '<div class="empty"><p>Erreur : '+error.message+'</p></div>'; return; }
     if (!data || !data.length) { container.innerHTML = '<div class="empty"><p>Aucun compte bureau.</p></div>'; return; }
     container.innerHTML = '<table class="acc-table"><thead><tr><th>Login</th><th>Rôle</th><th>Vues</th><th>Entités</th><th>Actif</th><th style="text-align:right;">Actions</th></tr></thead><tbody>'
@@ -3933,23 +3906,10 @@ async function resetBureauPassword(username) {
   if (newPass === null) return;
   const pwd = newPass.trim().length ? newPass : window.generateStrongPassword(16);
   if (pwd.length < 10) { showToast('Mot de passe trop court (10 min).'); return; }
-  const hash = await window.hashPassword(pwd);
-  // v1.37.3 : passage par l'RPC update_bureau_account qui gère password_hash + reset lock
-  const token = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!token) { showToast('Session expirée. Reconnecte-toi.'); return; }
+  // v1.38.0 : via Edge Function admin-user-ops
   try {
-    const { data, error } = await window.supabaseClient.rpc('update_bureau_account', {
-      p_caller_token:     token,
-      p_username:         username,
-      p_fullname:         null,
-      p_role:             null,
-      p_allowed_views:    null,
-      p_allowed_entities: null,
-      p_is_active:        true,  // réactive si désactivé par trop d'échecs
-      p_new_hash:         hash
-    });
-    if (error)         { showToast('Erreur : '+error.message); return; }
-    if (!data || !data.ok) { showToast('Erreur : '+(data && data.reason || 'inconnue')); return; }
+    const resp = await window.adminUserOps({ action: 'reset_password', username, password: pwd });
+    if (resp.error) { showToast('Erreur : ' + resp.error); return; }
     prompt('Nouveau mot de passe pour '+username+' (copiez-le maintenant !) :', pwd);
     showToast('Mot de passe mis à jour ✓');
   } catch(e) { showToast('Erreur : '+e.message); }
@@ -3959,25 +3919,9 @@ async function deleteBureauAccount(username) {
   if (!isSuperAdmin()) { showToast('Réservé aux super admins.'); return; }
   if (currentUser && currentUser.username === username) { showToast('Impossible de vous supprimer vous-même.'); return; }
   if (!confirm('Supprimer le compte bureau '+username+' ? Cette action est irréversible.')) return;
-  // v1.37.3 : suppression via RPC (vérifie super_admin + dernier admin + nettoie credentials + sessions)
-  const token = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!token) { showToast('Session expirée. Reconnecte-toi.'); return; }
   try {
-    const { data, error } = await window.supabaseClient.rpc('delete_bureau_account', {
-      p_caller_token: token,
-      p_username:     username
-    });
-    if (error)         { showToast('Erreur : '+error.message); return; }
-    if (!data || !data.ok) {
-      const map = {
-        'last_super_admin':   'Impossible de supprimer le dernier super administrateur.',
-        'cannot_delete_self': 'Impossible de vous supprimer vous-même.',
-        'forbidden':          'Réservé aux super admins.',
-        'session_invalid':    'Session expirée. Reconnecte-toi.'
-      };
-      showToast(map[data && data.reason] || ('Erreur : '+(data && data.reason || 'inconnue')));
-      return;
-    }
+    const resp = await window.adminUserOps({ action: 'delete', username });
+    if (resp.error) { showToast('Erreur : ' + resp.error); return; }
     showToast('Compte '+username+' supprimé ✓');
     loadBureauAccounts();
   } catch(e) { showToast('Erreur : '+e.message); }
@@ -4039,16 +3983,14 @@ async function saveBureauSettings() {
   if (!sites.length) { showToast('Renseignez au moins un site LCA.'); return; }
   try {
     // v1.37.7 : via RPC bureau_settings_set (super_admin vérifié côté serveur)
-    const tokS = window.getBureauCookie ? window.getBureauCookie() : null;
-    if (!tokS) { showToast('Session expirée.'); return; }
     const upserts = [
       { key: 'alert_threshold_lca',   value: thrLca   },
       { key: 'alert_threshold_other', value: thrOther },
       { key: 'lca_sites',             value: sites    }
     ];
     for (const u of upserts) {
-      const { error } = await window.supabaseClient.rpc('bureau_settings_set', {
-        p_token: tokS, p_key: u.key, p_value: u.value
+      const { error } = await window.supabaseClient.rpc('bureau_settings_set_v2', {
+            p_key: u.key, p_value: u.value
       });
       if (error) { showToast('Erreur : ' + error.message); return; }
     }
@@ -4070,12 +4012,8 @@ async function loadLoginHistory() {
   const filterUser    = (document.getElementById('hist-filter-user')?.value || '').trim();
   const filterOutcome = document.getElementById('hist-filter-outcome')?.value || 'all';
   try {
-    // v1.37.3 : login_history n'est plus accessible directement (RLS fermée)
-    // Passage par la RPC get_login_history (super_admin requis côté serveur)
-    const token = window.getBureauCookie ? window.getBureauCookie() : null;
-    if (!token) { container.innerHTML = '<div class="empty"><p>Session expirée.</p></div>'; return; }
-    const { data, error } = await window.supabaseClient.rpc('get_login_history', {
-      p_caller_token:   token,
+    // v1.38.0 : login_history via RPC get_login_history_v2 (super_admin vérifié via auth.uid())
+    const { data, error } = await window.supabaseClient.rpc('get_login_history_v2', {
       p_filter_user:    filterUser || null,
       p_filter_outcome: filterOutcome || 'all',
       p_limit:          200
@@ -4115,7 +4053,7 @@ async function getDriverAccounts() {
   // Comptes uniquement depuis Supabase
   if (window.supabaseClient) {
     try {
-      const { data, error } = await window.supabaseClient.from('driver_accounts').select('*');
+      const { data, error } = await window.supabaseClient.from('profiles').select('*').eq('role','driver');
       if (!error && data) return data;
     } catch(e) {}
   }
@@ -4128,43 +4066,25 @@ async function createAccount() {
   const pass   = document.getElementById('acc-pass').value;
   const entity = document.getElementById('acc-entity')?.value || '';
   if (!name || !login || !pass) { showToast('Tous les champs sont requis.'); return; }
-  if (!window.supabaseClient) { showToast('Supabase non disponible.'); return; }
-  if (!window.hashPassword)   { showToast('Helper hash non chargé.'); return; }
-
-  // v1.37.2 : on crée d'abord le compte dans driver_accounts (sans password_hash),
-  // puis on écrit le hash dans driver_credentials via l'RPC SECURITY DEFINER.
-  const hash = await window.hashPassword(pass);
-  const newAcc = { username: login, fullname: name, pdf_allowed: false, entity };
+  if (pass.length < 10)         { showToast('Mot de passe trop court (10 min).'); return; }
+  if (!window.supabaseClient)   { showToast('Supabase non disponible.'); return; }
+  // v1.38.0 : création via Edge Function admin-create-user (Supabase Auth)
   try {
-    let { error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' });
-    // Retry si colonnes manquantes (schéma pas encore migré)
-    if (error && /pdf_allowed/i.test(error.message || '')) {
-      delete newAcc.pdf_allowed;
-      ({ error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' }));
-    }
-    if (error && /entity/i.test(error.message || '')) {
-      delete newAcc.entity;
-      ({ error } = await window.supabaseClient.from('driver_accounts').upsert([newAcc], { onConflict: 'username' }));
-    }
-    if (error) {
-      console.error('[createAccount] erreur:', error);
-      showToast('Erreur création compte : ' + error.message);
-      return;
-    }
-    // v1.37.2 : écrire le hash dans driver_credentials via l'RPC SECURITY DEFINER
-    const { error: credErr } = await window.supabaseClient
-      .rpc('set_driver_credentials', { p_username: login, p_hash: hash });
-    if (credErr) {
-      console.error('[createAccount] set_driver_credentials:', credErr);
-      showToast('Compte créé mais mdp non enregistré : ' + credErr.message);
-      return;
-    }
+    const resp = await window.adminCreateUser({
+      username:    login,
+      password:    pass,
+      fullname:    name,
+      role:        'driver',
+      pdf_allowed: false,
+      entity:      entity
+    });
+    if (resp.error) { showToast('Erreur : ' + resp.error); return; }
+    if (!resp.ok)   { showToast('Erreur : création échouée'); return; }
     document.getElementById('acc-name').value = '';
     document.getElementById('acc-login').value = '';
     document.getElementById('acc-pass').value = '';
     if (document.getElementById('acc-entity')) document.getElementById('acc-entity').value = '';
     showToast('Compte créé pour ' + name + ' ✓');
-    // v1.34 : rafraîchir le cache driver→entity pour que le filtrage prenne effet
     await refreshDriverEntityCache();
     loadAccounts();
   } catch(e) {
@@ -4184,9 +4104,7 @@ async function createEntity() {
   if (!window.supabaseClient) return;
   try {
     // v1.37.7 : via RPC entities_insert
-    const tokE = window.getBureauCookie ? window.getBureauCookie() : null;
-    if (!tokE) { showToast('Session expirée.'); return; }
-    const { data, error } = await window.supabaseClient.rpc('entities_insert', { p_token: tokE, p_name: name });
+    const { data, error } = await window.supabaseClient.rpc('entities_insert_v2', { p_name: name });
     if (error) {
       if (/duplicate|unique/i.test(error.message)) { showToast('Cette entité existe déjà.'); return; }
       showToast('Erreur : ' + error.message); return;
@@ -4207,7 +4125,7 @@ async function loadEntitiesList() {
   // Compter les chauffeurs par entité
   let counts = {};
   try {
-    const { data } = await window.supabaseClient.from('driver_accounts').select('entity');
+    const { data } = await window.supabaseClient.from('profiles').select('entity').eq('role','driver');
     (data || []).forEach(d => {
       const e = d.entity || '';
       if (!e) return;
@@ -4241,11 +4159,9 @@ async function renameEntity(oldName) {
   const trimmed = newName.trim();
   if (!trimmed || trimmed === oldName) return;
   // v1.37.7 : via RPC entities_rename (fait tout : entité + driver + bureau)
-  const tok1 = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!tok1) { showToast('Session expirée.'); return; }
   try {
-    const { data, error } = await window.supabaseClient.rpc('entities_rename', {
-      p_token: tok1, p_old: oldName, p_new: trimmed
+    const { data, error } = await window.supabaseClient.rpc('entities_rename_v2', {
+            p_old: oldName, p_new: trimmed
     });
     if (error) { showToast('Erreur : ' + error.message); return; }
     if (!data || !data.ok) { showToast('Erreur : ' + (data && data.reason || 'inconnue')); return; }
@@ -4259,10 +4175,8 @@ async function renameEntity(oldName) {
 async function toggleEntity(id, newActive) {
   if (!isSuperAdmin()) return;
   // v1.37.7 : via RPC entities_toggle
-  const tokT = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!tokT) { showToast('Session expirée.'); return; }
   try {
-    const { data, error } = await window.supabaseClient.rpc('entities_toggle', { p_token: tokT, p_id: id, p_active: newActive });
+    const { data, error } = await window.supabaseClient.rpc('entities_toggle_v2', { p_id: id, p_active: newActive });
     if (error) { showToast('Erreur : ' + error.message); return; }
     if (!data || !data.ok) { showToast('Erreur : ' + (data && data.reason || 'inconnue')); return; }
     showToast('Entité ' + (newActive ? 'activée' : 'désactivée') + ' ✓');
@@ -4279,11 +4193,9 @@ async function deleteEntity(id, name, nbDrivers) {
     if (!confirm('Supprimer l\'entité "' + name + '" ?')) return;
   }
   // v1.37.7 : via RPC entities_delete (cascade driver + bureau + delete entité)
-  const tok2 = window.getBureauCookie ? window.getBureauCookie() : null;
-  if (!tok2) { showToast('Session expirée.'); return; }
   try {
-    const { data, error } = await window.supabaseClient.rpc('entities_delete', {
-      p_token: tok2, p_id: id, p_name: name
+    const { data, error } = await window.supabaseClient.rpc('entities_delete_v2', {
+            p_id: id, p_name: name
     });
     if (error) { showToast('Erreur : ' + error.message); return; }
     if (!data || !data.ok) { showToast('Erreur : ' + (data && data.reason || 'inconnue')); return; }
@@ -4297,13 +4209,11 @@ async function deleteEntity(id, name, nbDrivers) {
 async function togglePdfPermission(username, newVal) {
   if (!window.supabaseClient) { showToast('Supabase non disponible.'); return; }
   try {
-    const { error } = await window.supabaseClient
-      .from('driver_accounts')
-      .update({ pdf_allowed: newVal })
-      .eq('username', username);
-    if (error) {
-      showToast('Erreur mise à jour PDF : ' + error.message);
-      console.error('[togglePdfPermission]', error);
+    const r = await window.supabaseClient.rpc('admin_update_profile_v2', {
+      p_target_username: username, p_pdf_allowed: newVal
+    });
+    if (r.error || !r.data || !r.data.ok) {
+      showToast('Erreur mise à jour PDF : ' + (r.error?.message || r.data?.reason || 'inconnue'));
       return;
     }
     showToast((newVal ? '✅ PDF autorisé' : '⛔ PDF bloqué') + ' pour ' + username);
@@ -4315,7 +4225,8 @@ async function deleteAccount(username) {
   if (!confirm('Supprimer le compte ' + username + ' ?')) return;
   if (!window.supabaseClient) { showToast('Supabase non disponible.'); return; }
   try {
-    await window.supabaseClient.from('driver_accounts').delete().eq('username', username);
+    const resp = await window.adminUserOps({ action: 'delete', username });
+    if (resp.error) { showToast('Erreur : ' + resp.error); return; }
   } catch(e) {}
   showToast('Compte supprimé.');
   loadAccounts();

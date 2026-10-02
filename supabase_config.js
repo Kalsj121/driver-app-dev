@@ -3,6 +3,20 @@
 // Ne PAS confondre avec le supabase_config.js de la prod !
 // Ce fichier est destiné UNIQUEMENT au repo driver-app-dev.
 // ============================================================
+// v1.38.0 — Phase 4.5a : refonte complète sur Supabase Auth
+//
+// Changements majeurs :
+//   - Plus de hashPassword SHA-256 custom, plus de BUREAU_SALT.
+//   - Plus de cookies de session maison (bureau/driver).
+//   - Plus de token transmis manuellement en paramètre des RPCs.
+//   - Toute l'auth passe par supabase.auth (JWT standard).
+//   - Toutes les écritures passent par les RPCs _v2 qui lisent auth.uid().
+//
+// L'API publique garde le même nom (attemptBureauLogin, verifyDriverLogin,
+// saveMissionToSupabase, etc.) pour éviter de casser les appelants, mais le
+// corps est entièrement réécrit.
+// ============================================================
+
 const SUPABASE_URL  = 'https://qkvnggcecmukogctfgsl.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_oBsmqpo8oQVi8gqyKMjI8A_r7fnSAzK';
 
@@ -16,7 +30,14 @@ if (typeof supabase === 'undefined') {
 
 let supabaseClient = null;
 try {
-  supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      storage: window.localStorage
+    }
+  });
   console.log('[Supabase] Client created successfully');
 } catch (e) {
   console.error('[Supabase] Failed to create client:', e.message);
@@ -31,183 +52,120 @@ function toISO(val) {
   if (typeof val === 'string') return val;
   return new Date(val).toISOString();
 }
-
 function fromISO(val) {
   if (!val) return null;
   if (typeof val === 'number') return val;
   return new Date(val).getTime();
 }
-
 function stopToStorage(stop) {
   if (!stop) return stop;
-  return {
-    ...stop,
-    tArrival:      toISO(stop.tArrival),
-    tDockAssigned: toISO(stop.tDockAssigned),
-    tDockReady:    toISO(stop.tDockReady),
-    tOpsStart:     toISO(stop.tOpsStart),
-    tOpsEnd:       toISO(stop.tOpsEnd),
-    tDoc:          toISO(stop.tDoc),
-    tDepart:       toISO(stop.tDepart),
-  };
+  return { ...stop,
+    tArrival: toISO(stop.tArrival), tDockAssigned: toISO(stop.tDockAssigned),
+    tDockReady: toISO(stop.tDockReady), tOpsStart: toISO(stop.tOpsStart),
+    tOpsEnd: toISO(stop.tOpsEnd), tDoc: toISO(stop.tDoc), tDepart: toISO(stop.tDepart) };
 }
-
 function stopFromStorage(stop) {
   if (!stop) return stop;
-  return {
-    ...stop,
-    tArrival:      fromISO(stop.tArrival),
-    tDockAssigned: fromISO(stop.tDockAssigned),
-    tDockReady:    fromISO(stop.tDockReady),
-    tOpsStart:     fromISO(stop.tOpsStart),
-    tOpsEnd:       fromISO(stop.tOpsEnd),
-    tDoc:          fromISO(stop.tDoc),
-    tDepart:       fromISO(stop.tDepart),
-  };
+  return { ...stop,
+    tArrival: fromISO(stop.tArrival), tDockAssigned: fromISO(stop.tDockAssigned),
+    tDockReady: fromISO(stop.tDockReady), tOpsStart: fromISO(stop.tOpsStart),
+    tOpsEnd: fromISO(stop.tOpsEnd), tDoc: fromISO(stop.tDoc), tDepart: fromISO(stop.tDepart) };
 }
 
 // ============================================================
-// MISSIONS — Supabase Functions
+// MISSIONS — reads via SELECT, writes via RPC _v2
 // ============================================================
-
 async function loadMissionsFromSupabase() {
   if (!supabaseClient) return [];
   try {
-    const { data, error } = await supabaseClient
-      .from('missions')
-      .select('*')
-      .order('daystartts', { ascending: false });
+    const { data, error } = await supabaseClient.from('missions').select('*').order('daystartts', { ascending: false });
     if (error) { console.warn('[Supabase] Error loading missions:', error.message); return []; }
     return (data || []).map(m => ({
       ...m,
-      dayStartTs:        fromISO(m.daystartts),
-      dayEndTs:          fromISO(m.dayendts),
-      tDispatchNotified: fromISO(m.tdispatchnotified),
-      tDispatchReceived: fromISO(m.tdispatchreceived),
-      isPaused:          m.ispaused === true,
-      tPauseStart:       fromISO(m.tpausestart),
-      // v1.35 : Tâches LCA
-      isLcaTasks:        m.is_lca_tasks === true,
-      tLcaTasksStart:    fromISO(m.t_lca_tasks_start),
-      lcaTasks:          Array.isArray(m.lca_tasks) ? m.lca_tasks : [],
-      stops:  (m.stops  || []).map(stopFromStorage),
+      dayStartTs: fromISO(m.daystartts), dayEndTs: fromISO(m.dayendts),
+      tDispatchNotified: fromISO(m.tdispatchnotified), tDispatchReceived: fromISO(m.tdispatchreceived),
+      isPaused: m.ispaused === true, tPauseStart: fromISO(m.tpausestart),
+      isLcaTasks: m.is_lca_tasks === true, tLcaTasksStart: fromISO(m.t_lca_tasks_start),
+      lcaTasks: Array.isArray(m.lca_tasks) ? m.lca_tasks : [],
+      stops: (m.stops || []).map(stopFromStorage),
       pauses: Array.isArray(m.pauses) ? m.pauses : [],
     }));
   } catch (e) { console.warn('[Supabase] Mission load failed:', e.message); return []; }
 }
 
-// v1.24 — Sauvegarde de la mission. Le paramètre `opts` est conservé pour
-// rétrocompatibilité mais ignoré : depuis la migration Storage, les photos
-// ne sont plus en base64 dans `stops`, donc la colonne `stops` ne pèse plus
-// que quelques Ko — l'upsert complet est désormais bon marché en IO.
-// (L'optimisation `lightSync` v1.23 cassait les nouvelles missions car un
-// UPDATE sur une ligne inexistante ne crée rien.)
 async function saveMissionToSupabase(mission, opts) {
   if (!supabaseClient) return false;
   try {
     const payload = {
-      id:             mission.id,
-      driver:         mission.driver,
-      plate:          mission.plateTracteur || mission.plate || '',
+      id: mission.id,
+      plate: mission.plateTracteur || mission.plate || '',
       plate_remorque: mission.plateRemorque || mission.plate_remorque || '',
-      date:           mission.date,
-      daystartts:     toISO(mission.dayStartTs),
-      dayendts:       toISO(mission.dayEndTs),
-      completed:      mission.completed || false,
-      stops:          (mission.stops || []).map(stopToStorage),
-      updatedat:      new Date().toISOString()
+      date: mission.date,
+      daystartts: toISO(mission.dayStartTs),
+      dayendts: toISO(mission.dayEndTs),
+      completed: mission.completed || false,
+      stops: (mission.stops || []).map(stopToStorage),
     };
-    // v1.08 — sauvegarder explicitement les timestamps d'état (indispensable pour
-    // que le dashboard voie "En attente de notification / d'instructions / En route").
     if (Array.isArray(mission.pauses))             payload.pauses            = mission.pauses;
     if (mission.tDispatchNotified != null)         payload.tdispatchnotified = toISO(mission.tDispatchNotified);
     if (mission.tDispatchReceived != null)         payload.tdispatchreceived = toISO(mission.tDispatchReceived);
     if (typeof mission.isPaused === 'boolean')     payload.ispaused          = mission.isPaused;
     if (mission.tPauseStart != null)               payload.tpausestart       = toISO(mission.tPauseStart);
-    // v1.35 : Tâches LCA — colonnes optionnelles (retry drop si absentes)
     if (typeof mission.isLcaTasks === 'boolean')   payload.is_lca_tasks       = mission.isLcaTasks;
     if (mission.tLcaTasksStart != null)            payload.t_lca_tasks_start  = toISO(mission.tLcaTasksStart);
     if (Array.isArray(mission.lcaTasks))           payload.lca_tasks          = mission.lcaTasks;
 
-    // v1.37.4 : écriture via RPC driver_save_mission (session chauffeur requise)
-    const token = getDriverCookie();
-    if (!token) { console.warn('[Supabase] saveMission : pas de token chauffeur'); return false; }
-    const { data, error } = await supabaseClient.rpc('driver_save_mission', {
-      p_token: token, p_payload: payload
-    });
-    if (error) { console.error('[Supabase] driver_save_mission:', error.message); return false; }
-    if (!data || !data.ok) {
-      console.error('[Supabase] driver_save_mission refusé:', data && data.reason);
-      return false;
-    }
-    console.log('[Supabase] ✅ Mission saved via RPC (id=' + data.id + ')');
+    const { data, error } = await supabaseClient.rpc('driver_save_mission_v2', { p_payload: payload });
+    if (error) { console.error('[Supabase] driver_save_mission_v2:', error.message); return false; }
+    if (!data || !data.ok) { console.error('[Supabase] driver_save_mission_v2 refused:', data && data.reason); return false; }
+    console.log('[Supabase] ✅ Mission saved (id=' + data.id + ')');
     return true;
   } catch (e) { console.error('[Supabase] Mission save exception:', e.message); return false; }
 }
 
 // ============================================================
-// MESSAGES — Supabase Functions
+// MESSAGES — reads via SELECT, writes via RPC _v2
 // ============================================================
-
 async function loadMessagesFromSupabase() {
   if (!supabaseClient) return [];
   try {
-    const { data, error } = await supabaseClient
-      .from('messages')
-      .select('*')
-      .order('ts', { ascending: true });
+    const { data, error } = await supabaseClient.from('messages').select('*').order('ts', { ascending: true });
     if (error) { console.warn('[Supabase] Error loading messages:', error.message); return []; }
-    // Normalise snake_case DB columns (fromname, tolabel) → camelCase JS (fromName, toLabel)
-    // v1.25 : ajout attachmentUrl / attachmentType
     return (data || []).map(m => ({
       ...m,
-      fromName:       m.fromName       || m.fromname       || '',
-      toLabel:        m.toLabel        || m.tolabel        || '',
-      attachmentUrl:  m.attachmentUrl  || m.attachment_url  || null,
+      fromName: m.fromName || m.fromname || '',
+      toLabel: m.toLabel || m.tolabel || '',
+      attachmentUrl: m.attachmentUrl || m.attachment_url || null,
       attachmentType: m.attachmentType || m.attachment_type || null,
       ts: fromISO(m.ts),
     }));
   } catch (e) { console.warn('[Supabase] Message load failed:', e.message); return []; }
 }
 
-// v1.37.5 : envoi via RPC (session validée server-side).
-// Détection auto chauffeur vs bureau selon le cookie présent.
 async function saveMessageToSupabase(message) {
   if (!supabaseClient) return false;
+  // Détection auto chauffeur vs bureau selon le role du profile courant
+  const prof = await _getCurrentProfile();
+  if (!prof) { console.warn('[Supabase] saveMessage : non authentifié'); return false; }
+  const isBureau = ['operations','admin','super_admin'].includes(prof.role);
+  const rpcName = isBureau ? 'bureau_send_message_v2' : 'driver_send_message_v2';
   try {
-    const driverTok = getDriverCookie();
-    const bureauTok = getBureauCookie();
-    const common = {
+    const { data, error } = await supabaseClient.rpc(rpcName, {
       p_client_id:       message.id || null,
       p_to:              message.to || null,
       p_tolabel:         message.toLabel || null,
       p_text:            message.text || '',
       p_attachment_url:  message.attachmentUrl || null,
       p_attachment_type: message.attachmentType || null
-    };
-    let rpcName, token;
-    if (message.from === 'driver' && driverTok) {
-      rpcName = 'driver_send_message'; token = driverTok;
-    } else if (message.from === 'bureau' && bureauTok) {
-      rpcName = 'bureau_send_message'; token = bureauTok;
-    } else if (bureauTok) {
-      rpcName = 'bureau_send_message'; token = bureauTok;
-    } else if (driverTok) {
-      rpcName = 'driver_send_message'; token = driverTok;
-    } else {
-      console.warn('[Supabase] saveMessage : pas de session');
-      return false;
-    }
-    const { data, error } = await supabaseClient.rpc(rpcName, { p_token: token, ...common });
-    if (error)         { console.error('[Supabase] ' + rpcName + ':', error.message); return false; }
+    });
+    if (error) { console.error('[Supabase] ' + rpcName + ':', error.message); return false; }
     if (!data || !data.ok) { console.error('[Supabase] ' + rpcName + ' refused:', data && data.reason); return false; }
     return true;
   } catch (e) { console.error('[Supabase] saveMessage exception:', e); return false; }
 }
 
 async function updateMessageReadStatus(messageId, read) {
-  if (!supabaseClient) return false;
-  if (!read) return true;  // read=false ne nous intéresse pas, on ne « dé-marque » jamais
+  if (!supabaseClient || !read) return true;  // on ne « dé-marque » jamais
   try {
     const { error } = await supabaseClient.rpc('mark_messages_read', { p_ids: [messageId] });
     return !error;
@@ -215,21 +173,9 @@ async function updateMessageReadStatus(messageId, read) {
 }
 
 // ============================================================
-// VEHICLES — Supabase Functions
+// VEHICLES — reads via SELECT, writes via RPC _v2
 // ============================================================
-
 async function loadVehiclesFromSupabase(type) {
-  if (!supabaseClient) return [];
-  try {
-    let query = supabaseClient.from('vehicles').select('*').order('plate');
-    if (type) query = query.eq('type', type);
-    const { data, error } = await query;
-    if (error) { console.warn('[Supabase] Error loading vehicles:', error.message); return []; }
-    return data || [];
-  } catch (e) { return []; }
-}
-
-async function loadActiveVehiclesFromSupabase(type) {
   if (!supabaseClient) return [];
   try {
     let query = supabaseClient.from('vehicles').select('*').eq('active', true).order('plate');
@@ -239,131 +185,166 @@ async function loadActiveVehiclesFromSupabase(type) {
     return data || [];
   } catch (e) { return []; }
 }
-
-// v1.37.7 : vehicles via RPCs (super_admin uniquement, vérifié côté serveur)
 async function saveVehicleToSupabase(vehicle) {
   if (!supabaseClient) return false;
-  const tok = getBureauCookie();
-  if (!tok) return false;
   try {
-    const { data, error } = await supabaseClient.rpc('vehicles_upsert', { p_token: tok, p_payload: vehicle });
+    const { data, error } = await supabaseClient.rpc('vehicles_upsert_v2', { p_payload: vehicle });
     return !error && data && data.ok;
   } catch (e) { return false; }
 }
-
 async function deleteVehicleFromSupabase(plate) {
   if (!supabaseClient) return false;
-  const tok = getBureauCookie();
-  if (!tok) return false;
   try {
-    const { data, error } = await supabaseClient.rpc('vehicles_delete', { p_token: tok, p_plate: plate });
+    const { data, error } = await supabaseClient.rpc('vehicles_delete_v2', { p_plate: plate });
     return !error && data && data.ok;
   } catch (e) { return false; }
 }
-
 async function toggleVehicleActiveStatus(plate, active) {
   if (!supabaseClient) return false;
-  const tok = getBureauCookie();
-  if (!tok) return false;
   try {
-    const { data, error } = await supabaseClient.rpc('vehicles_toggle', { p_token: tok, p_plate: plate, p_active: active });
+    const { data, error } = await supabaseClient.rpc('vehicles_toggle_v2', { p_plate: plate, p_active: active });
     if (error) { console.warn('[Supabase] Error toggling vehicle:', error.message); return false; }
     return !!(data && data.ok);
   } catch (e) { return false; }
 }
 
 // ============================================================
-// LOCATIONS — Supabase Functions (v1.11)
+// LOCATIONS
 // ============================================================
-
 async function loadLocationsFromSupabase() {
   if (!supabaseClient) return [];
   try {
-    const { data, error } = await supabaseClient.from('locations').select('*').order('name');
-    if (error) { console.warn('[Supabase] Error loading locations:', error.message); return []; }
+    const { data } = await supabaseClient.from('locations').select('*').order('name');
     return data || [];
-  } catch (e) { console.warn('[Supabase] Locations load failed:', e.message); return []; }
+  } catch (e) { return []; }
 }
-
 async function loadActiveLocationsFromSupabase() {
   if (!supabaseClient) return [];
   try {
-    const { data, error } = await supabaseClient.from('locations').select('*').eq('active', true).order('name');
-    if (error) return [];
-    return data || [];
-  } catch (e) { return []; }
-}
-
-async function saveLocationToSupabase(location) {
-  if (!supabaseClient) return false;
-  try {
-    const { error } = await supabaseClient.from('locations').upsert([location], { onConflict: 'name' });
-    if (error) { console.warn('[Supabase] Error saving location:', error.message); return false; }
-    return true;
-  } catch (e) { return false; }
-}
-
-async function deleteLocationFromSupabase(name) {
-  if (!supabaseClient) return false;
-  try {
-    const { error } = await supabaseClient.from('locations').delete().eq('name', name);
-    return !error;
-  } catch (e) { return false; }
-}
-
-async function toggleLocationActiveStatus(name, active) {
-  if (!supabaseClient) return false;
-  try {
-    const { error } = await supabaseClient.from('locations').update({ active }).eq('name', name);
-    if (error) { console.warn('[Supabase] Error toggling location:', error.message); return false; }
-    return true;
-  } catch (e) { return false; }
-}
-
-// ============================================================
-// DRIVER ACCOUNTS — Supabase Functions
-// ============================================================
-
-async function loadDriverAccountsFromSupabase() {
-  if (!supabaseClient) return [];
-  try {
-    const { data, error } = await supabaseClient.from('driver_accounts').select('*');
-    if (error) { console.warn('[Supabase] Error loading accounts:', error.message); return []; }
+    const { data } = await supabaseClient.from('locations').select('*').eq('active', true).order('name');
     return data || [];
   } catch (e) { return []; }
 }
 
 // ============================================================
-// v1.33 — BUREAU AUTH : hashage, sessions, brute-force protection
+// AUTH — Phase 4.5a : tout passe par supabase.auth
+// Les anciennes API (attemptBureauLogin, verifyDriverLogin, etc.) sont
+// conservées pour que les callers (index.html / dashboard.html) n'aient
+// qu'un minimum de changements.
 // ============================================================
 
-const BUREAU_SALT = 'LCA-TRANSFERT-v1.33-SALT';   // salt fixe côté client
-const BUREAU_SESSION_HOURS       = 2;              // durée session par défaut
-const BUREAU_INACTIVITY_MINUTES  = 120;            // timeout inactivité
-const BUREAU_MAX_FAILED_ATTEMPTS = 5;              // avant lock
-const BUREAU_LOCK_MINUTES        = 30;             // durée du lock
-const BUREAU_FAIL_WINDOW_MINUTES = 15;             // fenêtre de comptage des échecs
-const BUREAU_COOKIE_NAME         = 'lca_bureau_session';
+const DRIVER_EMAIL_DOMAIN = 'drivers.liegecargo.local';
+const BUREAU_EMAIL_DOMAIN = 'bureau.liegecargo.local';
+const BUREAU_INACTIVITY_MINUTES = 120;
 
-// Hash SHA-256 hex de (BUREAU_SALT + password) via Web Crypto natif.
-// Aucune lib externe, marche sur tous les navigateurs modernes (dashboard = desktop).
-async function hashPassword(password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(BUREAU_SALT + String(password || ''));
-  const hashBuf = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+function _usernameToEmail(username, isBureau) {
+  const lower = String(username || '').trim().toLowerCase();
+  return lower + '@' + (isBureau ? BUREAU_EMAIL_DOMAIN : DRIVER_EMAIL_DOMAIN);
 }
 
-// Génère un token de session aléatoire cryptographiquement sûr (32 bytes → 64 hex chars)
-function generateSessionToken() {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+async function _getCurrentProfile() {
+  if (!supabaseClient) return null;
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return null;
+    const { data, error } = await supabaseClient.rpc('me');
+    if (error || !data) return null;
+    return data;
+  } catch (e) { return null; }
 }
 
-// Génère un mot de passe aléatoire fort (16 chars, alphanumérique + symboles)
+async function _attemptLogin(username, password, isBureau) {
+  if (!supabaseClient) return { ok: false, reason: 'server_error' };
+  if (!username || !password) return { ok: false, reason: 'missing_credentials' };
+  try {
+    const email = _usernameToEmail(username, isBureau);
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('invalid login') || msg.includes('invalid credentials'))
+        return { ok: false, reason: 'bad_password' };
+      if (msg.includes('user not found')) return { ok: false, reason: 'unknown_user' };
+      if (msg.includes('email not confirmed')) return { ok: false, reason: 'account_disabled' };
+      return { ok: false, reason: 'server_error', detail: error.message };
+    }
+    if (!data || !data.user || !data.session) return { ok: false, reason: 'server_error' };
+
+    const { data: prof, error: pErr } = await supabaseClient.rpc('me');
+    if (pErr || !prof) {
+      await supabaseClient.auth.signOut();
+      return { ok: false, reason: 'profile_missing' };
+    }
+    if (prof.is_active === false) {
+      await supabaseClient.auth.signOut();
+      return { ok: false, reason: 'account_disabled' };
+    }
+    const isBureauRole = ['operations','admin','super_admin'].includes(prof.role);
+    if (isBureau && !isBureauRole) {
+      await supabaseClient.auth.signOut();
+      return { ok: false, reason: 'wrong_role' };
+    }
+    if (!isBureau && prof.role !== 'driver') {
+      await supabaseClient.auth.signOut();
+      return { ok: false, reason: 'wrong_role' };
+    }
+    return { ok: true, session: data.session, account: prof, profile: prof };
+  } catch (e) {
+    console.warn('[auth] exception:', e);
+    return { ok: false, reason: 'server_error' };
+  }
+}
+
+// ---- Bureau API (compat) ----
+async function attemptBureauLogin(username, password) {
+  return await _attemptLogin(username, password, true);
+}
+async function validateBureauSession() {
+  const prof = await _getCurrentProfile();
+  if (!prof) return { valid: false, reason: 'no_session' };
+  const isBureauRole = ['operations','admin','super_admin'].includes(prof.role);
+  if (!isBureauRole) return { valid: false, reason: 'wrong_role' };
+  if (prof.is_active === false) {
+    await supabaseClient.auth.signOut();
+    return { valid: false, reason: 'account_disabled' };
+  }
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  return { valid: true, session, account: prof };
+}
+async function touchBureauSession() {
+  // Supabase Auth gère son propre refresh automatiquement, rien à faire.
+}
+async function endBureauSession() {
+  if (supabaseClient) try { await supabaseClient.auth.signOut(); } catch(e) {}
+}
+
+// ---- Driver API (compat) ----
+async function verifyDriverLogin(username, password) {
+  const r = await _attemptLogin(username, password, false);
+  if (!r.ok) return { ok: false, reachable: true, reason: r.reason };
+  return { ok: true, reachable: true, account: {
+    username:    r.profile.username,
+    fullname:    r.profile.fullname,
+    pdf_allowed: r.profile.pdf_allowed,
+    entity:      r.profile.entity
+  } };
+}
+async function validateDriverSession() {
+  const prof = await _getCurrentProfile();
+  if (!prof) return { valid: false, reason: 'no_session' };
+  if (prof.role !== 'driver') return { valid: false, reason: 'wrong_role' };
+  if (prof.is_active === false) {
+    await supabaseClient.auth.signOut();
+    return { valid: false, reason: 'account_disabled' };
+  }
+  return { valid: true, account: prof };
+}
+async function endDriverSession() {
+  if (supabaseClient) try { await supabaseClient.auth.signOut(); } catch(e) {}
+}
+
+// ============================================================
+// Helpers divers encore utilisés
+// ============================================================
 function generateStrongPassword(length = 16) {
   const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!#$%&*+?';
   const bytes = new Uint8Array(length);
@@ -373,266 +354,26 @@ function generateStrongPassword(length = 16) {
   return out;
 }
 
-// Cookie helpers (utilisés pour le token de session bureau)
-function setBureauCookie(token, hours = BUREAU_SESSION_HOURS) {
-  const maxAge = Math.floor(hours * 3600);
-  document.cookie = BUREAU_COOKIE_NAME + '=' + encodeURIComponent(token) +
-    '; path=/; max-age=' + maxAge + '; SameSite=Lax';
-}
-function getBureauCookie() {
-  const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + BUREAU_COOKIE_NAME + '=([^;]*)'));
-  return m ? decodeURIComponent(m[1]) : null;
-}
-function clearBureauCookie() {
-  document.cookie = BUREAU_COOKIE_NAME + '=; path=/; max-age=0; SameSite=Lax';
-}
-
-// v1.37.4 : cookie session chauffeur (identique au bureau mais clé séparée)
-const DRIVER_COOKIE_NAME     = 'lca_driver_session';
-const DRIVER_SESSION_HOURS   = 72;  // long shift coverage
-function setDriverCookie(token, hours = DRIVER_SESSION_HOURS) {
-  const maxAge = Math.floor(hours * 3600);
-  document.cookie = DRIVER_COOKIE_NAME + '=' + encodeURIComponent(token) +
-    '; path=/; max-age=' + maxAge + '; SameSite=Lax';
-}
-function getDriverCookie() {
-  const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + DRIVER_COOKIE_NAME + '=([^;]*)'));
-  return m ? decodeURIComponent(m[1]) : null;
-}
-function clearDriverCookie() {
-  document.cookie = DRIVER_COOKIE_NAME + '=; path=/; max-age=0; SameSite=Lax';
-}
-
 // ============================================================
-// v1.38.0 — Phase 4.2 : helpers d'authentification Supabase Auth
-// Cohabitent avec les anciens (attemptBureauLogin, etc.) tant qu'on n'a pas
-// bascule l'UI principale. On peut tester en console sans impact.
+// Admin ops — appel aux Edge Functions avec JWT
 // ============================================================
-
-const DRIVER_EMAIL_DOMAIN_V2 = 'drivers.liegecargo.local';
-const BUREAU_EMAIL_DOMAIN_V2 = 'bureau.liegecargo.local';
-
-function _usernameToEmailV2(username, isBureau) {
-  const lower = String(username || '').trim().toLowerCase();
-  return lower + '@' + (isBureau ? BUREAU_EMAIL_DOMAIN_V2 : DRIVER_EMAIL_DOMAIN_V2);
-}
-
-/**
- * Tentative de login via Supabase Auth.
- * @param {string} username - identifiant métier (ex: "AdminAdmin", "J.KALSCHEUER")
- * @param {string} password
- * @param {boolean} isBureau - true pour un compte bureau, false pour chauffeur
- * @returns {Promise<{ok:boolean, reason?:string, profile?:object, session?:object}>}
- */
-async function attemptLoginV2(username, password, isBureau) {
-  if (!supabaseClient) return { ok: false, reason: 'server_error' };
-  if (!username || !password) return { ok: false, reason: 'missing_credentials' };
-  try {
-    const email = _usernameToEmailV2(username, isBureau);
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if (error) {
-      const msg = (error.message || '').toLowerCase();
-      if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
-        return { ok: false, reason: 'bad_password' };
-      }
-      if (msg.includes('user not found')) return { ok: false, reason: 'unknown_user' };
-      if (msg.includes('email not confirmed')) return { ok: false, reason: 'account_disabled' };
-      return { ok: false, reason: 'server_error', detail: error.message };
-    }
-    if (!data || !data.user || !data.session) return { ok: false, reason: 'server_error' };
-
-    // Récupérer le profile metier
-    const { data: prof, error: pErr } = await supabaseClient.rpc('me');
-    if (pErr) return { ok: false, reason: 'profile_fetch_failed', detail: pErr.message };
-    if (!prof)           return { ok: false, reason: 'profile_missing' };
-    if (prof.is_active === false) {
-      await supabaseClient.auth.signOut();
-      return { ok: false, reason: 'account_disabled' };
-    }
-    // Garde-fou : rôle doit correspondre au contexte
-    const isBureauRole = ['operations','admin','super_admin'].includes(prof.role);
-    if (isBureau && !isBureauRole) {
-      await supabaseClient.auth.signOut();
-      return { ok: false, reason: 'wrong_role_bureau_expected' };
-    }
-    if (!isBureau && prof.role !== 'driver') {
-      await supabaseClient.auth.signOut();
-      return { ok: false, reason: 'wrong_role_driver_expected' };
-    }
-    return { ok: true, session: data.session, profile: prof };
-  } catch (e) {
-    console.warn('[authV2] exception:', e);
-    return { ok: false, reason: 'server_error' };
-  }
-}
-
-/**
- * Récupère la session courante Supabase Auth + le profile associé.
- * @returns {Promise<{valid:boolean, profile?:object, session?:object, reason?:string}>}
- */
-async function validateSessionV2() {
-  if (!supabaseClient) return { valid: false, reason: 'server_not_ready' };
-  try {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) return { valid: false, reason: 'no_session' };
-    const { data: prof, error } = await supabaseClient.rpc('me');
-    if (error || !prof) return { valid: false, reason: 'profile_missing' };
-    if (prof.is_active === false) {
-      await supabaseClient.auth.signOut();
-      return { valid: false, reason: 'account_disabled' };
-    }
-    return { valid: true, session, profile: prof };
-  } catch (e) {
-    return { valid: false, reason: 'server_error' };
-  }
-}
-
-/** Déconnexion Supabase Auth */
-async function endSessionV2() {
-  if (!supabaseClient) return;
-  try { await supabaseClient.auth.signOut(); } catch (e) {}
-}
-
-/** Appelle l'Edge Function admin-create-user (super_admin requis) */
-async function adminCreateUserV2(payload) {
-  if (!supabaseClient) return { ok: false, reason: 'server_not_ready' };
+async function _authedFetch(path, bodyObj) {
+  if (!supabaseClient) throw new Error('server_not_ready');
   const { data: { session } } = await supabaseClient.auth.getSession();
-  if (!session) return { ok: false, reason: 'not_authenticated' };
-  const url = (SUPABASE_URL || '') + '/functions/v1/admin-create-user';
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': 'Bearer ' + session.access_token
-      },
-      body: JSON.stringify(payload)
-    });
-    return await r.json();
-  } catch (e) {
-    return { ok: false, reason: 'fetch_failed', detail: String(e) };
-  }
+  if (!session) throw new Error('not_authenticated');
+  const r = await fetch(SUPABASE_URL + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+    body: JSON.stringify(bodyObj)
+  });
+  return await r.json();
 }
-
-// Récupère l'user-agent + best-effort IP (l'IP réelle n'est pas dispo côté client,
-// on log ce qu'on a — Supabase peut avoir accès au header X-Forwarded-For si besoin
-// via une Edge Function, mais pour v1.33 on garde simple : IP = null).
-function getClientContext() {
-  return {
-    ip: null,
-    user_agent: (navigator && navigator.userAgent) ? navigator.userAgent.slice(0, 500) : ''
-  };
-}
-
-// Log une tentative de connexion (succès ou échec) dans login_history
-async function logLoginAttempt(username, success, reason) {
-  if (!supabaseClient) return;
-  try {
-    const ctx = getClientContext();
-    await supabaseClient.from('login_history').insert({
-      username: username || '',
-      success:  !!success,
-      reason:   reason || (success ? 'ok' : 'unknown'),
-      ip:       ctx.ip,
-      user_agent: ctx.user_agent
-    });
-  } catch(e) { console.warn('[Auth] log attempt failed:', e.message); }
-}
-
-// v1.37.3 : tous les flux login / session passent désormais par des RPCs
-// SECURITY DEFINER côté Postgres. Plus de SELECT direct sur bureau_accounts
-// ou bureau_sessions côté client. Les hashes vivent dans bureau_credentials
-// (table verrouillée, lecture impossible depuis le client).
-
-// Récupération d'un compte bureau — utilisé uniquement pour l'affichage (sans mdp).
-// Reste un SELECT sur bureau_accounts (plus de password_hash dedans).
-async function getBureauAccountByUsername(username) {
-  if (!supabaseClient || !username) return null;
-  try {
-    const { data, error } = await supabaseClient
-      .from('bureau_accounts')
-      .select('*')
-      .eq('username', username)
-      .limit(1);
-    if (error) { console.warn('[Auth] fetch account:', error.message); return null; }
-    return (data && data[0]) ? data[0] : null;
-  } catch(e) { return null; }
-}
-
-// Tentative de login via l'RPC server-side (brute-force + session gérés en SQL).
-async function attemptBureauLogin(username, password) {
-  if (!supabaseClient) return { ok: false, reason: 'server_error' };
-  try {
-    const hash = await hashPassword(password);
-    const ctx  = getClientContext();
-    const { data, error } = await supabaseClient.rpc('attempt_bureau_login', {
-      p_username: username, p_hash: hash, p_ip: ctx.ip, p_ua: ctx.user_agent
-    });
-    if (error) {
-      console.warn('[Auth] attempt_bureau_login RPC:', error.message);
-      return { ok: false, reason: 'server_error' };
-    }
-    if (!data || !data.ok) {
-      return {
-        ok: false,
-        reason: (data && data.reason) || 'unknown',
-        attempts_left: data && data.attempts_left,
-        locked_until:  data && data.locked_until
-      };
-    }
-    setBureauCookie(data.token);
-    return { ok: true, session: { token: data.token, username: data.account.username, expires_at: data.expires_at }, account: data.account };
-  } catch(e) {
-    console.warn('[Auth] attempt_bureau_login exception:', e);
-    return { ok: false, reason: 'server_error' };
-  }
-}
-
-// Valide une session (via cookie) → RPC validate_bureau_session
-async function validateBureauSession() {
-  const token = getBureauCookie();
-  if (!token) return { valid: false, reason: 'no_cookie' };
-  if (!supabaseClient) return { valid: false, reason: 'supabase_not_ready' };
-  try {
-    const { data, error } = await supabaseClient.rpc('validate_bureau_session', {
-      p_token: token,
-      p_inactivity_minutes: BUREAU_INACTIVITY_MINUTES
-    });
-    if (error) {
-      console.warn('[Auth] validate_bureau_session RPC:', error.message);
-      return { valid: false, reason: 'server_error' };
-    }
-    if (!data || !data.valid) {
-      clearBureauCookie();
-      return { valid: false, reason: (data && data.reason) || 'invalid' };
-    }
-    return { valid: true, session: { token, expires_at: data.expires_at, username: data.account.username }, account: data.account };
-  } catch(e) {
-    console.warn('[Auth] validate exception:', e);
-    return { valid: false, reason: 'server_error' };
-  }
-}
-
-// Refresh last_activity de la session courante
-async function touchBureauSession() {
-  const token = getBureauCookie();
-  if (!token || !supabaseClient) return;
-  try { await supabaseClient.rpc('touch_bureau_session', { p_token: token }); } catch(e) {}
-}
-
-// Déconnexion : RPC end_bureau_session + clear cookie
-async function endBureauSession() {
-  const token = getBureauCookie();
-  if (token && supabaseClient) {
-    try { await supabaseClient.rpc('end_bureau_session', { p_token: token }); } catch(e) {}
-  }
-  clearBureauCookie();
-}
+async function adminCreateUser(payload) { return await _authedFetch('/functions/v1/admin-create-user', payload); }
+async function adminUserOps(payload)    { return await _authedFetch('/functions/v1/admin-user-ops', payload); }
 
 // ============================================================
 // Initialization
 // ============================================================
-
 async function initSupabase() {
   console.log('[Supabase] Starting initialization...');
   const sbMissions = await loadMissionsFromSupabase();
@@ -643,62 +384,45 @@ async function initSupabase() {
   window._supabaseReady = true;
 }
 
+// ============================================================
 // Expose globally
+// ============================================================
+window.supabaseClient                 = supabaseClient;
+window.loadMissionsFromSupabase       = loadMissionsFromSupabase;
 window.saveMissionToSupabase          = saveMissionToSupabase;
+window.loadMessagesFromSupabase       = loadMessagesFromSupabase;
 window.saveMessageToSupabase          = saveMessageToSupabase;
 window.updateMessageReadStatus        = updateMessageReadStatus;
-window.loadMissionsFromSupabase       = loadMissionsFromSupabase;
-window.loadMessagesFromSupabase       = loadMessagesFromSupabase;
 window.loadVehiclesFromSupabase       = loadVehiclesFromSupabase;
-window.loadActiveVehiclesFromSupabase = loadActiveVehiclesFromSupabase;
 window.saveVehicleToSupabase          = saveVehicleToSupabase;
 window.deleteVehicleFromSupabase      = deleteVehicleFromSupabase;
 window.toggleVehicleActiveStatus      = toggleVehicleActiveStatus;
-window.loadDriverAccountsFromSupabase = loadDriverAccountsFromSupabase;
-// v1.11 : locations
-window.loadLocationsFromSupabase       = loadLocationsFromSupabase;
+window.loadLocationsFromSupabase      = loadLocationsFromSupabase;
 window.loadActiveLocationsFromSupabase = loadActiveLocationsFromSupabase;
-window.saveLocationToSupabase          = saveLocationToSupabase;
-window.deleteLocationFromSupabase      = deleteLocationFromSupabase;
-window.toggleLocationActiveStatus      = toggleLocationActiveStatus;
-window.initSupabase                   = initSupabase;
-window.supabaseClient                 = supabaseClient;
-// v1.33 : bureau auth helpers
-window.hashPassword                   = hashPassword;
-window.generateSessionToken           = generateSessionToken;
-window.generateStrongPassword         = generateStrongPassword;
+// Auth compat
 window.attemptBureauLogin             = attemptBureauLogin;
 window.validateBureauSession          = validateBureauSession;
 window.touchBureauSession             = touchBureauSession;
 window.endBureauSession               = endBureauSession;
-window.getBureauCookie                = getBureauCookie;  // v1.37.3 : exposé pour les RPCs CRUD
-window.getDriverCookie                = getDriverCookie;  // v1.37.4
-window.setDriverCookie                = setDriverCookie;
-window.clearDriverCookie              = clearDriverCookie;
-// v1.38.0 — Phase 4.2 : nouvelles helpers Supabase Auth
-window.attemptLoginV2                 = attemptLoginV2;
-window.validateSessionV2              = validateSessionV2;
-window.endSessionV2                   = endSessionV2;
-window.adminCreateUserV2              = adminCreateUserV2;
-window.getBureauAccountByUsername     = getBureauAccountByUsername;
-window.logLoginAttempt                = logLoginAttempt;
-window.BUREAU_SALT                    = BUREAU_SALT;
+window.verifyDriverLogin              = verifyDriverLogin;
+window.validateDriverSession          = validateDriverSession;
+window.endDriverSession               = endDriverSession;
+// Admin
+window.adminCreateUser                = adminCreateUser;
+window.adminUserOps                   = adminUserOps;
+// Helpers
+window.generateStrongPassword         = generateStrongPassword;
 window.BUREAU_INACTIVITY_MINUTES      = BUREAU_INACTIVITY_MINUTES;
-window.BUREAU_MAX_FAILED_ATTEMPTS     = BUREAU_MAX_FAILED_ATTEMPTS;
-// v1.13 : helpers de conversion timestamp pour la restauration de session
 window.fromISO                        = fromISO;
 window.stopFromStorage                = stopFromStorage;
-// v1.23 : exposer l'URL pour la détection d'environnement (bandeau DEV)
 window.SUPABASE_URL                   = SUPABASE_URL;
-// v1.29 : exposer la anon key (pour appeler les Edge Functions depuis l'app)
-//         et la clé publique VAPID (pour l'abonnement Web Push)
 window.SUPABASE_ANON                  = SUPABASE_ANON;
 window.VAPID_PUBLIC_KEY               = 'BOmlj45rRhgjl6fW_j0tvQPgwvxK23SKSWP8Cxa_GmqDHyuQD4U9OzeeBbp5kw2k-I0RTZz8WHfaAgQsLmkoFb8';
 
-console.log('[Supabase] Functions registered globally');
+console.log('[Supabase] v1.38.0 — Phase 4.5a : fonctions enregistrées');
 
-if (typeof supabase !== 'undefined') {
-  initSupabase().catch(e => console.warn('[Supabase] Init error:', e.message));
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initSupabase);
 } else {
-  console.error('[Supabase] Library still not loaded!');
+  initSupabase();
 }
