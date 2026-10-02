@@ -393,11 +393,12 @@ window.saveMissionToSupabase          = saveMissionToSupabase;
 window.loadMessagesFromSupabase       = loadMessagesFromSupabase;
 window.saveMessageToSupabase          = saveMessageToSupabase;
 window.updateMessageReadStatus        = updateMessageReadStatus;
-window.loadVehiclesFromSupabase       = loadVehiclesFromSupabase;
-window.saveVehicleToSupabase          = saveVehicleToSupabase;
-window.deleteVehicleFromSupabase      = deleteVehicleFromSupabase;
-window.toggleVehicleActiveStatus      = toggleVehicleActiveStatus;
-window.loadLocationsFromSupabase      = loadLocationsFromSupabase;
+window.loadVehiclesFromSupabase        = loadVehiclesFromSupabase;
+window.loadActiveVehiclesFromSupabase  = loadVehiclesFromSupabase;  // alias compat
+window.saveVehicleToSupabase           = saveVehicleToSupabase;
+window.deleteVehicleFromSupabase       = deleteVehicleFromSupabase;
+window.toggleVehicleActiveStatus       = toggleVehicleActiveStatus;
+window.loadLocationsFromSupabase       = loadLocationsFromSupabase;
 window.loadActiveLocationsFromSupabase = loadActiveLocationsFromSupabase;
 // Auth compat
 window.attemptBureauLogin             = attemptBureauLogin;
