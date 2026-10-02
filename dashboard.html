@@ -1160,26 +1160,27 @@ async function doLogout() {
   setTimeout(() => location.reload(), 500);
 }
 
-// v1.36 : Force re-login à chaque page load (comme l'app chauffeur).
-// Pas d'auto-restore silencieux — plus sécurisé, comportement natif app.
-// On invalide le cookie de session pour repartir sur un login propre.
-// Le username reste pré-rempli pour minimiser la friction.
-(async function forceReLogin() {
+// v1.38.0 : plus de force-logout à chaque page load — Supabase Auth gère la persistance.
+// Si la session est valide, on auto-restore directement l'app. Sinon on reste sur
+// l'écran de login avec le username pré-rempli.
+(async function tryRestoreSession() {
   try {
-    // Attendre Supabase pour pouvoir déletter la session en base
     let w = 0;
     while (w < 8000 && !window._supabaseReady) { await new Promise(r => setTimeout(r, 100)); w += 100; }
-    // Récupérer l'ancien username (avant de supprimer la session) pour pré-remplir le login
-    // v1.37.3 : plus de SELECT direct sur bureau_sessions (RLS fermée) → on passe par validate_bureau_session
     let lastUsername = null;
     try {
       if (window.validateBureauSession) {
         const v = await window.validateBureauSession();
-        if (v && v.valid && v.account) lastUsername = v.account.username;
+        if (v && v.valid && v.account) {
+          lastUsername = v.account.username;
+          // Session valide → auto-restore de l'app
+          currentUser = normalizeAccount(v.account);
+          showApp();
+          startInactivityWatcher();
+          return;
+        }
       }
     } catch(e) {}
-    // Invalider proprement l'ancienne session (delete + cookie clear)
-    if (window.endBureauSession) await window.endBureauSession();
     // Pré-remplir l'input login pour ne demander que le mot de passe
     if (lastUsername) {
       const attemptFill = () => {
