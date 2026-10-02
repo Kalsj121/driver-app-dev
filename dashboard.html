@@ -1160,27 +1160,38 @@ async function doLogout() {
   setTimeout(() => location.reload(), 500);
 }
 
-// v1.38.0 : plus de force-logout à chaque page load — Supabase Auth gère la persistance.
-// Si la session est valide, on auto-restore directement l'app. Sinon on reste sur
-// l'écran de login avec le username pré-rempli.
+// v1.38.0 : auto-restore si session bureau valide, sinon force logout + login screen.
+// Si la session Supabase Auth courante appartient à un chauffeur (session partagée
+// avec l'app chauffeur dans le même navigateur), on la purge pour forcer un login bureau.
 (async function tryRestoreSession() {
   try {
     let w = 0;
     while (w < 8000 && !window._supabaseReady) { await new Promise(r => setTimeout(r, 100)); w += 100; }
     let lastUsername = null;
     try {
-      if (window.validateBureauSession) {
-        const v = await window.validateBureauSession();
-        if (v && v.valid && v.account) {
-          lastUsername = v.account.username;
-          // Session valide → auto-restore de l'app
-          currentUser = normalizeAccount(v.account);
-          showApp();
-          startInactivityWatcher();
-          return;
+      // Vérifie le profile courant AVANT de valider le rôle bureau
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (session) {
+        const { data: prof } = await window.supabaseClient.rpc('me');
+        if (prof) {
+          const isBureauRole = ['operations','admin','super_admin'].includes(prof.role);
+          if (!isBureauRole) {
+            // Session chauffeur → purge pour forcer re-login bureau
+            await window.supabaseClient.auth.signOut();
+            console.log('[Auth] session chauffeur détectée sur dashboard → signout forcé');
+          } else if (prof.is_active) {
+            // Session bureau valide → auto-restore
+            currentUser = normalizeAccount(prof);
+            showApp();
+            startInactivityWatcher();
+            return;
+          } else {
+            await window.supabaseClient.auth.signOut();
+          }
+          lastUsername = prof.username;
         }
       }
-    } catch(e) {}
+    } catch(e) { console.warn('[Auth] restore check:', e.message); }
     // Pré-remplir l'input login pour ne demander que le mot de passe
     if (lastUsername) {
       const attemptFill = () => {
