@@ -2188,16 +2188,23 @@ async function persistDayLcaTasksToLastMission() {
       .limit(1);
     if (data && data.length) {
       const missionId = data[0].id;
-      // Update dans missions (mission en cours ou complétée récente)
-      await window.supabaseClient.from('missions')
-        .update({ lca_tasks: dayLcaTasks })
-        .eq('id', missionId);
-      // v1.36.3 : update aussi dans missions_archive (sinon feuille de route ne voit rien
-      // car elle prend l'archive prioritairement lors du merge)
+      // v1.38.0 : via RPCs driver_* (direct update sur missions bloqué pour anon)
+      // Récupérer la mission complète pour construire un payload cohérent
+      const { data: mRow } = await window.supabaseClient
+        .from('missions').select('*').eq('id', missionId).limit(1);
+      if (mRow && mRow[0]) {
+        await window.supabaseClient.rpc('driver_save_mission_v2', {
+          p_payload: { ...mRow[0], lca_tasks: dayLcaTasks }
+        });
+      }
       try {
-        await window.supabaseClient.from('missions_archive')
-          .update({ lca_tasks: dayLcaTasks })
-          .eq('id', String(missionId));
+        const { data: aRow } = await window.supabaseClient
+          .from('missions_archive').select('*').eq('id', String(missionId)).limit(1);
+        if (aRow && aRow[0]) {
+          await window.supabaseClient.rpc('driver_save_mission_archive_v2', {
+            p_payload: { ...aRow[0], lca_tasks: dayLcaTasks }
+          });
+        }
       } catch(e) { console.warn('[persistDayLcaTasks] archive update:', e.message); }
     }
   } catch(e) { console.warn('[persistDayLcaTasks]', e.message); }
@@ -2224,24 +2231,29 @@ async function persistDayPausesToLastMission() {
   } catch(e) { console.warn('[PauseAttach] lookup missions failed:', e.message); }
   if (!target) { console.warn('[PauseAttach] aucune mission du jour trouvée — pause non attachée pour l\'instant'); return; }
 
-  // v1.09g : UPDATE (pas upsert) — la mission existe déjà, on ne veut pas
-  // qu'un insert déclenché par upsert exige tous les champs NOT NULL (driver, date, …).
+  // v1.38.0 : UPDATE via RPC driver_save_mission_v2 (session chauffeur vérifiée server-side)
   try {
-    const { error } = await window.supabaseClient.from('missions')
-      .update({ pauses: [...dayPauses], updatedat: new Date().toISOString() })
-      .eq('id', target.id);
-    if (error) { console.error('[PauseAttach] erreur update missions:', error.message); return; }
+    const payload = {
+      id:     target.id,
+      date:   target.date,
+      daystartts: target.daystartts,
+      pauses: [...dayPauses]
+    };
+    const r = await window.supabaseClient.rpc('driver_save_mission_v2', { p_payload: payload });
+    if (r.error || !r.data || !r.data.ok) {
+      console.error('[PauseAttach] driver_save_mission_v2 refused:', r.error?.message || r.data?.reason); return;
+    }
     console.log('[PauseAttach] ✅ pauses attachées à mission', target.id, dayPauses.length, 'pause(s)');
   } catch(e) { console.error('[PauseAttach] exception:', e.message); return; }
 
-  // Mettre à jour aussi missions_archive si la mission y est (pour feuille de route)
+  // Archive : via bureau_upsert_mission_archive_v2 n'est pas accessible aux chauffeurs.
+  // On met à jour via driver_save_mission_archive_v2 (crée/upsert selon besoin).
   try {
     const { data: arch } = await window.supabaseClient.from('missions_archive')
-      .select('id').eq('id', String(target.id)).limit(1);
+      .select('*').eq('id', String(target.id)).limit(1);
     if (arch && arch[0]) {
-      await window.supabaseClient.from('missions_archive')
-        .update({ pauses: [...dayPauses], updatedat: new Date().toISOString() })
-        .eq('id', String(target.id));
+      const archPayload = { ...arch[0], pauses: [...dayPauses] };
+      await window.supabaseClient.rpc('driver_save_mission_archive_v2', { p_payload: archPayload });
       console.log('[PauseAttach] ✅ pauses aussi dans missions_archive');
     }
   } catch(e) { console.warn('[PauseAttach] update archive failed:', e.message); }
@@ -2253,7 +2265,6 @@ async function persistDayPausesToLastMission() {
 // v1.37.4 : écriture via RPC driver_update_active_state (whitelist côté serveur)
 async function updateActiveDriverState(fields) {
   if (!window.supabaseClient) { console.error('[ActiveDriver] supabaseClient manquant'); return; }
-  if (!token) { console.warn('[ActiveDriver] token chauffeur manquant'); return; }
   const normalized = {};
   for (const [k, v] of Object.entries(fields || {})) {
     if (typeof v === 'number' && v > 1e12) normalized[k] = new Date(v).toISOString();
